@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { AlertTriangle, CheckCircle2, Copy, Download, FolderOpen, Info, Save, Upload } from 'lucide-react'
 import type { ValidationIssue } from '@autoinstall/shared'
 import { useStore } from '../store.js'
+import { formatBytes } from '../lib/format.js'
 import { useT } from '../lib/i18n.js'
 import { Badge, Button, Callout, Card, CodeBlock } from '../components/ui.js'
 
@@ -128,6 +129,42 @@ export function ReviewStep(): React.JSX.Element {
             {profile.ssh.installServer
               ? `有効（鍵 ${profile.ssh.authorizedKeys.length} 個 / パスワード ${profile.ssh.allowPasswordAuth ? '許可' : '禁止'}）`
               : '無効'}
+          </Summary>
+          <Summary label="追加ユーザー">
+            {profile.postInstall.additionalUsers.length === 0
+              ? 'なし'
+              : profile.postInstall.additionalUsers.map((u) => u.username).join(', ')}
+          </Summary>
+          <Summary label="アプリの展開">
+            {profile.postInstall.deployments.length === 0
+              ? 'なし'
+              : `${profile.postInstall.deployments.length} 件${
+                  config !== null && config.payloadBytes > 0
+                    ? `（${formatBytes(config.payloadBytes)}）`
+                    : ''
+                }`}
+          </Summary>
+          <Summary label="サービス">
+            {profile.postInstall.services.length === 0
+              ? 'なし'
+              : profile.postInstall.services.map((s) => `${s.name}.service`).join(', ')}
+          </Summary>
+          <Summary label="GPU / CUDA">
+            {profile.software.gpu.enabled ? (
+              <Badge tone="info">
+                {profile.software.gpu.driver === 'open'
+                  ? 'nvidia-open'
+                  : profile.software.gpu.driver === 'proprietary'
+                    ? 'cuda-drivers'
+                    : 'ドライバなし'}
+                {profile.software.gpu.toolkit !== 'none' && ' + CUDA'}
+              </Badge>
+            ) : (
+              'なし'
+            )}
+          </Summary>
+          <Summary label="apt full-upgrade">
+            {profile.postInstall.aptFullUpgrade ? '実行する' : 'しない'}
           </Summary>
           <Summary label="インストール後の動作">
             {profile.behavior.shutdown === 'reboot' ? '再起動' : '電源オフ'}

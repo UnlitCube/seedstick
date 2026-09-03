@@ -4,8 +4,11 @@ export const APP_ID = 'app.autoinstall-ui.desktop'
 export const APP_NAME = 'Autoinstall USB Creator'
 
 export * from './autoinstall/model.js'
+export * from './autoinstall/provisioning.js'
 export * from './autoinstall/defaults.js'
 export * from './autoinstall/generate.js'
+export * from './autoinstall/generate-provisioning.js'
+export * from './autoinstall/migrate.js'
 export * from './autoinstall/presets.js'
 export * from './autoinstall/validate.js'
 // Node 専用（node:crypto を使う）のでバレルには載せない。main からは

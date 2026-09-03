@@ -7,6 +7,12 @@ import type {
 } from './model.js'
 import { SERIES_FEATURES } from './model.js'
 import { getPreset, shellQuote } from './presets.js'
+import {
+  SEED_MOUNT_PATH,
+  buildProvisioningCommands,
+  seedMountCommands,
+  seedUmountCommands,
+} from './generate-provisioning.js'
 
 // プロファイル → autoinstall YAML の決定的な変換。
 // GUI で作った設定と、実際にインストーラへ渡る YAML が 1 対 1 で対応することが商用ツールの信頼性の要。
@@ -17,11 +23,6 @@ export type CommentLocale = 'ja' | 'en'
 export interface GenerateOptions {
   /** コメントの言語。`none` はコメントなし。 */
   readonly comments: CommentLocale | 'none'
-  /**
-   * CIDATA に置くファイルを /target にコピーする late-commands を生成するときの、
-   * cloud-init が seed をマウントするパス。既定は `/cdrom` ではなく NoCloud の seed ディレクトリ。
-   */
-  readonly seedMountPath?: string
 }
 
 const DEFAULT_OPTIONS: GenerateOptions = { comments: 'ja' }
@@ -248,10 +249,12 @@ function buildApt(profile: AutoinstallProfile): Record<string, unknown> | undefi
 }
 
 /** CIDATA 上のファイルを新システムへコピーする late-command を作る。 */
-function fileCopyCommands(profile: AutoinstallProfile, seedPath: string): string[] {
+function fileCopyCommands(profile: AutoinstallProfile): string[] {
   const cmds: string[] = []
   for (const f of profile.postInstall.files) {
-    const src = `${seedPath}/${f.name}`
+    // CIDATA は SEED_MOUNT_PATH に自分でマウントしたもの。
+    // /cdrom は ISO9660 パーティションであって CIDATA ではないので使えない。
+    const src = `${SEED_MOUNT_PATH}/${f.name}`
     const dest = `/target${f.targetPath}`
     cmds.push(`mkdir -p ${shellQuote(dirnamePosix(dest))}`)
     cmds.push(`cp ${shellQuote(src)} ${shellQuote(dest)}`)
@@ -269,21 +272,45 @@ function dirnamePosix(p: string): string {
   return i <= 0 ? '/' : p.slice(0, i)
 }
 
-export function collectLateCommands(profile: AutoinstallProfile, seedPath: string): string[] {
+/**
+ * late-commands を組み立てる。
+ *
+ * 順序に意味がある:
+ *   1. プリセット（sudoers など、他が依存しうる土台）
+ *   2. CIDATA をマウント → ファイル配置・アプリ展開 → アンマウント
+ *   3. 追加ユーザー・サービス登録・apt full-upgrade
+ *   4. ユーザーが自分で書いたコマンド（最後に手を入れられるように）
+ */
+export function collectLateCommands(profile: AutoinstallProfile): string[] {
   const ctx = { username: profile.user.username, hostname: profile.basics.hostname }
+  const provisioning = buildProvisioningCommands(profile)
   const cmds: string[] = []
+
   for (const id of profile.postInstall.presets) cmds.push(...getPreset(id).lateCommands(ctx))
-  cmds.push(...fileCopyCommands(profile, seedPath))
+
+  if (provisioning.needsSeedMount) cmds.push(...seedMountCommands())
+  cmds.push(...fileCopyCommands(profile))
+  cmds.push(...provisioning.late)
+  if (provisioning.needsSeedMount) cmds.push(...seedUmountCommands())
+
   cmds.push(...profile.postInstall.lateCommands)
   return cmds
 }
 
-/** プリセットが要求する追加パッケージを含めた、重複なしのパッケージ一覧。 */
+/** 初回起動時に cloud-init が実行するコマンド。 */
+export function collectFirstBootCommands(profile: AutoinstallProfile): string[] {
+  const provisioning = buildProvisioningCommands(profile)
+  // ユーザーが書いたコマンドを先に実行する。GPU は再起動を伴うので必ず最後。
+  return [...profile.postInstall.firstBootCommands, ...provisioning.firstBoot]
+}
+
+/** プリセットやプロビジョニングが要求する追加パッケージを含めた、重複なしの一覧。 */
 export function collectPackages(profile: AutoinstallProfile): string[] {
   const set = new Set<string>(profile.software.packages)
   for (const id of profile.postInstall.presets) {
     for (const pkg of getPreset(id).packages ?? []) set.add(pkg)
   }
+  for (const pkg of buildProvisioningCommands(profile).packages) set.add(pkg)
   return [...set].sort()
 }
 
@@ -297,7 +324,6 @@ export function buildAutoinstallObject(
   options: GenerateOptions = DEFAULT_OPTIONS,
 ): Record<string, unknown> {
   const features = SERIES_FEATURES[profile.series]
-  const seedPath = options.seedMountPath ?? '/cdrom'
   const out: Record<string, unknown> = { version: 1 }
 
   if (features.interactiveSections && profile.behavior.interactiveSections.length > 0) {
@@ -350,7 +376,7 @@ export function buildAutoinstallObject(
     const key = features.ubuntuPro ? 'ubuntu-pro' : 'ubuntu-advantage'
     out[key] = { token: profile.software.ubuntuProToken }
   }
-  const late = collectLateCommands(profile, seedPath)
+  const late = collectLateCommands(profile)
   if (late.length > 0) out['late-commands'] = late
   const userData = buildUserData(profile)
   if (userData) out['user-data'] = userData
@@ -365,9 +391,8 @@ export function buildAutoinstallObject(
 
 function buildUserData(profile: AutoinstallProfile): Record<string, unknown> | undefined {
   const ud: Record<string, unknown> = {}
-  if (profile.postInstall.firstBootCommands.length > 0) {
-    ud['runcmd'] = [...profile.postInstall.firstBootCommands]
-  }
+  const runcmd = collectFirstBootCommands(profile)
+  if (runcmd.length > 0) ud['runcmd'] = runcmd
   return Object.keys(ud).length > 0 ? ud : undefined
 }
 

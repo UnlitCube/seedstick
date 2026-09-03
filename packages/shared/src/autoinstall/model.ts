@@ -1,3 +1,10 @@
+import type {
+  AdditionalUser,
+  Deployment,
+  GpuConfig,
+  SystemdService,
+} from './provisioning.js'
+
 // GUI が編集する「プロファイル」型。これが唯一の入力で、ここから autoinstall YAML を決定的に生成する。
 // autoinstall のキー名をそのまま使わず、初心者に意味が分かる語彙にしている（変換は generate.ts）。
 
@@ -170,8 +177,11 @@ export type PostInstallPresetId =
 // ---------------------------------------------------------------------------
 
 export interface AutoinstallProfile {
-  /** プロファイル JSON の形式バージョン（autoinstall の version とは別物） */
-  readonly profileVersion: 1
+  /**
+   * プロファイル JSON の形式バージョン（autoinstall の version とは別物）。
+   * 1: 初版 / 2: 追加ユーザー・展開・サービス・GPU を追加
+   */
+  readonly profileVersion: 2
   readonly meta: {
     readonly name: string
     /** ISO 8601。生成時に埋める。 */
@@ -212,6 +222,8 @@ export interface AutoinstallProfile {
     /** null = subiquity の既定に任せる（25.10+） */
     readonly kernelCrashDumps: boolean | null
     readonly ubuntuProToken: string
+    /** NVIDIA ドライバ / CUDA。初回起動時に cloud-init が導入する。 */
+    readonly gpu: GpuConfig
   }
   readonly apt: {
     readonly mode: 'default' | 'country-mirror' | 'custom'
@@ -230,6 +242,14 @@ export interface AutoinstallProfile {
     /** 初回起動時に cloud-init が実行するコマンド（`user-data.runcmd`） */
     readonly firstBootCommands: readonly string[]
     readonly files: readonly ProvisionFile[]
+    /** identity とは別に作るユーザー */
+    readonly additionalUsers: readonly AdditionalUser[]
+    /** USB 同梱または URL 取得のアプリ/ファイルの展開 */
+    readonly deployments: readonly Deployment[]
+    /** 登録する systemd サービス */
+    readonly services: readonly SystemdService[]
+    /** インストール直後に apt full-upgrade を走らせる */
+    readonly aptFullUpgrade: boolean
   }
   readonly behavior: {
     /** 対話させたいセクション（`["*"]` で全部対話）。空なら完全無人。 */

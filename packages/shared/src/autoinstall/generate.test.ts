@@ -169,7 +169,9 @@ describe('buildAutoinstallObject', () => {
     expect(late[1]).toBe('chmod 0440 /target/etc/sudoers.d/90-autoinstall-ops')
   })
 
-  it('追加ファイルは seed からコピーする late-commands になる', () => {
+  it('追加ファイルは CIDATA を自分でマウントしてからコピーする', () => {
+    // cloud-init は seed を読み終わるとアンマウントするので、late-commands の時点では
+    // どこにもマウントされていない。/cdrom は ISO9660 パーティションなので使えない。
     const o = buildAutoinstallObject(
       profile((p) => ({
         ...p,
@@ -178,14 +180,18 @@ describe('buildAutoinstallObject', () => {
           files: [{ name: 'motd.txt', targetPath: '/etc/motd', mode: '0644', owner: 'root', content: 'hi' }],
         },
       })),
-      { comments: 'none', seedMountPath: '/cdrom' },
+      { comments: 'none' },
     )
     const late = o['late-commands'] as string[]
     expect(late).toEqual([
+      'mkdir -p /run/autoinstall-seed',
+      'mount -L CIDATA /run/autoinstall-seed || mount -L cidata /run/autoinstall-seed',
       "mkdir -p '/target/etc'",
-      "cp '/cdrom/motd.txt' '/target/etc/motd'",
+      "cp '/run/autoinstall-seed/motd.txt' '/target/etc/motd'",
       "chmod 0644 '/target/etc/motd'",
+      'umount /run/autoinstall-seed || true',
     ])
+    expect(late.join('\n')).not.toContain('/cdrom')
   })
 
   it("シングルクォートを含む late-command を安全にエスケープする", () => {

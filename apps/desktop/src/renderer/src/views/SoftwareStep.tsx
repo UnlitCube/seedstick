@@ -2,6 +2,7 @@ import { APT_MIRROR_PRESETS, COMMON_PACKAGES, SERIES_FEATURES } from '@autoinsta
 import { useStore } from '../store.js'
 import { useT } from '../lib/i18n.js'
 import { Badge, Callout, Card, Field, RadioGroup, Select, Switch, TextArea, TextInput } from '../components/ui.js'
+import { GpuSection } from './sections/Gpu.js'
 
 export function SoftwareStep(): React.JSX.Element {
   const t = useT()
@@ -187,6 +188,8 @@ export function SoftwareStep(): React.JSX.Element {
           />
         </div>
       </Card>
+
+      <GpuSection />
 
       <Card title={t('software.aptMirror')}>
         <RadioGroup

@@ -1,5 +1,5 @@
 import { BrowserWindow, dialog, ipcMain, shell, app } from 'electron'
-import { readFile, writeFile } from 'node:fs/promises'
+import { readFile, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { randomBytes, createHash } from 'node:crypto'
 import {
@@ -10,20 +10,24 @@ import {
   type RemovableDevice,
 } from '@autoinstall/media'
 import {
-  createDefaultProfile,
+  detectArchiveFormat,
   generateAutoinstallYaml,
   generateMetaData,
   generateUserData,
+  migrateProfile,
   validateProfile,
   type AppSettings,
   type AutoinstallProfile,
   type DeviceInfo,
   type GeneratedConfig,
+  type PickedFile,
   type WriteRequest,
 } from '@autoinstall/shared'
 // crypt はバレルに載せていない（renderer に Node の型を持ち込まないため）。main から直接 import する。
 import { sha512Crypt } from '@autoinstall/shared/crypt'
 import { computeChecksum, openIso } from './iso-service.js'
+import * as profileStore from './profile-store.js'
+import { buildSeedBundle, SeedBuildError } from './seed-builder.js'
 import { getSettings, saveSettings } from './settings.js'
 import { WriteSupervisor } from './write-supervisor.js'
 
@@ -34,6 +38,8 @@ const supervisor = new WriteSupervisor()
 
 /** renderer が指定できる ISO パスは、ユーザーがダイアログで選んだものだけに限る。 */
 const allowedIsoPaths = new Set<string>()
+/** ペイロードとして読めるパスも、ダイアログで選ばれたものだけに限る。 */
+const allowedPayloadPaths = new Set<string>()
 /** renderer が指定できるデバイス ID は、直近の列挙結果に含まれ、かつ選択可能なものだけ。 */
 let selectableDeviceIds = new Set<string>()
 
@@ -58,10 +64,31 @@ function broadcast(channel: string, payload: unknown): void {
   }
 }
 
+function mainWindow(): BrowserWindow {
+  const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+  if (!win) throw new Error('ウィンドウがありません。')
+  return win
+}
+
+/** 設定の生成と検証。ペイロードの実体は読まずにサイズだけ集計する。 */
 async function generate(profile: AutoinstallProfile): Promise<GeneratedConfig> {
   const settings = await getSettings()
   const options = { comments: settings.commentLanguage } as const
   const validation = validateProfile(profile)
+
+  let payloadBytes = 0
+  const missingSources: string[] = []
+  for (const f of profile.postInstall.files) payloadBytes += Buffer.byteLength(f.content, 'utf8')
+  for (const d of profile.postInstall.deployments) {
+    if (d.source.kind === 'inline') {
+      payloadBytes += Buffer.byteLength(d.source.content, 'utf8')
+    } else if (d.source.kind === 'host-file') {
+      const info = await profileStore.checkHostFile(d.source.path)
+      if (info.exists) payloadBytes += info.sizeBytes
+      else missingSources.push(d.source.path)
+    }
+  }
+
   return {
     userData: generateUserData(profile, options),
     metaData: generateMetaData(`autoinstall-${profile.basics.hostname || 'ubuntu'}`),
@@ -69,54 +96,16 @@ async function generate(profile: AutoinstallProfile): Promise<GeneratedConfig> {
     issues: validation.issues,
     ok: validation.ok,
     unattended: profile.behavior.interactiveSections.length === 0,
+    payloadBytes,
+    missingSources,
   }
-}
-
-/** CIDATA に置くファイル一式を作る。 */
-async function buildSeedFiles(
-  req: WriteRequest,
-  isoSha256: string,
-): Promise<{ name: string; content: Buffer }[]> {
-  const config = await generate(req.profile)
-  const files: { name: string; content: Buffer }[] = [
-    { name: 'user-data', content: Buffer.from(config.userData, 'utf8') },
-    { name: 'meta-data', content: Buffer.from(config.metaData, 'utf8') },
-    // 人が読む用の控え。cloud-init はこのファイルを見ない。
-    { name: 'autoinstall.yaml.txt', content: Buffer.from(config.autoinstallYaml, 'utf8') },
-  ]
-  for (const f of req.profile.postInstall.files) {
-    files.push({ name: f.name, content: Buffer.from(f.content, 'utf8') })
-  }
-  if (req.auditRecord) {
-    // 監査用の作成記録。パスワードは含めず、設定のハッシュだけを残す。
-    const record = {
-      tool: `${app.getName()} ${app.getVersion()}`,
-      createdAt: new Date().toISOString(),
-      isoFile: basename(req.isoPath),
-      isoSha256,
-      ubuntuSeries: req.profile.series,
-      hostname: req.profile.basics.hostname,
-      username: req.profile.user.username,
-      profileSha256: createHash('sha256')
-        .update(JSON.stringify(req.profile))
-        .digest('hex'),
-      userDataSha256: createHash('sha256').update(config.userData).digest('hex'),
-      unattended: config.unattended,
-    }
-    files.push({
-      name: 'autoinstall-usb.json',
-      content: Buffer.from(`${JSON.stringify(record, null, 2)}\n`, 'utf8'),
-    })
-  }
-  return files
 }
 
 export function registerIpc(): void {
   // --- ISO ---
   ipcMain.handle('chooseIso', async () => {
     const settings = await getSettings()
-    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
-    const result = await dialog.showOpenDialog(win!, {
+    const result = await dialog.showOpenDialog(mainWindow(), {
       title: 'Ubuntu Server の ISO ファイルを選ぶ',
       filters: [{ name: 'ISO イメージ', extensions: ['iso'] }],
       properties: ['openFile'],
@@ -156,37 +145,82 @@ export function registerIpc(): void {
     return sha512Crypt(plain)
   })
 
-  // --- プロファイル ---
+  // --- プロファイル（ライブラリ） ---
+  ipcMain.handle('listProfiles', () => profileStore.listProfiles())
+
+  ipcMain.handle('saveNamedProfile', (_e, id: unknown, name: unknown, profile: AutoinstallProfile) => {
+    if (id !== null && typeof id !== 'string') throw new Error('プロファイル ID が不正です。')
+    if (typeof name !== 'string' || !name.trim()) throw new Error('プロファイル名を入力してください。')
+    return profileStore.saveProfile(id, name.trim(), profile)
+  })
+
+  ipcMain.handle('loadNamedProfile', (_e, id: unknown) => {
+    if (typeof id !== 'string') throw new Error('プロファイル ID が不正です。')
+    return profileStore.loadProfile(id)
+  })
+
+  ipcMain.handle('deleteNamedProfile', (_e, id: unknown) => {
+    if (typeof id !== 'string') throw new Error('プロファイル ID が不正です。')
+    return profileStore.deleteProfile(id)
+  })
+
+  ipcMain.handle('duplicateNamedProfile', (_e, id: unknown, newName: unknown) => {
+    if (typeof id !== 'string' || typeof newName !== 'string') throw new Error('引数が不正です。')
+    return profileStore.duplicateProfile(id, newName.trim() || 'コピー')
+  })
+
+  ipcMain.handle('renameNamedProfile', (_e, id: unknown, newName: unknown) => {
+    if (typeof id !== 'string' || typeof newName !== 'string') throw new Error('引数が不正です。')
+    if (!newName.trim()) throw new Error('プロファイル名を入力してください。')
+    return profileStore.renameProfile(id, newName.trim())
+  })
+
+  ipcMain.handle('revealProfilesFolder', async () => {
+    await shell.openPath(await profileStore.profilesDirectory())
+  })
+
+  // --- プロファイル（ファイル入出力） ---
   ipcMain.handle('saveProfile', async (_e, profile: AutoinstallProfile) => {
-    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
-    const result = await dialog.showSaveDialog(win!, {
-      title: 'プロファイルを保存',
+    const result = await dialog.showSaveDialog(mainWindow(), {
+      title: 'プロファイルをファイルに書き出す',
       defaultPath: `${profile.meta.name || 'autoinstall'}.profile.json`,
       filters: [{ name: 'プロファイル', extensions: ['json'] }],
     })
     if (result.canceled || !result.filePath) return null
-    await writeFile(result.filePath, `${JSON.stringify(profile, null, 2)}\n`, 'utf8')
+    await profileStore.exportProfileFile(profile, result.filePath)
     return result.filePath
   })
 
   ipcMain.handle('loadProfile', async () => {
-    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
-    const result = await dialog.showOpenDialog(win!, {
-      title: 'プロファイルを読み込む',
+    const result = await dialog.showOpenDialog(mainWindow(), {
+      title: 'プロファイルをファイルから読み込む',
       filters: [{ name: 'プロファイル', extensions: ['json'] }],
       properties: ['openFile'],
     })
     const path = result.filePaths[0]
     if (result.canceled || !path) return null
-    const raw = JSON.parse(await readFile(path, 'utf8')) as unknown
-    // 欠けたキーは既定値で補う。古いバージョンのプロファイルでも開けるようにするため。
-    const base = createDefaultProfile()
-    return { ...base, ...(raw as object) } as AutoinstallProfile
+    const raw = JSON.parse(await readFile(path, 'utf8')) as { profile?: unknown }
+    const { profile, notes } = migrateProfile(raw.profile ?? raw)
+    // 読み込んだプロファイルが参照するペイロードは、以後読めるように許可しておく
+    for (const d of profile.postInstall.deployments) {
+      if (d.source.kind === 'host-file') allowedPayloadPaths.add(d.source.path)
+    }
+    return { profile, notes: [...notes] }
+  })
+
+  ipcMain.handle('importProfileToLibrary', async () => {
+    const result = await dialog.showOpenDialog(mainWindow(), {
+      title: 'プロファイルを取り込む',
+      filters: [{ name: 'プロファイル', extensions: ['json'] }],
+      properties: ['openFile'],
+    })
+    const path = result.filePaths[0]
+    if (result.canceled || !path) return null
+    return profileStore.importProfileFile(path, basename(path).replace(/\.profile\.json$|\.json$/, ''))
   })
 
   ipcMain.handle('exportBundle', async (_e, profile: AutoinstallProfile) => {
-    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
-    const result = await dialog.showOpenDialog(win!, {
+    const result = await dialog.showOpenDialog(mainWindow(), {
       title: '設定一式の保存先フォルダを選ぶ',
       properties: ['openDirectory', 'createDirectory'],
     })
@@ -211,12 +245,42 @@ export function registerIpc(): void {
         '',
         'このツールで USB を作れば、上記 2〜5 はすべて自動で行われます。',
         '',
+        '注意: アプリの展開を設定している場合、そのファイルはここには書き出されません。',
+        '      late-commands が CIDATA パーティションをマウントして参照します。',
+        '',
         `生成: ${app.getName()} ${app.getVersion()}`,
         `日時: ${new Date().toISOString()}`,
       ].join('\n'),
       'utf8',
     )
     return dir
+  })
+
+  // --- アプリ展開のペイロード ---
+  ipcMain.handle('pickPayloadFile', async (): Promise<PickedFile | null> => {
+    const result = await dialog.showOpenDialog(mainWindow(), {
+      title: 'インストール先に展開するファイルを選ぶ',
+      properties: ['openFile'],
+      filters: [
+        { name: 'アーカイブ', extensions: ['tar.gz', 'tgz', 'tar.xz', 'txz', 'tar.bz2', 'tar', 'zip'] },
+        { name: 'すべてのファイル', extensions: ['*'] },
+      ],
+    })
+    const path = result.filePaths[0]
+    if (result.canceled || !path) return null
+    const info = await stat(path)
+    allowedPayloadPaths.add(path)
+    return {
+      path,
+      name: basename(path),
+      sizeBytes: info.size,
+      archiveFormat: detectArchiveFormat(basename(path)),
+    }
+  })
+
+  ipcMain.handle('checkPayloadFile', (_e, path: unknown) => {
+    if (typeof path !== 'string') return { exists: false, sizeBytes: 0 }
+    return profileStore.checkHostFile(path)
   })
 
   // --- デバイス ---
@@ -238,6 +302,14 @@ export function registerIpc(): void {
         message: 'このデバイスには書き込めません。デバイス一覧を再読み込みしてください。',
       }
     }
+    for (const d of req.profile.postInstall.deployments) {
+      if (d.source.kind === 'host-file' && !allowedPayloadPaths.has(d.source.path)) {
+        return {
+          started: false,
+          message: `展開するファイル "${d.name}" が選択されていません。選び直してください。`,
+        }
+      }
+    }
     const validation = validateProfile(req.profile)
     if (!validation.ok) {
       return { started: false, message: '設定にエラーがあります。確認画面で修正してください。' }
@@ -252,7 +324,7 @@ export function registerIpc(): void {
     // ISO のパッチは main 側で作る。画面に見せた内容とワーカーが書く内容を一致させるため。
     const isoDev = await FileBlockDevice.open(req.isoPath, 'r')
     let patches
-    let isoSha256 = ''
+    let isoFingerprint = ''
     try {
       const inspection = await inspectIso(isoDev)
       const plan = buildIsoPatches(inspection, { args: ['autoinstall'], markTitle: true })
@@ -262,23 +334,42 @@ export function registerIpc(): void {
         label: p.label,
       }))
       // 監査記録用。全体のハッシュは重いので、識別に足る情報だけを使う。
-      isoSha256 = createHash('sha256')
+      isoFingerprint = createHash('sha256')
         .update(`${inspection.volumeId}|${inspection.sizeBytes}|${inspection.diskInfo ?? ''}`)
         .digest('hex')
     } finally {
       await isoDev.close().catch(() => undefined)
     }
 
-    const seedFiles = await buildSeedFiles(req, isoSha256)
     const settings = await getSettings()
+    let bundle
+    try {
+      bundle = await buildSeedBundle({
+        profile: req.profile,
+        generateOptions: { comments: settings.commentLanguage },
+        auditRecord: req.auditRecord,
+        isoFileName: basename(req.isoPath),
+        isoFingerprint,
+        minimumCidataSize: req.cidataSizeBytes || settings.cidataSizeBytes,
+      })
+    } catch (err) {
+      if (err instanceof SeedBuildError) return { started: false, message: err.message }
+      throw err
+    }
+    if (bundle.missingSources.length > 0) {
+      return {
+        started: false,
+        message: `展開するファイルが見つかりません: ${bundle.missingSources.join(', ')}`,
+      }
+    }
 
     return supervisor.start({
       isoPath: req.isoPath,
       devicePath: device.id,
       deviceSizeBytes: device.sizeBytes,
       patches,
-      seedFiles: seedFiles.map((f) => ({ name: f.name, content: f.content.toString('base64') })),
-      cidataSizeBytes: req.cidataSizeBytes || settings.cidataSizeBytes,
+      seedFiles: bundle.files.map((f) => ({ name: f.name, content: f.content.toString('base64') })),
+      cidataSizeBytes: bundle.cidataSizeBytes,
       hideIsoPartitionFromWindows: true,
       verify: req.verify,
       timestampIso: new Date().toISOString(),
@@ -311,19 +402,21 @@ export function registerIpc(): void {
       'canonical-subiquity.readthedocs-hosted.com',
       'docs.cloud-init.io',
       'netplan.io',
+      'docs.nvidia.com',
+      'developer.nvidia.com',
+      'www.freedesktop.org',
     ])
     if (parsed.protocol !== 'https:' || !allowedHosts.has(parsed.hostname)) return
     await shell.openExternal(parsed.toString())
   })
 
   ipcMain.handle('readTextFile', async () => {
-    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
-    const result = await dialog.showOpenDialog(win!, {
+    const result = await dialog.showOpenDialog(mainWindow(), {
       title: 'ファイルを選ぶ',
       properties: ['openFile'],
       filters: [
         { name: '公開鍵', extensions: ['pub'] },
-        { name: 'テキスト', extensions: ['txt', 'yaml', 'yml', 'cfg', 'conf', 'json'] },
+        { name: 'テキスト', extensions: ['txt', 'yaml', 'yml', 'cfg', 'conf', 'json', 'service', 'sh'] },
         { name: 'すべて', extensions: ['*'] },
       ],
     })

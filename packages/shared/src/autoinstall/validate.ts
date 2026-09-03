@@ -4,6 +4,7 @@ import { SERIES_FEATURES } from './model.js'
 import { buildAutoinstallObject, collectPackages } from './generate.js'
 import { isValidSha512CryptHash, looksLikeCryptHash } from '../crypt/validate.js'
 import { getPreset } from './presets.js'
+import { CUDA_REPO_DISTRO, cudaPackages, isValidServiceName } from './provisioning.js'
 
 // プロファイルの検証。JSON Schema による構文チェックだけでは「サーバーに触れなくなる設定」を防げないので、
 // 意味論的な検査（ロックアウト、ネットワーク不要環境でのパッケージ指定など）を重視している。
@@ -320,6 +321,208 @@ export function validateProfile(profile: AutoinstallProfile): ValidationResult {
       'postInstall.presets',
       'パスワード無し sudo を有効にしています。そのユーザーを奪われると即座に root 権限を取られます。',
       'Passwordless sudo is enabled. Anyone who takes that account gets root immediately.',
+    )
+  }
+
+  // --- 追加ユーザー ---
+  const allUsernames = new Set<string>([profile.user.username])
+  for (const [i, u] of profile.postInstall.additionalUsers.entries()) {
+    const where = `postInstall.additionalUsers[${i}]`
+    if (!u.username) {
+      add('error', `${where}.username`, `追加ユーザー #${i + 1} の名前が空です。`, `Additional user #${i + 1} has no username.`)
+    } else if (!USERNAME_RE.test(u.username)) {
+      add(
+        'error',
+        `${where}.username`,
+        `追加ユーザー "${u.username}" の名前に使えない文字があります。`,
+        `Additional user "${u.username}" has an invalid username.`,
+      )
+    } else if (RESERVED_USERNAMES.has(u.username)) {
+      add(
+        'error',
+        `${where}.username`,
+        `"${u.username}" はシステムが予約している名前です。`,
+        `"${u.username}" is reserved by the system.`,
+      )
+    } else if (allUsernames.has(u.username)) {
+      add(
+        'error',
+        `${where}.username`,
+        `ユーザー名 "${u.username}" が重複しています。`,
+        `Username "${u.username}" is duplicated.`,
+      )
+    }
+    allUsernames.add(u.username)
+
+    if (u.passwordHash && !looksLikeCryptHash(u.passwordHash)) {
+      add(
+        'error',
+        `${where}.passwordHash`,
+        `追加ユーザー "${u.username}" のパスワードが平文のままです。`,
+        `The password for "${u.username}" is plain text.`,
+      )
+    }
+    if (!u.passwordHash && u.sshAuthorizedKeys.length === 0 && !u.systemAccount) {
+      add(
+        'warning',
+        `${where}.passwordHash`,
+        `"${u.username}" はパスワードも SSH 鍵も無いためログインできません（アカウントはロックされます）。`,
+        `"${u.username}" has neither a password nor an SSH key and cannot log in (the account will be locked).`,
+      )
+    }
+    for (const [k, key] of u.sshAuthorizedKeys.entries()) {
+      if (!SSH_KEY_RE.test(key.trim())) {
+        add(
+          'error',
+          `${where}.sshAuthorizedKeys[${k}]`,
+          `"${u.username}" の ${k + 1} 番目の SSH 公開鍵の形式が正しくありません。`,
+          `SSH key #${k + 1} for "${u.username}" is malformed.`,
+        )
+      }
+    }
+    if (u.sudo === 'nopasswd') {
+      add(
+        'info',
+        `${where}.sudo`,
+        `"${u.username}" はパスワード無しで sudo を使えます。`,
+        `"${u.username}" can use sudo without a password.`,
+      )
+    }
+  }
+
+  // --- アプリの展開 ---
+  for (const [i, d] of profile.postInstall.deployments.entries()) {
+    const where = `postInstall.deployments[${i}]`
+    if (!d.targetPath.startsWith('/')) {
+      add(
+        'error',
+        `${where}.targetPath`,
+        `展開 #${i + 1} の配置先は絶対パスにしてください。`,
+        `Deployment #${i + 1} needs an absolute target path.`,
+      )
+    }
+    if (!d.name || /[\\/:*?"<>|]/.test(d.name)) {
+      add(
+        'error',
+        `${where}.name`,
+        `展開 #${i + 1} のファイル名に使えない文字があります。`,
+        `Deployment #${i + 1} has an invalid file name.`,
+      )
+    }
+    if (d.kind === 'file' && !/^0?[0-7]{3}$/.test(d.mode)) {
+      add(
+        'error',
+        `${where}.mode`,
+        `展開 #${i + 1} のパーミッションは 0644 のような 8 進数で指定してください。`,
+        `Deployment #${i + 1} permission must be octal such as 0644.`,
+      )
+    }
+    if (d.source.kind === 'url') {
+      if (!/^https?:\/\//.test(d.source.url)) {
+        add('error', `${where}.source.url`, `展開 #${i + 1} の URL が正しくありません。`, `Deployment #${i + 1} has an invalid URL.`)
+      }
+      if (!d.source.sha256) {
+        add(
+          'warning',
+          `${where}.source.sha256`,
+          `展開 #${i + 1} は URL から取得しますが SHA-256 が未設定です。改ざんを検出できません。`,
+          `Deployment #${i + 1} downloads from a URL without a SHA-256 checksum, so tampering cannot be detected.`,
+        )
+      } else if (!/^[0-9a-f]{64}$/i.test(d.source.sha256)) {
+        add(
+          'error',
+          `${where}.source.sha256`,
+          `展開 #${i + 1} の SHA-256 は 64 桁の 16 進数です。`,
+          `Deployment #${i + 1} SHA-256 must be 64 hex characters.`,
+        )
+      }
+    }
+    if (d.source.kind === 'host-file' && !d.source.path) {
+      add(
+        'error',
+        `${where}.source.path`,
+        `展開 #${i + 1} の元ファイルが選ばれていません。`,
+        `Deployment #${i + 1} has no source file selected.`,
+      )
+    }
+  }
+
+  // --- systemd サービス ---
+  const serviceNames = new Set<string>()
+  for (const [i, svc] of profile.postInstall.services.entries()) {
+    const where = `postInstall.services[${i}]`
+    if (!isValidServiceName(svc.name)) {
+      add(
+        'error',
+        `${where}.name`,
+        `サービス #${i + 1} の名前が不正です（英数字と . _ - @ のみ、末尾に .service は付けません）。`,
+        `Service #${i + 1} has an invalid name (letters, digits and . _ - @ only; do not append .service).`,
+      )
+    } else if (serviceNames.has(svc.name)) {
+      add('error', `${where}.name`, `サービス名 "${svc.name}" が重複しています。`, `Service name "${svc.name}" is duplicated.`)
+    }
+    serviceNames.add(svc.name)
+    if (!svc.execStart.trim()) {
+      add('error', `${where}.execStart`, `サービス "${svc.name}" の実行コマンドが空です。`, `Service "${svc.name}" has no ExecStart command.`)
+    } else if (!svc.execStart.trim().startsWith('/')) {
+      add(
+        'warning',
+        `${where}.execStart`,
+        `サービス "${svc.name}" の実行コマンドは絶対パスにしてください（systemd は PATH を解決しません）。`,
+        `ExecStart for "${svc.name}" should be an absolute path; systemd does not resolve PATH.`,
+      )
+    }
+    if (svc.user && svc.user !== 'root' && svc.user !== 'nobody' && !allUsernames.has(svc.user)) {
+      add(
+        'warning',
+        `${where}.user`,
+        `サービス "${svc.name}" が使うユーザー "${svc.user}" はこの設定では作成されません。`,
+        `Service "${svc.name}" runs as "${svc.user}", which this config does not create.`,
+      )
+    }
+    for (const [k, e] of svc.environment.entries()) {
+      if (e.trim() && !/^[A-Za-z_][A-Za-z0-9_]*=/.test(e.trim())) {
+        add(
+          'error',
+          `${where}.environment[${k}]`,
+          `サービス "${svc.name}" の環境変数は KEY=VALUE の形式で書いてください。`,
+          `Environment entries for "${svc.name}" must be KEY=VALUE.`,
+        )
+      }
+    }
+  }
+
+  // --- GPU / CUDA ---
+  if (profile.software.gpu.enabled) {
+    if (CUDA_REPO_DISTRO[profile.series] === null) {
+      add(
+        'error',
+        'software.gpu',
+        `NVIDIA は Ubuntu ${profile.series} 向けの CUDA リポジトリを提供していません。LTS 版（22.04 / 24.04 / 26.04）を使ってください。`,
+        `NVIDIA does not publish a CUDA repository for Ubuntu ${profile.series}. Use an LTS release (22.04 / 24.04 / 26.04).`,
+      )
+    }
+    if (cudaPackages(profile.software.gpu).length === 0) {
+      add(
+        'warning',
+        'software.gpu',
+        'GPU 設定が有効ですが、ドライバもツールキットも選ばれていません。',
+        'GPU setup is enabled but neither a driver nor a toolkit is selected.',
+      )
+    }
+    if (profile.software.gpu.containerToolkit && !profile.postInstall.presets.includes('docker-ce')) {
+      add(
+        'warning',
+        'software.gpu.containerToolkit',
+        'コンテナから GPU を使う設定ですが、Docker がインストールされません。「インストール後」で Docker を有効にしてください。',
+        'The container toolkit is enabled but Docker is not installed. Enable Docker under "After install".',
+      )
+    }
+    add(
+      'info',
+      'software.gpu',
+      'CUDA は初回起動時にインターネットから数 GB をダウンロードします。完了後に自動で再起動します。',
+      'CUDA downloads several GB from the internet on first boot, then reboots automatically.',
     )
   }
 

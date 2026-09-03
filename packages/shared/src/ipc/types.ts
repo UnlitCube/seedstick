@@ -1,4 +1,5 @@
 import type { AutoinstallProfile } from '../autoinstall/model.js'
+import type { ProfileSummary } from '../autoinstall/migrate.js'
 import type { ValidationIssue } from '../autoinstall/validate.js'
 import type { IsoIdentity } from '../iso/catalog.js'
 
@@ -53,6 +54,25 @@ export interface GeneratedConfig {
   readonly ok: boolean
   /** 完全無人でインストールが完了するか（interactive-sections が空か） */
   readonly unattended: boolean
+  /** USB に載せるペイロードの合計バイト数（CIDATA のサイズ決定に使う） */
+  readonly payloadBytes: number
+  /** ペイロードの元ファイルが見つからないもの（プロファイルを別の PC で開いた場合など） */
+  readonly missingSources: readonly string[]
+}
+
+/** ホスト上のファイルを選んだ結果（アプリ展開のペイロード用）。 */
+export interface PickedFile {
+  readonly path: string
+  readonly name: string
+  readonly sizeBytes: number
+  /** 拡張子から推測したアーカイブ形式。判定できなければ null。 */
+  readonly archiveFormat: string | null
+}
+
+/** プロファイル保存の結果。 */
+export interface SavedProfileRef {
+  readonly id: string
+  readonly updatedAt: string
 }
 
 export interface WriteRequest {
@@ -113,10 +133,30 @@ export interface AutoinstallApi {
   generateConfig(profile: AutoinstallProfile): Promise<GeneratedConfig>
   hashPassword(plain: string): Promise<string>
 
-  // --- プロファイル ---
+  // --- プロファイル（ライブラリ） ---
+  /** 保存済みプロファイルの一覧（更新日時の新しい順） */
+  listProfiles(): Promise<ProfileSummary[]>
+  /** `id` を渡すと上書き保存、null なら新規保存 */
+  saveNamedProfile(id: string | null, name: string, profile: AutoinstallProfile): Promise<SavedProfileRef>
+  /** 保存済みプロファイルを開く。古い形式は移行され、`notes` に注意点が入る。 */
+  loadNamedProfile(id: string): Promise<{ profile: AutoinstallProfile; notes: string[] } | null>
+  deleteNamedProfile(id: string): Promise<boolean>
+  duplicateNamedProfile(id: string, newName: string): Promise<SavedProfileRef | null>
+  renameNamedProfile(id: string, newName: string): Promise<SavedProfileRef | null>
+  /** 保存フォルダをエクスプローラ／Finder で開く */
+  revealProfilesFolder(): Promise<void>
+
+  // --- プロファイル（ファイル入出力） ---
   saveProfile(profile: AutoinstallProfile): Promise<string | null>
-  loadProfile(): Promise<AutoinstallProfile | null>
+  loadProfile(): Promise<{ profile: AutoinstallProfile; notes: string[] } | null>
+  importProfileToLibrary(): Promise<SavedProfileRef | null>
   exportBundle(profile: AutoinstallProfile): Promise<string | null>
+
+  // --- アプリ展開のペイロード ---
+  /** 展開するファイル／アーカイブを選ぶ */
+  pickPayloadFile(): Promise<PickedFile | null>
+  /** プロファイルを開き直したときに、元ファイルがまだあるか確認する */
+  checkPayloadFile(path: string): Promise<{ exists: boolean; sizeBytes: number }>
 
   // --- デバイス ---
   listDevices(): Promise<DeviceInfo[]>

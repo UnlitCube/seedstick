@@ -5,6 +5,7 @@ import { useStore } from '../store.js'
 import { useT } from '../lib/i18n.js'
 import { generatePassword, passwordStrength } from '../lib/format.js'
 import { Badge, Button, Callout, Card, Field, Switch, TextArea, TextInput } from '../components/ui.js'
+import { AdditionalUsersSection } from './sections/AdditionalUsers.js'
 
 const SSH_KEY_RE =
   /^(ssh-rsa|ssh-ed25519|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com)\s+[A-Za-z0-9+/=]+(\s+\S+)?$/
@@ -248,6 +249,8 @@ export function UserStep(): React.JSX.Element {
           </div>
         )}
       </Card>
+
+      <AdditionalUsersSection />
     </div>
   )
 }

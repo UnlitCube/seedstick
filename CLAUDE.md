@@ -9,6 +9,9 @@ ISO を再構築せず、raw 書き込み + 数セクタのインプレース改
 autoinstall-ui/
 ├── packages/shared/   @autoinstall/shared  — 純 TS 契約（renderer からも import する）
 │   ├── autoinstall/   プロファイル型・YAML 生成・検証・プリセット
+│   │                  provisioning.ts (追加ユーザー/展開/サービス/GPU の型)
+│   │                  generate-provisioning.ts (それらを late-commands と runcmd に落とす)
+│   │                  migrate.ts (保存済みプロファイルの読み込みと v1→v2 移行)
 │   ├── crypt/         validate.ts (ブラウザ可) / sha512crypt.ts (Node 専用・サブパス export)
 │   ├── iso/           Volume ID → バージョン判定、リリースカタログ
 │   ├── i18n/          ja.ts が原文、en.ts は satisfies でキー整合を強制
@@ -83,50 +86,86 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
 
 ### FAT / CIDATA
 
-7. **FAT の種類を先に決めてからクラスタサイズを選ぶ。** 逆にすると 64 MiB が FAT32 になる
+7. **late-commands の時点で CIDATA はマウントされていない。**
+   cloud-init の `util.mount_cb` は「マウント → 読む → **アンマウント**」する実装なので、
+   seed は残らない。`/cdrom` は ISO9660 パーティションであって CIDATA ではない。
+   同梱ファイルを使うには late-commands で自分で
+   `mount -L CIDATA /run/autoinstall-seed` する（`SEED_MOUNT_PATH`）。
+   ラベルの大小は環境差があるので `|| mount -L cidata ...` を必ず付ける。
+   アンマウントは `|| true` を付ける（失敗でインストール全体を落とさない）。
+
+8. **アーカイブは /target の外から直接展開できない。**
+   `curtin in-target` は `/target` を chroot するので、`/run/autoinstall-seed` は見えない。
+   いったん `/target/var/tmp/` へコピーしてから in-target で展開し、後で消す。
+
+9. **FAT の種類を先に決めてからクラスタサイズを選ぶ。** 逆にすると 64 MiB が FAT32 になる
    （クラスタ 1 セクタで 131072 個 → FAT32 レンジ）。目標種別のクラスタ数レンジに収まる
    最小のクラスタサイズを選ぶのが正しい順序。
-8. **`user-data` / `meta-data` は 8.3 名に収まらないので VFAT LFN が必須。**
+10. **`user-data` / `meta-data` は 8.3 名に収まらないので VFAT LFN が必須。**
    短縮名は `USER-D~1`。LFN エントリはディスク上「逆順」に置く。
-9. **cloud-init は `TYPE=vfat` または `iso9660` の全ブロックデバイスからラベル `cidata` を探す**
+11. **cloud-init は `TYPE=vfat` または `iso9660` の全ブロックデバイスからラベル `cidata` を探す**
    （`DataSourceNoCloud._get_devices`）。だから同一 USB 内の別パーティションでも見つかる。
    `meta-data` が無いと「not a valid seed」として無視される（空でよい）。
-10. **CIDATA に `.disk/info` を置かない。** UEFI の署名版 grubx64.efi は
-    `search --file /.disk/info` でボリュームを探すため、誤ヒットする。
+12. **CIDATA に `.disk/info` を置かない。** UEFI の署名版 grubx64.efi は
+   `search --file /.disk/info` でボリュームを探すため、誤ヒットする。
+
+### プロビジョニング
+
+13. **`chpasswd -e` に渡すハッシュは必ずクォートする。**
+   `$6$...` の `$` がシェルに展開されるとパスワードが壊れる。
+   `inTargetSh()` を通せば `shellQuote` が二重にエスケープする。
+
+14. **`useradd` は既にユーザーがいると非ゼロで終わり、インストール全体が失敗する。**
+   `id -u <name> >/dev/null 2>&1 || useradd ...` で冪等にする。
+
+15. **`After=network-online.target` だけでは待たない。** systemd は `Wants=` も要求する。
+   `renderServiceUnit()` が自動で付ける。
+
+16. **CUDA は late-commands ではなく初回起動時に入れる。**
+   数 GB のダウンロードが発生し、インストーラ画面では進捗が見えず「固まった」ように見える。
+   ドライバを入れた場合は最後に `systemctl reboot` が必要（カーネルモジュールの読み込み）。
+
+17. **NVIDIA は 25.10 向けの CUDA リポジトリを公開していない**（実測で 404）。
+   `CUDA_REPO_DISTRO['25.10']` は null で、UI と検証の両方でブロックする。
 
 ### プラットフォーム
 
-11. **Windows の `\\.\PhysicalDriveN` はセクタ境界・セクタ長でしか読み書きできない。**
-    違反すると EINVAL になり原因が分かりにくい。部分セクタは read-modify-write する。
-12. **Windows 8 以降、マウント済みボリュームがあるディスクには書けない。** `diskpart` の
-    `clean` でボリュームを外してから書く。
-13. **昇格した子プロセスの標準出力は親から読めない。** `Start-Process -Verb RunAs` がその代表。
-    進捗は 127.0.0.1 の TCP に NDJSON で流す（それがこの設計の理由）。
-14. **`ELECTRON_RUN_AS_NODE=1` を付けないと GUI がもう一つ開く。** ワーカーは Electron バイナリを
-    素の Node として実行する。
-15. **Windows では `child.kill()` が孫プロセスを取り残す。** 昇格した実体は孫になるので
-    `taskkill /pid <pid> /T /F` でツリーごと落とす。
+18. **Windows の `\\.\PhysicalDriveN` はセクタ境界・セクタ長でしか読み書きできない。**
+   違反すると EINVAL になり原因が分かりにくい。部分セクタは read-modify-write する。
+19. **Windows 8 以降、マウント済みボリュームがあるディスクには書けない。** `diskpart` の
+   `clean` でボリュームを外してから書く。
+20. **昇格した子プロセスの標準出力は親から読めない。** `Start-Process -Verb RunAs` がその代表。
+   進捗は 127.0.0.1 の TCP に NDJSON で流す（それがこの設計の理由）。
+21. **`ELECTRON_RUN_AS_NODE=1` を付けないと GUI がもう一つ開く。** ワーカーは Electron バイナリを
+   素の Node として実行する。
+22. **Windows では `child.kill()` が孫プロセスを取り残す。** 昇格した実体は孫になるので
+   `taskkill /pid <pid> /T /F` でツリーごと落とす。
 
 ### ビルド / テスト
 
-16. **electron-vite の renderer `build.outDir` は相対パスの解決先が直感と食い違う。**
-    `resolve(import.meta.dirname, 'out/renderer')` と絶対パスで書かないとリポジトリルートに逃げる。
-17. **npm workspaces + electron-builder は「Cannot compute electron version」で落ちる。**
-    `require('electron/package.json').version` を `-c.electronVersion=` で明示的に渡す
-    （`apps/desktop/scripts/dist.mjs`）。
-18. **`expect(promise).rejects` に巨大なオブジェクトを渡すと vitest が OOM する。**
-    解決してしまった場合に pretty-format が 64 MiB の Buffer を含むオブジェクトを整形しようとして
-    ヒープを使い切る。自前で try/catch して小さい値だけを assert する。
-19. **統合テストは 3 GB 級のイメージを扱うので `maxWorkers: 2` / `fileParallelism: false`。**
-    並列度を上げるとワーカーがメモリ不足で落ちる。
-20. **Git Bash から Windows ネイティブ実行ファイルに渡す引数は ANSI コードページに変換される。**
-    `openssl passwd -6 "パスワード漢字"` の結果が UTF-8 前提の実装と食い違った。
-    テストベクタは UTF-8 バイトを明示できる経路で作る。
+23. **electron-vite の renderer `build.outDir` は相対パスの解決先が直感と食い違う。**
+   `resolve(import.meta.dirname, 'out/renderer')` と絶対パスで書かないとリポジトリルートに逃げる。
+24. **npm workspaces + electron-builder は「Cannot compute electron version」で落ちる。**
+   `require('electron/package.json').version` を `-c.electronVersion=` で明示的に渡す
+   （`apps/desktop/scripts/dist.mjs`）。
+25. **`expect(promise).rejects` に巨大なオブジェクトを渡すと vitest が OOM する。**
+   解決してしまった場合に pretty-format が 64 MiB の Buffer を含むオブジェクトを整形しようとして
+   ヒープを使い切る。自前で try/catch して小さい値だけを assert する。
+26. **統合テストは 3 GB 級のイメージを扱うので `maxWorkers: 2` / `fileParallelism: false`。**
+   並列度を上げるとワーカーがメモリ不足で落ちる。
+27. **ソースに U+2028 / U+2029 を直接書くと JS の行終端として扱われ、構文エラーになる。**
+   正規表現に入れたいときは Unicode プロパティ `\p{Zl}` / `\p{Zp}` を使う（ソースが ASCII で済む）。
+
+28. **Git Bash から Windows ネイティブ実行ファイルに渡す引数は ANSI コードページに変換される。**
+   `openssl passwd -6 "パスワード漢字"` の結果が UTF-8 前提の実装と食い違った。
+   テストベクタは UTF-8 バイトを明示できる経路で作る。
 
 ## 検証していないこと（実機確認が必要）
 
 - 実際の USB メモリへの書き込み（`.img` ファイルへの書き出しまでは実 ISO で検証済み）
 - 実機／VM からの起動と、完全無人インストールの完走
+- 追加ユーザー・アプリ展開・サービス登録・CUDA が実機で意図どおり動くか
+  （生成されるコマンドは単体テストとスモークテストで検証済みだが、実行はしていない）
 - Windows が `CIDATA` にドライブレターを割り当てるか（GPT bit63 で ISO9660 側は隠している）
 - macOS / Linux でのデバイス列挙と権限昇格（コードは書いたが実機未確認）
 

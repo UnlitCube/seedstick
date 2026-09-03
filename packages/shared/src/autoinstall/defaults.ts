@@ -7,7 +7,7 @@ export function createDefaultProfile(
   createdAt = '1970-01-01T00:00:00.000Z',
 ): AutoinstallProfile {
   return {
-    profileVersion: 1,
+    profileVersion: 2,
     meta: { name: 'default', createdAt, toolVersion },
     series,
     basics: {
@@ -42,6 +42,13 @@ export function createDefaultProfile(
       installDrivers: false,
       kernelCrashDumps: null,
       ubuntuProToken: '',
+      gpu: {
+        enabled: false,
+        driver: 'open',
+        toolkit: 'latest',
+        setupPath: true,
+        containerToolkit: false,
+      },
     },
     apt: {
       mode: 'default',
@@ -50,7 +57,16 @@ export function createDefaultProfile(
       proxy: '',
       disableComponents: [],
     },
-    postInstall: { presets: [], lateCommands: [], firstBootCommands: [], files: [] },
+    postInstall: {
+      presets: [],
+      lateCommands: [],
+      firstBootCommands: [],
+      files: [],
+      additionalUsers: [],
+      deployments: [],
+      services: [],
+      aptFullUpgrade: false,
+    },
     behavior: {
       interactiveSections: [],
       shutdown: 'reboot',

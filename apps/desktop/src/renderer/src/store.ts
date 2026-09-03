@@ -9,6 +9,7 @@ import {
   type GeneratedConfig,
   type IsoFileInfo,
   type Locale,
+  type ProfileSummary,
   type WriteStatus,
 } from '@autoinstall/shared'
 
@@ -57,6 +58,14 @@ interface AppState {
   /** 平文パスワードはここにだけ置く。保存もログ出力もしない。 */
   passwordDraft: string
   passwordConfirmDraft: string
+  /** 保存済みプロファイルの一覧 */
+  profiles: ProfileSummary[]
+  /** 今開いているプロファイルの ID。未保存なら null。 */
+  currentProfileId: string | null
+  /** 最後の保存以降に変更があったか */
+  dirty: boolean
+  /** プロファイル読み込み時の注意（古い形式の移行など） */
+  profileNotes: string[]
 
   init(): Promise<void>
   setStep(step: StepId): void
@@ -75,6 +84,13 @@ interface AppState {
   saveSettings(update: (s: AppSettings) => AppSettings): Promise<void>
   loadProfileFromDisk(): Promise<void>
   setLocale(locale: Locale): Promise<void>
+  refreshProfiles(): Promise<void>
+  saveCurrentProfile(name?: string): Promise<void>
+  openProfile(id: string): Promise<void>
+  removeProfile(id: string): Promise<void>
+  duplicateProfile(id: string, newName: string): Promise<void>
+  newProfile(): void
+  dismissProfileNotes(): void
 }
 
 /** 設定保存の直列化。連続保存で古いスナップショットが後勝ちするのを防ぐ。 */
@@ -102,6 +118,10 @@ export const useStore = create<AppState>((set, get) => ({
   writeStatus: { state: 'idle' },
   passwordDraft: '',
   passwordConfirmDraft: '',
+  profiles: [],
+  currentProfileId: null,
+  dirty: false,
+  profileNotes: [],
 
   async init() {
     const settings = await window.autoinstall.getSettings()
@@ -117,6 +137,7 @@ export const useStore = create<AppState>((set, get) => ({
     })
     window.autoinstall.onChecksumProgress((checksumProgress) => set({ checksumProgress }))
     set({ writeStatus: await window.autoinstall.getWriteStatus() })
+    void get().refreshProfiles()
     void get().regenerate()
   },
 
@@ -127,7 +148,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   updateProfile(fn) {
-    set({ profile: fn(get().profile) })
+    set({ profile: fn(get().profile), dirty: true })
     void get().regenerate()
   },
 
@@ -261,10 +282,81 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   async loadProfileFromDisk() {
-    const profile = await window.autoinstall.loadProfile()
-    if (!profile) return
-    set({ profile, passwordDraft: '', passwordConfirmDraft: '' })
+    const loaded = await window.autoinstall.loadProfile()
+    if (!loaded) return
+    set({
+      profile: loaded.profile,
+      // ファイルから開いたものはライブラリの特定の項目には紐づかない
+      currentProfileId: null,
+      dirty: true,
+      profileNotes: loaded.notes,
+      passwordDraft: '',
+      passwordConfirmDraft: '',
+    })
     void get().regenerate()
+  },
+
+  async refreshProfiles() {
+    set({ profiles: await window.autoinstall.listProfiles() })
+  },
+
+  async saveCurrentProfile(name) {
+    const { profile, currentProfileId } = get()
+    // 名前を指定されたら「名前を付けて保存」、無ければ現在の項目に上書き
+    const targetName = name ?? profile.meta.name
+    const targetId = name !== undefined ? null : currentProfileId
+    const saved = await window.autoinstall.saveNamedProfile(targetId, targetName, profile)
+    set({
+      currentProfileId: saved.id,
+      dirty: false,
+      profile: { ...profile, meta: { ...profile.meta, name: targetName } },
+    })
+    await get().refreshProfiles()
+  },
+
+  async openProfile(id) {
+    const loaded = await window.autoinstall.loadNamedProfile(id)
+    if (!loaded) return
+    set({
+      profile: loaded.profile,
+      currentProfileId: id,
+      dirty: false,
+      profileNotes: loaded.notes,
+      passwordDraft: '',
+      passwordConfirmDraft: '',
+    })
+    void get().regenerate()
+  },
+
+  async removeProfile(id) {
+    await window.autoinstall.deleteNamedProfile(id)
+    if (get().currentProfileId === id) set({ currentProfileId: null, dirty: true })
+    await get().refreshProfiles()
+  },
+
+  async duplicateProfile(id, newName) {
+    await window.autoinstall.duplicateNamedProfile(id, newName)
+    await get().refreshProfiles()
+  },
+
+  newProfile() {
+    set({
+      profile: createDefaultProfile(
+        get().iso?.identity.series ?? '24.04',
+        'autoinstall-ui/0.1.0',
+        new Date().toISOString(),
+      ),
+      currentProfileId: null,
+      dirty: false,
+      profileNotes: [],
+      passwordDraft: '',
+      passwordConfirmDraft: '',
+    })
+    void get().regenerate()
+  },
+
+  dismissProfileNotes() {
+    set({ profileNotes: [] })
   },
 
   async setLocale(locale) {

@@ -7,6 +7,9 @@ import type {
   DeviceInfo,
   GeneratedConfig,
   IsoOpenResult,
+  PickedFile,
+  ProfileSummary,
+  SavedProfileRef,
   WriteRequest,
   WriteStatus,
 } from '@autoinstall/shared'
@@ -38,11 +41,36 @@ const api: AutoinstallApi = {
     ipcRenderer.invoke('generateConfig', profile) as Promise<GeneratedConfig>,
   hashPassword: (plain: string) => ipcRenderer.invoke('hashPassword', plain) as Promise<string>,
 
+  listProfiles: () => ipcRenderer.invoke('listProfiles') as Promise<ProfileSummary[]>,
+  saveNamedProfile: (id: string | null, name: string, profile: AutoinstallProfile) =>
+    ipcRenderer.invoke('saveNamedProfile', id, name, profile) as Promise<SavedProfileRef>,
+  loadNamedProfile: (id: string) =>
+    ipcRenderer.invoke('loadNamedProfile', id) as Promise<{
+      profile: AutoinstallProfile
+      notes: string[]
+    } | null>,
+  deleteNamedProfile: (id: string) => ipcRenderer.invoke('deleteNamedProfile', id) as Promise<boolean>,
+  duplicateNamedProfile: (id: string, newName: string) =>
+    ipcRenderer.invoke('duplicateNamedProfile', id, newName) as Promise<SavedProfileRef | null>,
+  renameNamedProfile: (id: string, newName: string) =>
+    ipcRenderer.invoke('renameNamedProfile', id, newName) as Promise<SavedProfileRef | null>,
+  revealProfilesFolder: () => ipcRenderer.invoke('revealProfilesFolder') as Promise<void>,
+
   saveProfile: (profile: AutoinstallProfile) =>
     ipcRenderer.invoke('saveProfile', profile) as Promise<string | null>,
-  loadProfile: () => ipcRenderer.invoke('loadProfile') as Promise<AutoinstallProfile | null>,
+  loadProfile: () =>
+    ipcRenderer.invoke('loadProfile') as Promise<{
+      profile: AutoinstallProfile
+      notes: string[]
+    } | null>,
+  importProfileToLibrary: () =>
+    ipcRenderer.invoke('importProfileToLibrary') as Promise<SavedProfileRef | null>,
   exportBundle: (profile: AutoinstallProfile) =>
     ipcRenderer.invoke('exportBundle', profile) as Promise<string | null>,
+
+  pickPayloadFile: () => ipcRenderer.invoke('pickPayloadFile') as Promise<PickedFile | null>,
+  checkPayloadFile: (path: string) =>
+    ipcRenderer.invoke('checkPayloadFile', path) as Promise<{ exists: boolean; sizeBytes: number }>,
 
   listDevices: () => ipcRenderer.invoke('listDevices') as Promise<DeviceInfo[]>,
   onDevicesChanged: (cb) => subscribe('devices-changed', cb),

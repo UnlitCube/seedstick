@@ -3,7 +3,8 @@ import { Check, ChevronLeft, ChevronRight, Disc3, Languages } from 'lucide-react
 import type { MsgKey } from '@autoinstall/shared'
 import { STEP_ORDER, useStore, type StepId } from './store.js'
 import { useT } from './lib/i18n.js'
-import { Button } from './components/ui.js'
+import { Button, Callout } from './components/ui.js'
+import { ProfileBar } from './views/ProfileBar.js'
 import { IsoStep } from './views/IsoStep.js'
 import { BasicsStep } from './views/BasicsStep.js'
 import { UserStep } from './views/UserStep.js'
@@ -49,6 +50,8 @@ export function App(): React.JSX.Element {
   const locale = useStore((s) => s.locale)
   const setLocale = useStore((s) => s.setLocale)
   const writeStatus = useStore((s) => s.writeStatus)
+  const profileNotes = useStore((s) => s.profileNotes)
+  const dismissProfileNotes = useStore((s) => s.dismissProfileNotes)
 
   useEffect(() => {
     void init()
@@ -83,6 +86,7 @@ export function App(): React.JSX.Element {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          <ProfileBar />
           {iso !== null && (
             <span className="hidden truncate text-xs text-slate-500 sm:block dark:text-slate-400">
               Ubuntu Server {iso.identity.version} {iso.identity.arch}
@@ -137,7 +141,22 @@ export function App(): React.JSX.Element {
         </nav>
 
         <main className="min-w-0 flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-3xl p-6">
+          <div className="mx-auto max-w-3xl space-y-5 p-6">
+            {profileNotes.length > 0 && (
+              <Callout tone="info" title={t('profile.migrated')}>
+                <ul className="list-inside list-disc">
+                  {profileNotes.map((n) => (
+                    <li key={n}>{n}</li>
+                  ))}
+                </ul>
+                <button
+                  onClick={dismissProfileNotes}
+                  className="mt-2 text-xs text-sky-700 underline-offset-2 hover:underline dark:text-sky-400"
+                >
+                  {t('common.close')}
+                </button>
+              </Callout>
+            )}
             <View />
           </div>
         </main>

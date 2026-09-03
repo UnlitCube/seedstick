@@ -11,7 +11,7 @@
  * ISO が 1 つも見つからない場合はスキップして正常終了する（CI でも落とさないため）。
  */
 import { createHash, randomBytes } from 'node:crypto'
-import { mkdtemp, rm, stat, readdir } from 'node:fs/promises'
+import { mkdtemp, rm, stat, readdir, writeFile } from 'node:fs/promises'
 import { tmpdir, homedir } from 'node:os'
 import { join, basename } from 'node:path'
 import {
@@ -32,11 +32,15 @@ import {
   IsoValidationError,
 } from '../packages/media/src/index.js'
 import {
+  SEED_MOUNT_PATH,
+  collectFirstBootCommands,
+  collectLateCommands,
   createDefaultProfile,
   generateUserData,
   generateMetaData,
   recognizeIso,
   validateProfile,
+  type AutoinstallProfile,
 } from '../packages/shared/src/index.js'
 import { sha512Crypt } from '../packages/shared/src/crypt/sha512crypt.js'
 
@@ -125,17 +129,77 @@ async function checkFullWrite(path: string): Promise<void> {
     check('md5sum.txt がある', inspection.md5sum !== null)
     check('Joliet ツリーにも grub.cfg がある', inspection.grubCfgJoliet !== null)
 
-    // --- 2. 設定の生成 ---
+    // --- 2. 設定の生成（プロビジョニング一式を入れた実運用に近い構成） ---
+    // アプリ展開のペイロードを実ファイルとして用意する
+    const payloadPath = join(workDir, 'myapp.tar.gz')
+    const payload = Buffer.from(`fake-archive-${'x'.repeat(4096)}`, 'utf8')
+    await writeFile(payloadPath, payload)
+
     const base = createDefaultProfile(recognized.identity.series, 'smoke/0.1.0', '2026-09-03T00:00:00.000Z')
-    const profile = {
+    const gpuSupported = recognized.identity.series !== '25.10'
+    const profile: AutoinstallProfile = {
       ...base,
       basics: { ...base.basics, hostname: 'smoke-host', locale: 'ja_JP.UTF-8', timezone: 'Asia/Tokyo' },
       user: { ...base.user, username: 'smoke', passwordHash: HASH },
+      software: {
+        ...base.software,
+        gpu: { ...base.software.gpu, enabled: gpuSupported, driver: 'open', toolkit: 'latest' },
+      },
       postInstall: {
         ...base.postInstall,
-        presets: ['chrony-ntp' as const, 'qemu-guest-agent' as const],
+        presets: ['chrony-ntp', 'qemu-guest-agent', 'docker-ce'],
+        aptFullUpgrade: true,
         files: [
           { name: 'motd.txt', targetPath: '/etc/motd', mode: '0644', owner: 'root', content: 'smoke test\n' },
+        ],
+        additionalUsers: [
+          {
+            id: 'u1',
+            username: 'deploy',
+            realname: 'Deploy account',
+            passwordHash: HASH,
+            sudo: 'nopasswd',
+            groups: ['docker'],
+            shell: '/bin/bash',
+            sshAuthorizedKeys: ['ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample deploy@smoke'],
+            createHome: true,
+            systemAccount: false,
+          },
+        ],
+        deployments: [
+          {
+            id: 'd1',
+            kind: 'archive',
+            name: 'myapp.tar.gz',
+            source: { kind: 'host-file', path: payloadPath, sizeBytes: payload.length },
+            targetPath: '/opt/myapp',
+            owner: 'deploy',
+            group: 'deploy',
+            mode: '0644',
+            archiveFormat: 'tar.gz',
+            postCommand: 'chmod +x bin/server',
+            chownRecursive: true,
+          },
+        ],
+        services: [
+          {
+            id: 's1',
+            name: 'myapp',
+            description: 'Smoke test service',
+            execStart: '/opt/myapp/bin/server',
+            execStartPre: '',
+            workingDirectory: '/opt/myapp',
+            user: 'deploy',
+            group: 'deploy',
+            environment: ['NODE_ENV=production'],
+            environmentFile: '',
+            serviceType: 'simple',
+            restart: 'on-failure',
+            restartSec: 5,
+            after: ['network-online.target'],
+            wantedBy: 'multi-user.target',
+            enabled: true,
+          },
         ],
       },
     }
@@ -146,6 +210,28 @@ async function checkFullWrite(path: string): Promise<void> {
     check('user-data が #cloud-config で始まる', userData.startsWith('#cloud-config\n'))
     check('user-data に autoinstall キーがある', userData.includes('\nautoinstall:'))
     check('user-data にパスワードハッシュが入る', userData.includes(HASH))
+
+    // --- 2b. プロビジョニングのコマンドが期待どおりか ---
+    const late = collectLateCommands(profile)
+    const lateText = late.join('\n')
+    check('CIDATA を自分でマウントする', lateText.includes(`mount -L CIDATA ${SEED_MOUNT_PATH}`))
+    check('/cdrom を seed として参照していない', !lateText.includes('/cdrom'))
+    check('追加ユーザーを useradd で作る', lateText.includes('|| useradd'))
+    check('追加ユーザーのパスワードを chpasswd -e で設定する', lateText.includes('chpasswd -e'))
+    check('SSH 鍵を authorized_keys に置く', lateText.includes('/home/deploy/.ssh/authorized_keys'))
+    check('アーカイブを展開する', lateText.includes('tar -xzf'))
+    check('systemd ユニットを書いて enable する', lateText.includes('systemctl enable myapp.service'))
+    check('apt full-upgrade を実行する', lateText.includes('apt-get -y full-upgrade'))
+    check('最後に seed をアンマウントする', late.at(-1)?.startsWith('umount ') === true)
+
+    const firstBoot = collectFirstBootCommands(profile).join('\n')
+    if (gpuSupported) {
+      check('CUDA の keyring を初回起動時に入れる', firstBoot.includes('cuda-keyring_1.1-1_all.deb'))
+      check('CUDA のパッケージを apt で入れる', firstBoot.includes('nvidia-open'))
+      check('ドライバ導入後に再起動する', firstBoot.trimEnd().endsWith('systemctl reboot'))
+    } else {
+      check('CUDA 非対応バージョンでは runcmd を出さない', firstBoot === '')
+    }
 
     // --- 3. レイアウト計画 ---
     const patchPlan = buildIsoPatches(inspection, { args: ['autoinstall'], markTitle: true })
@@ -162,6 +248,8 @@ async function checkFullWrite(path: string): Promise<void> {
         { name: 'user-data', content: Buffer.from(userData, 'utf8') },
         { name: 'meta-data', content: Buffer.from(metaData, 'utf8') },
         { name: 'motd.txt', content: Buffer.from('smoke test\n', 'utf8') },
+        // アプリ展開のペイロードも CIDATA に載る
+        { name: 'myapp.tar.gz', content: payload },
       ],
       random: () => randomBytes(16),
       timestamp: new Date('2026-09-03T00:00:00Z'),
@@ -265,6 +353,10 @@ async function checkFullWrite(path: string): Promise<void> {
         fs.files.find((f) => f.name === 'meta-data')!.content.toString('utf8'),
         metaData,
       )
+      // アプリ展開のペイロードがバイト単位で一致すること（FAT のクラスタ鎖が正しいことの確認）
+      const shipped = fs.files.find((f) => f.name === 'myapp.tar.gz')
+      check('展開用ペイロードが CIDATA に載っている', shipped !== undefined)
+      check('ペイロードがバイト単位で一致する', shipped?.content.equals(payload) === true)
     } finally {
       await img.close()
     }
