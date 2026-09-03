@@ -1,0 +1,30 @@
+{
+  "name": "autoinstall-ui",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Ubuntu Server autoinstall USB creator (Electron, Windows/macOS/Linux)",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "npm run dev -w @autoinstall/desktop",
+    "build": "npm run build -w @autoinstall/desktop",
+    "typecheck": "tsc -p packages/shared/tsconfig.json && tsc -p packages/media/tsconfig.json && tsc -p apps/desktop/tsconfig.node.json && tsc -p apps/desktop/tsconfig.json",
+    "test:unit": "vitest run",
+    "smoke": "tsx scripts/smoke-media.mts",
+    "test": "npm run typecheck && npm run test:unit && npm run smoke",
+    "dist:win": "npm run dist:win -w @autoinstall/desktop",
+    "dist:mac": "npm run dist:mac -w @autoinstall/desktop",
+    "dist:linux": "npm run dist:linux -w @autoinstall/desktop"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.0.0"
+  }
+}

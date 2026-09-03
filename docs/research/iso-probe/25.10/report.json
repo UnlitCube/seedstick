@@ -1,0 +1,711 @@
+{
+  "url": "https://releases.ubuntu.com/25.10/ubuntu-25.10-live-server-amd64.iso",
+  "mbr": {
+    "signature": "aa55",
+    "bootCodeNonZero": true,
+    "diskSig": "0",
+    "entries": [
+      {
+        "status": "0",
+        "chsStart": "00 02 00",
+        "type": "0xee",
+        "chsEnd": "3f e0 ff",
+        "lbaStart": 1,
+        "sectors": 4459687
+      },
+      {
+        "status": "80",
+        "chsStart": "00 01 00",
+        "type": "0x00",
+        "chsEnd": "00 01 00",
+        "lbaStart": 0,
+        "sectors": 1
+      },
+      {
+        "status": "0",
+        "chsStart": "00 00 00",
+        "type": "0x00",
+        "chsEnd": "00 00 00",
+        "lbaStart": 0,
+        "sectors": 0
+      },
+      {
+        "status": "0",
+        "chsStart": "00 00 00",
+        "type": "0x00",
+        "chsEnd": "00 00 00",
+        "lbaStart": 0,
+        "sectors": 0
+      }
+    ]
+  },
+  "gpt": {
+    "revision": "10000",
+    "headerSize": 92,
+    "headerCrc": "da3b2783",
+    "myLba": 1,
+    "alternateLba": 4459687,
+    "firstUsable": 64,
+    "lastUsable": 4459624,
+    "diskGuid": "30523B61-2CE5-4634-BEAA-1BCD4CAC3703",
+    "entriesLba": 2,
+    "numEntries": 248,
+    "entrySize": 128,
+    "entriesCrc": "eb4cef76",
+    "entries": [
+      {
+        "index": 0,
+        "type": "EBD0A0A2-B9E5-4433-87C0-68B6B72699C7",
+        "unique": "30523B61-2CE5-4634-BEAB-1BCD4CAC3703",
+        "start": 64,
+        "end": 4448767,
+        "attrs": "1000000000000001",
+        "name": "ISO9660"
+      },
+      {
+        "index": 1,
+        "type": "C12A7328-F81F-11D2-BA4B-00A0C93EC93B",
+        "unique": "30523B61-2CE5-4634-BEA8-1BCD4CAC3703",
+        "start": 4448768,
+        "end": 4459023,
+        "attrs": "0",
+        "name": "Appended2"
+      },
+      {
+        "index": 2,
+        "type": "EBD0A0A2-B9E5-4433-87C0-68B6B72699C7",
+        "unique": "30523B61-2CE5-4634-BEA9-1BCD4CAC3703",
+        "start": 4459024,
+        "end": 4459623,
+        "attrs": "1000000000000001",
+        "name": "Gap1"
+      }
+    ]
+  },
+  "size": {
+    "size": 2283360256,
+    "acceptRanges": "bytes"
+  },
+  "backupGpt": {
+    "lastLba": 4459687,
+    "hasSignature": true,
+    "myLba": 4459687,
+    "alternateLba": 1
+  },
+  "volumeDescriptors": [
+    {
+      "index": 16,
+      "type": 1,
+      "volumeId": "Ubuntu-Server 25.10 amd64",
+      "volumeSpaceSize": 1114922,
+      "logicalBlockSize": 2048,
+      "systemId": "",
+      "publisher": "",
+      "application": "",
+      "creationDate": "2025100719354400\u0000"
+    },
+    {
+      "index": 17,
+      "type": 0,
+      "bootSystemId": "EL TORITO SPECIFICATION",
+      "bootCatalogLba": 800
+    },
+    {
+      "index": 18,
+      "type": 2,
+      "escape": "25 2f 45",
+      "volumeId": "唀戀甀渀琀甀ⴀ匀攀爀瘀攀爀 ㈀㔀"
+    },
+    {
+      "index": 19,
+      "type": 255,
+      "terminator": true
+    }
+  ],
+  "rootDir": {
+    "extent": 35,
+    "size": 2048
+  },
+  "rootListing": [
+    {
+      "name": "\u0000",
+      "rr": null,
+      "extent": 35,
+      "size": 2048,
+      "flags": 2,
+      "su": "SP,PX,TF,CE"
+    },
+    {
+      "name": "\u0001",
+      "rr": null,
+      "extent": 35,
+      "size": 2048,
+      "flags": 2,
+      "su": "PX,TF"
+    },
+    {
+      "name": ".DISK",
+      "rr": ".disk",
+      "extent": 37,
+      "size": 2048,
+      "flags": 2,
+      "su": "PX,TF,NM"
+    },
+    {
+      "name": "BOOT",
+      "rr": "boot",
+      "extent": 38,
+      "size": 2048,
+      "flags": 2,
+      "su": "PX,TF,NM"
+    },
+    {
+      "name": "BOOT.CATALOG;1",
+      "rr": "boot.catalog",
+      "extent": 800,
+      "size": 2048,
+      "flags": 0,
+      "su": "PX,TF,NM"
+    },
+    {
+      "name": "CASPER",
+      "rr": "casper",
+      "extent": 80,
+      "size": 4096,
+      "flags": 2,
+      "su": "PX,TF,NM"
+    },
+    {
+      "name": "DISTS",
+      "rr": "dists",
+      "extent": 82,
+      "size": 2048,
+      "flags": 2,
+      "su": "PX,TF,NM"
+    },
+    {
+      "name": "EFI",
+      "rr": "EFI",
+      "extent": 92,
+      "size": 2048,
+      "flags": 2,
+      "su": "PX,TF,NM"
+    },
+    {
+      "name": "INSTALL",
+      "rr": "install",
+      "extent": 94,
+      "size": 2048,
+      "flags": 2,
+      "su": "PX,TF,NM"
+    },
+    {
+      "name": "MD5SUM.TXT;1",
+      "rr": "md5sum.txt",
+      "extent": 757951,
+      "size": 19769,
+      "flags": 0,
+      "su": "PX,TF,NM"
+    },
+    {
+      "name": "POOL",
+      "rr": "pool",
+      "extent": 95,
+      "size": 2048,
+      "flags": 2,
+      "su": "PX,TF,NM"
+    },
+    {
+      "name": "UBUNTU.;1",
+      "rr": "ubuntu",
+      "extent": 799,
+      "size": 0,
+      "flags": 0,
+      "su": "PX,TF,NM,SL"
+    }
+  ],
+  "grubCfg": {
+    "found": true,
+    "trail": [
+      {
+        "part": "boot",
+        "extent": 38,
+        "size": 2048,
+        "sizeBE": 2048,
+        "flags": 2,
+        "name": "BOOT",
+        "rrName": "boot",
+        "recordOffsetInDir": 338,
+        "dirExtent": 35,
+        "dirSize": 2048,
+        "su": [
+          "PX",
+          "TF",
+          "NM"
+        ]
+      },
+      {
+        "part": "grub",
+        "extent": 39,
+        "size": 2048,
+        "sizeBE": 2048,
+        "flags": 2,
+        "name": "GRUB",
+        "rrName": "grub",
+        "recordOffsetInDir": 192,
+        "dirExtent": 38,
+        "dirSize": 2048,
+        "su": [
+          "PX",
+          "TF",
+          "NM"
+        ]
+      },
+      {
+        "part": "grub.cfg",
+        "extent": 1999,
+        "size": 443,
+        "sizeBE": 443,
+        "flags": 0,
+        "name": "GRUB.CFG;1",
+        "rrName": "grub.cfg",
+        "recordOffsetInDir": 302,
+        "dirExtent": 39,
+        "dirSize": 2048,
+        "su": [
+          "PX",
+          "TF",
+          "NM"
+        ]
+      }
+    ],
+    "extent": 1999,
+    "size": 443
+  },
+  "grubCfgText": "set timeout=30\n\nloadfont unicode\n\nset menu_color_normal=white/black\nset menu_color_highlight=black/light-gray\n\nmenuentry \"Try or Install Ubuntu Server\" {\n\tset gfxpayload=keep\n\tlinux\t/casper/vmlinuz  ---\n\tinitrd\t/casper/initrd\n}\ngrub_platform\nif [ \"$grub_platform\" = \"efi\" ]; then\nmenuentry 'Boot from next volume' {\n\texit 1\n}\nmenuentry 'UEFI Firmware Settings' {\n\tfwsetup\n}\nelse\nmenuentry 'Test memory' {\n\tlinux16 /boot/memtest86+x64.bin\n}\nfi\n",
+  "grubCfgSlackAfterFile": "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+  "grubCfgJoliet": {
+    "found": false,
+    "at": "boot",
+    "listing": [
+      {
+        "name": "",
+        "rr": null,
+        "extent": 441,
+        "size": 2048,
+        "flags": 2
+      },
+      {
+        "name": "",
+        "rr": null,
+        "extent": 441,
+        "size": 2048,
+        "flags": 2
+      },
+      {
+        "name": "⸀搀椀猀欀",
+        "rr": null,
+        "extent": 442,
+        "size": 2048,
+        "flags": 2
+      },
+      {
+        "name": "䔀䘀䤀",
+        "rr": null,
+        "extent": 443,
+        "size": 2048,
+        "flags": 2
+      },
+      {
+        "name": "戀漀漀琀",
+        "rr": null,
+        "extent": 445,
+        "size": 2048,
+        "flags": 2
+      },
+      {
+        "name": "戀漀漀琀⸀挀愀琀愀氀漀最",
+        "rr": null,
+        "extent": 800,
+        "size": 2048,
+        "flags": 0
+      },
+      {
+        "name": "挀愀猀瀀攀爀",
+        "rr": null,
+        "extent": 466,
+        "size": 4096,
+        "flags": 2
+      },
+      {
+        "name": "搀椀猀琀猀",
+        "rr": null,
+        "extent": 468,
+        "size": 2048,
+        "flags": 2
+      },
+      {
+        "name": "椀渀猀琀愀氀氀",
+        "rr": null,
+        "extent": 478,
+        "size": 2048,
+        "flags": 2
+      },
+      {
+        "name": "洀搀㔀猀甀洀⸀琀砀琀",
+        "rr": null,
+        "extent": 757951,
+        "size": 19769,
+        "flags": 0
+      },
+      {
+        "name": "瀀漀漀氀",
+        "rr": null,
+        "extent": 479,
+        "size": 2048,
+        "flags": 2
+      }
+    ]
+  },
+  "loopbackCfg": {
+    "found": true,
+    "trail": [
+      {
+        "part": "boot",
+        "extent": 38,
+        "size": 2048,
+        "sizeBE": 2048,
+        "flags": 2,
+        "name": "BOOT",
+        "rrName": "boot",
+        "recordOffsetInDir": 338,
+        "dirExtent": 35,
+        "dirSize": 2048,
+        "su": [
+          "PX",
+          "TF",
+          "NM"
+        ]
+      },
+      {
+        "part": "grub",
+        "extent": 39,
+        "size": 2048,
+        "sizeBE": 2048,
+        "flags": 2,
+        "name": "GRUB",
+        "rrName": "grub",
+        "recordOffsetInDir": 192,
+        "dirExtent": 38,
+        "dirSize": 2048,
+        "su": [
+          "PX",
+          "TF",
+          "NM"
+        ]
+      },
+      {
+        "part": "loopback.cfg",
+        "extent": 3277,
+        "size": 148,
+        "sizeBE": 148,
+        "flags": 0,
+        "name": "LOOPBACK.CFG;1",
+        "rrName": "loopback.cfg",
+        "recordOffsetInDir": 536,
+        "dirExtent": 39,
+        "dirSize": 2048,
+        "su": [
+          "PX",
+          "TF",
+          "NM"
+        ]
+      }
+    ],
+    "extent": 3277,
+    "size": 148
+  },
+  "loopbackCfgText": "\nmenuentry \"Try or Install Ubuntu Server\" {\n\tset gfxpayload=keep\n\tlinux\t/casper/vmlinuz  iso-scan/filename=${iso_path} ---\n\tinitrd\t/casper/initrd\n}\n",
+  "diskInfo": {
+    "found": true,
+    "trail": [
+      {
+        "part": ".disk",
+        "extent": 37,
+        "size": 2048,
+        "sizeBE": 2048,
+        "flags": 2,
+        "name": ".DISK",
+        "rrName": ".disk",
+        "recordOffsetInDir": 228,
+        "dirExtent": 35,
+        "dirSize": 2048,
+        "su": [
+          "PX",
+          "TF",
+          "NM"
+        ]
+      },
+      {
+        "part": "info",
+        "extent": 819,
+        "size": 66,
+        "sizeBE": 66,
+        "flags": 0,
+        "name": "INFO.;1",
+        "rrName": "info",
+        "recordOffsetInDir": 588,
+        "dirExtent": 37,
+        "dirSize": 2048,
+        "su": [
+          "PX",
+          "TF",
+          "NM"
+        ]
+      }
+    ],
+    "extent": 819,
+    "size": 66
+  },
+  "diskInfoText": "Ubuntu-Server 25.10 \"Questing Quokka\" - Release amd64 (20251007.1)",
+  "md5sum": {
+    "size": 19769,
+    "lines": 203,
+    "grubLines": [
+      "91f6c3830f66f70fcd824963b27f0ef1  ./pool/main/g/grub2/grub-efi_2.14~git20250718.0e36779-1ubuntu4_amd64.deb",
+      "0a6fb59865cc6ea9682d59a316dc3649  ./pool/main/g/grub2/grub-pc-bin_2.14~git20250718.0e36779-1ubuntu4_amd64.deb",
+      "7e4bba3f426ed0fdbdf8bc37b1a926c5  ./pool/main/g/grub2/grub2-common_2.14~git20250718.0e36779-1ubuntu4_amd64.deb",
+      "cebf4ec41bfca2a0f11a4b104aad2093  ./pool/main/g/grub2/grub-pc_2.14~git20250718.0e36779-1ubuntu4_amd64.deb",
+      "400321e1fa30a79d784e25f97ce7d691  ./pool/main/g/grub-gfxpayload-lists/grub-gfxpayload-lists_0.7build2_amd64.deb",
+      "c4cc47a60df64c02a355299d8ae8a763  ./pool/main/g/grub2-unsigned/grub-efi-amd64-unsigned_2.14~git20250718.0e36779-1ubuntu4_amd64.deb",
+      "195cbe8cb81db4829843da7b57fb6a07  ./pool/main/g/grub2-unsigned/grub-efi-amd64-bin_2.14~git20250718.0e36779-1ubuntu4_amd64.deb",
+      "44705509d9df24d24786d10af25bec2d  ./pool/main/g/grub2-unsigned/grub-efi-amd64_2.14~git20250718.0e36779-1ubuntu4_amd64.deb",
+      "f2151f03fb69e8d644abf879c2df6151  ./pool/main/g/grub2-signed/grub-efi-amd64-signed_1.214+2.14~git20250718.0e36779-1ubuntu4_amd64.deb",
+      "968f2c75196f27c9c8943b602aa3bf3c  ./boot/grub/grub.cfg",
+      "eb4476530400842415557296de2d96d7  ./boot/grub/loopback.cfg"
+    ],
+    "casperLines": [
+      "ee0c0f03ae029fc62a382e477d4d5664  ./casper/ubuntu-server-minimal.squashfs",
+      "1288e9954e202df8c7984a7a9e6f483a  ./casper/ubuntu-server-minimal.ubuntu-server.size",
+      "d41d8cd98f00b204e9800998ecf8427e  ./casper/ubuntu-server-minimal.ubuntu-server.installer.generic.manifest",
+      "4aec9d54fe1f321f0d61dd8acb98b7c3  ./casper/ubuntu-server-minimal.ubuntu-server.installer.squashfs",
+      "398ede7120586a0ba00ba60e9db1cb75  ./casper/ubuntu-server-minimal.squashfs.gpg",
+      "fceec94646f5e22a81443d268c9715bf  ./casper/ubuntu-server-minimal.ubuntu-server.squashfs.gpg",
+      "069310fdd96677f2bbbd5f5e48c28283  ./casper/ubuntu-server-minimal.ubuntu-server.installer.generic.size",
+      "55e6b137f204a3a0308cbe429de3f8cf  ./casper/ubuntu-server-minimal.ubuntu-server.installer.generic.squashfs.gpg",
+      "73f18f424b95701dfe8544b235027d48  ./casper/ubuntu-server-minimal.ubuntu-server.installer.squashfs.gpg",
+      "573dddfe1ab1d5b1b0508139222de353  ./casper/ubuntu-server-minimal.size"
+    ]
+  },
+  "casper": [
+    {
+      "name": "FILESYSTEM.MANIFEST;1",
+      "rr": "filesystem.manifest",
+      "size": 20182
+    },
+    {
+      "name": "FILESYSTEM.SIZE;1",
+      "rr": "filesystem.size",
+      "size": 11
+    },
+    {
+      "name": "INITRD.;1",
+      "rr": "initrd",
+      "size": 93321352
+    },
+    {
+      "name": "INSTALL_SOURCES.YAML;1",
+      "rr": "install-sources.yaml",
+      "size": 750
+    },
+    {
+      "name": "UBUNTU_SERVER_MINIMAL.MANIFEST;1",
+      "rr": "ubuntu-server-minimal.manifest",
+      "size": 14694
+    },
+    {
+      "name": "UBUNTU_SERVER_MINIMAL.SIZE;1",
+      "rr": "ubuntu-server-minimal.size",
+      "size": 11
+    },
+    {
+      "name": "UBUNTU_SERVER_MINIMAL.SQUASHFS;1",
+      "rr": "ubuntu-server-minimal.squashfs",
+      "size": 1129721856
+    },
+    {
+      "name": "UBUNTU_SERVER_MINIMAL_SQUAS.GPG;1",
+      "rr": "ubuntu-server-minimal.squashfs.gpg",
+      "size": 833
+    },
+    {
+      "name": "UBUNTU_SERVER_MINIMAL_UBUN0.GPG;1",
+      "rr": "ubuntu-server-minimal.ubuntu-server.installer.generic.squashfs.gpg",
+      "size": 833
+    },
+    {
+      "name": "UBUNTU_SERVER_MINIMAL_UBUN0.MAN;1",
+      "rr": "ubuntu-server-minimal.ubuntu-server.installer.generic.manifest",
+      "size": 0
+    },
+    {
+      "name": "UBUNTU_SERVER_MINIMAL_UBUN0.SIZ;1",
+      "rr": "ubuntu-server-minimal.ubuntu-server.installer.generic.size",
+      "size": 9
+    },
+    {
+      "name": "UBUNTU_SERVER_MINIMAL_UBUN0.SQU;1",
+      "rr": "ubuntu-server-minimal.ubuntu-server.installer.generic.squashfs",
+      "size": 266240
+    },
+    {
+      "name": "UBUNTU_SERVER_MINIMAL_UBUN1.GPG;1",
+      "rr": "ubuntu-server-minimal.ubuntu-server.installer.squashfs.gpg",
+      "size": 833
+    },
+    {
+      "name": "UBUNTU_SERVER_MINIMAL_UBUN1.MAN;1",
+      "rr": "ubuntu-server-minimal.ubuntu-server.installer.manifest",
+      "size": 766
+    },
+    {
+      "name": "UBUNTU_SERVER_MINIMAL_UBUN1.SIZ;1",
+      "rr": "ubuntu-server-minimal.ubuntu-server.installer.size",
+      "size": 10
+    },
+    {
+      "name": "UBUNTU_SERVER_MINIMAL_UBUN1.SQU;1",
+      "rr": "ubuntu-server-minimal.ubuntu-server.installer.squashfs",
+      "size": 150528000
+    },
+    {
+      "name": "UBUNTU_SERVER_MINIMAL_UBUN2.GPG;1",
+      "rr": "ubuntu-server-minimal.ubuntu-server.squashfs.gpg",
+      "size": 833
+    },
+    {
+      "name": "UBUNTU_SERVER_MINIMAL_UBUN2.MAN;1",
+      "rr": "ubuntu-server-minimal.ubuntu-server.manifest",
+      "size": 6080
+    },
+    {
+      "name": "UBUNTU_SERVER_MINIMAL_UBUN2.SIZ;1",
+      "rr": "ubuntu-server-minimal.ubuntu-server.size",
+      "size": 11
+    },
+    {
+      "name": "UBUNTU_SERVER_MINIMAL_UBUN2.SQU;1",
+      "rr": "ubuntu-server-minimal.ubuntu-server.squashfs",
+      "size": 147132416
+    },
+    {
+      "name": "VMLINUZ.;1",
+      "rr": "vmlinuz",
+      "size": 16542088
+    }
+  ],
+  "bootGrub": [
+    {
+      "name": "\u0000",
+      "rr": null,
+      "size": 2048,
+      "flags": 2
+    },
+    {
+      "name": "\u0001",
+      "rr": null,
+      "size": 2048,
+      "flags": 2
+    },
+    {
+      "name": "FONTS",
+      "rr": "fonts",
+      "size": 2048,
+      "flags": 2
+    },
+    {
+      "name": "GRUB.CFG;1",
+      "rr": "grub.cfg",
+      "size": 443,
+      "flags": 0
+    },
+    {
+      "name": "I386_PC",
+      "rr": "i386-pc",
+      "size": 40960,
+      "flags": 2
+    },
+    {
+      "name": "LOOPBACK.CFG;1",
+      "rr": "loopback.cfg",
+      "size": 148,
+      "flags": 0
+    },
+    {
+      "name": "X86_64_EFI",
+      "rr": "x86_64-efi",
+      "size": 38912,
+      "flags": 2
+    }
+  ],
+  "bootCatalog": {
+    "lba": 800,
+    "entries": [
+      {
+        "off": 0,
+        "kind": "validation",
+        "platform": 0,
+        "idString": "",
+        "sig": "aa55"
+      },
+      {
+        "off": 32,
+        "kind": "initial/section entry",
+        "bootable": true,
+        "mediaType": 0,
+        "loadSegment": "0",
+        "systemType": 0,
+        "sectorCount": 4,
+        "loadRba": 801
+      },
+      {
+        "off": 64,
+        "kind": "section header",
+        "last": true,
+        "platform": 239,
+        "count": 1,
+        "idString": ""
+      },
+      {
+        "off": 96,
+        "kind": "initial/section entry",
+        "bootable": true,
+        "mediaType": 0,
+        "loadSegment": "0",
+        "systemType": 0,
+        "sectorCount": 10256,
+        "loadRba": 1112192
+      }
+    ]
+  },
+  "efiImage": {
+    "start512": 4448768,
+    "end512": 4459023,
+    "bytes": 5251072,
+    "bpb": {
+      "oem": "mkfs.fat",
+      "bytesPerSec": 512,
+      "secPerClus": 4,
+      "rsvd": 4,
+      "numFats": 2,
+      "rootEnt": 512,
+      "totSec16": 10240,
+      "media": "f8",
+      "fatSz16": 8,
+      "totSec32": 0,
+      "volLab": "ESP        ",
+      "fsType": "FAT12   "
+    },
+    "grubCfgGuess": "configfile"
+  }
+}

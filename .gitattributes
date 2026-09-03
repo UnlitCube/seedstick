@@ -1,0 +1,14 @@
+# テキストは LF で保存する（Windows / macOS / Linux で同じソースを扱うため）
+* text=auto eol=lf
+
+# Windows のバッチファイルは CRLF でないと動かない
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 実 ISO から抜き出したテストフィクスチャ（base64 の JSON）。差分表示しても意味がない。
+docs/research/iso-probe/fixtures/*.json -diff
+docs/research/iso-probe/*/report.json -diff
+
+# 一次資料のコピー。GitHub の言語統計から除外する。
+docs/research/sources/** linguist-vendored
+docs/research/schema/** linguist-vendored

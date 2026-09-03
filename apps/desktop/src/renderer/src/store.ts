@@ -1,0 +1,274 @@
+import { create } from 'zustand'
+import {
+  createDefaultProfile,
+  resolveLocale,
+  type AppSettings,
+  type ChecksumResult,
+  type AutoinstallProfile,
+  type DeviceInfo,
+  type GeneratedConfig,
+  type IsoFileInfo,
+  type Locale,
+  type WriteStatus,
+} from '@autoinstall/shared'
+
+// アプリ全体の状態。ステップを移動しても入力が消えないよう 1 つのストアに集約する。
+
+export type StepId =
+  | 'iso'
+  | 'basics'
+  | 'user'
+  | 'network'
+  | 'storage'
+  | 'software'
+  | 'postinstall'
+  | 'review'
+  | 'write'
+
+export const STEP_ORDER: readonly StepId[] = [
+  'iso',
+  'basics',
+  'user',
+  'network',
+  'storage',
+  'software',
+  'postinstall',
+  'review',
+  'write',
+]
+
+interface AppState {
+  ready: boolean
+  locale: Locale
+  settings: AppSettings | null
+  step: StepId
+  profile: AutoinstallProfile
+  iso: IsoFileInfo | null
+  isoError: string | null
+  isoBusy: boolean
+  checksum: ChecksumResult | null
+  checksumProgress: { bytesDone: number; bytesTotal: number } | null
+  config: GeneratedConfig | null
+  configBusy: boolean
+  devices: DeviceInfo[]
+  devicesBusy: boolean
+  selectedDeviceId: string | null
+  writeStatus: WriteStatus
+  /** 平文パスワードはここにだけ置く。保存もログ出力もしない。 */
+  passwordDraft: string
+  passwordConfirmDraft: string
+
+  init(): Promise<void>
+  setStep(step: StepId): void
+  updateProfile(fn: (p: AutoinstallProfile) => AutoinstallProfile): void
+  setPasswordDraft(plain: string, confirm: string): void
+  applyPassword(): Promise<void>
+  chooseIso(): Promise<void>
+  openIsoPath(path: string): Promise<void>
+  clearIso(): void
+  verifyChecksum(): Promise<void>
+  regenerate(): Promise<void>
+  refreshDevices(): Promise<void>
+  selectDevice(id: string | null): void
+  startWrite(): Promise<void>
+  cancelWrite(): Promise<void>
+  saveSettings(update: (s: AppSettings) => AppSettings): Promise<void>
+  loadProfileFromDisk(): Promise<void>
+  setLocale(locale: Locale): Promise<void>
+}
+
+/** 設定保存の直列化。連続保存で古いスナップショットが後勝ちするのを防ぐ。 */
+let settingsChain: Promise<unknown> = Promise.resolve()
+
+/** 設定生成の多重起動を避けるための世代番号 */
+let generation = 0
+
+export const useStore = create<AppState>((set, get) => ({
+  ready: false,
+  locale: 'ja',
+  settings: null,
+  step: 'iso',
+  profile: createDefaultProfile('24.04', 'autoinstall-ui/0.1.0', new Date().toISOString()),
+  iso: null,
+  isoError: null,
+  isoBusy: false,
+  checksum: null,
+  checksumProgress: null,
+  config: null,
+  configBusy: false,
+  devices: [],
+  devicesBusy: false,
+  selectedDeviceId: null,
+  writeStatus: { state: 'idle' },
+  passwordDraft: '',
+  passwordConfirmDraft: '',
+
+  async init() {
+    const settings = await window.autoinstall.getSettings()
+    set({
+      settings,
+      locale: settings.locale ?? resolveLocale(window.autoinstall.systemLocale),
+      ready: true,
+    })
+    window.autoinstall.onWriteStatus((writeStatus) => {
+      set({ writeStatus })
+      // 書き込みが終わったらデバイス一覧を更新する（ドライブレターが変わるため）
+      if (writeStatus.state === 'done') void get().refreshDevices()
+    })
+    window.autoinstall.onChecksumProgress((checksumProgress) => set({ checksumProgress }))
+    set({ writeStatus: await window.autoinstall.getWriteStatus() })
+    void get().regenerate()
+  },
+
+  setStep(step) {
+    set({ step })
+    if (step === 'review') void get().regenerate()
+    if (step === 'write') void get().refreshDevices()
+  },
+
+  updateProfile(fn) {
+    set({ profile: fn(get().profile) })
+    void get().regenerate()
+  },
+
+  setPasswordDraft(passwordDraft, passwordConfirmDraft) {
+    set({ passwordDraft, passwordConfirmDraft })
+  },
+
+  async applyPassword() {
+    const { passwordDraft } = get()
+    if (!passwordDraft) return
+    // ハッシュ化は main 側で行う。平文はストアの外に出さない。
+    const hash = await window.autoinstall.hashPassword(passwordDraft)
+    get().updateProfile((p) => ({ ...p, user: { ...p.user, passwordHash: hash } }))
+  },
+
+  async chooseIso() {
+    set({ isoBusy: true, isoError: null })
+    try {
+      const result = await window.autoinstall.chooseIso()
+      if (!result) return
+      if (!result.ok) {
+        set({ isoError: result.detail, iso: null })
+        return
+      }
+      set({ iso: result.info, isoError: null, checksum: null, checksumProgress: null })
+      get().updateProfile((p) => ({ ...p, series: result.info.identity.series }))
+    } finally {
+      set({ isoBusy: false })
+    }
+  },
+
+  async openIsoPath(path) {
+    set({ isoBusy: true, isoError: null })
+    try {
+      const result = await window.autoinstall.openIso(path)
+      if (!result.ok) {
+        set({ isoError: result.detail, iso: null })
+        return
+      }
+      set({ iso: result.info, isoError: null, checksum: null, checksumProgress: null })
+      get().updateProfile((p) => ({ ...p, series: result.info.identity.series }))
+    } finally {
+      set({ isoBusy: false })
+    }
+  },
+
+  clearIso() {
+    set({ iso: null, isoError: null, checksum: null, checksumProgress: null })
+  },
+
+  async verifyChecksum() {
+    const iso = get().iso
+    if (!iso) return
+    set({ checksumProgress: { bytesDone: 0, bytesTotal: iso.sizeBytes } })
+    try {
+      const checksum = await window.autoinstall.computeIsoChecksum(iso.path)
+      set({ checksum })
+    } finally {
+      set({ checksumProgress: null })
+    }
+  },
+
+  async regenerate() {
+    const myGeneration = ++generation
+    set({ configBusy: true })
+    try {
+      const config = await window.autoinstall.generateConfig(get().profile)
+      // 生成中に profile が変わっていたら古い結果を捨てる
+      if (myGeneration === generation) set({ config })
+    } catch {
+      if (myGeneration === generation) set({ config: null })
+    } finally {
+      if (myGeneration === generation) set({ configBusy: false })
+    }
+  },
+
+  async refreshDevices() {
+    set({ devicesBusy: true })
+    try {
+      const devices = await window.autoinstall.listDevices()
+      const selected = get().selectedDeviceId
+      set({
+        devices,
+        // 選択中のデバイスが消えたら選択を外す（抜かれた USB に書かないため）
+        selectedDeviceId: devices.some((d) => d.id === selected && d.selectable) ? selected : null,
+      })
+    } finally {
+      set({ devicesBusy: false })
+    }
+  },
+
+  selectDevice(selectedDeviceId) {
+    set({ selectedDeviceId })
+  },
+
+  async startWrite() {
+    const { iso, selectedDeviceId, profile, settings } = get()
+    if (!iso || !selectedDeviceId || !settings) return
+    const result = await window.autoinstall.startWrite({
+      isoPath: iso.path,
+      deviceId: selectedDeviceId,
+      profile,
+      verify: settings.verifyAfterWrite,
+      cidataSizeBytes: settings.cidataSizeBytes,
+      auditRecord: settings.auditRecord,
+    })
+    if (!result.started) {
+      set({
+        writeStatus: {
+          state: 'error',
+          message: result.message ?? '書き込みを開始できませんでした。',
+          detail: null,
+        },
+      })
+    }
+  },
+
+  async cancelWrite() {
+    await window.autoinstall.cancelWrite()
+  },
+
+  async saveSettings(update) {
+    settingsChain = settingsChain.then(async () => {
+      // 保存直前に最新を取り直す。古いスナップショットで上書きしないため。
+      const fresh = await window.autoinstall.getSettings()
+      const saved = await window.autoinstall.saveSettings(update(fresh))
+      set({ settings: saved, locale: saved.locale })
+      void get().regenerate()
+    })
+    await settingsChain
+  },
+
+  async loadProfileFromDisk() {
+    const profile = await window.autoinstall.loadProfile()
+    if (!profile) return
+    set({ profile, passwordDraft: '', passwordConfirmDraft: '' })
+    void get().regenerate()
+  },
+
+  async setLocale(locale) {
+    set({ locale })
+    await get().saveSettings((s) => ({ ...s, locale }))
+  },
+}))
