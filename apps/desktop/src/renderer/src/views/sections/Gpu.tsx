@@ -39,7 +39,10 @@ export function GpuSection(): React.JSX.Element {
         checked={gpu.enabled}
         onChange={(v) => setGpu({ enabled: v })}
         label={t('gpu.enable')}
-        disabled={!repoAvailable}
+        // 非対応バージョンでも「切る」ことはできなければならない。
+        // enabled=true のプロファイルを 25.10 の ISO と組み合わせると、
+        // 設定パネルも隠れるので、解除できない検証エラーで書き込めなくなっていた。
+        disabled={!repoAvailable && !gpu.enabled}
         description={
           repoAvailable
             ? `NVIDIA の ${CUDA_REPO_DISTRO[series]} リポジトリを使います。`

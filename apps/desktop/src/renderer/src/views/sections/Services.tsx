@@ -21,6 +21,7 @@ import {
   Switch,
   TextArea,
   TextInput,
+  useListDraft,
 } from '../../components/ui.js'
 
 function newService(): SystemdService {
@@ -52,6 +53,9 @@ export function ServicesSection(): React.JSX.Element {
   const primaryUser = useStore((s) => s.profile.user.username)
   const update = useStore((s) => s.updateProfile)
   const [editing, setEditing] = useState<{ index: number; item: SystemdService } | null>(null)
+  // カンマ区切りの欄は正規化した配列から value を作ると区切り文字が打てない
+  // （useListDraft のコメント参照）。
+  const afterDraft = useListDraft(editing?.item.after ?? [], ',')
 
   const save = (): void => {
     if (!editing) return
@@ -298,15 +302,12 @@ export function ServicesSection(): React.JSX.Element {
               {(id) => (
                 <TextInput
                   id={id}
-                  value={editing.item.after.join(', ')}
+                  value={afterDraft.text}
                   spellCheck={false}
                   onChange={(e) =>
                     setEditing({
                       ...editing,
-                      item: {
-                        ...editing.item,
-                        after: e.target.value.split(',').map((x) => x.trim()).filter(Boolean),
-                      },
+                      item: { ...editing.item, after: afterDraft.change(e.target.value) },
                     })
                   }
                 />

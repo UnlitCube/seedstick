@@ -14,6 +14,7 @@ import {
   Switch,
   TextArea,
   TextInput,
+  useListDraft,
 } from '../components/ui.js'
 import { AdditionalUsersSection } from './sections/AdditionalUsers.js'
 
@@ -44,13 +45,12 @@ export function UserStep(): React.JSX.Element {
     passwordConfirmDraft.length > 0 && passwordDraft !== passwordConfirmDraft
   const strength = passwordStrength(passwordDraft)
   const keys = profile.ssh.authorizedKeys
-  const keysText = keys.join('\n')
+  // 改行区切りの欄も同じ。正規化した配列から value を作ると
+  // 改行を打った瞬間に消え、2 個目の鍵をキーボードで足せない。
+  const keysDraft = useListDraft(keys, '\n')
 
   const setKeys = (text: string): void => {
-    const list = text
-      .split('\n')
-      .map((l) => l.trim())
-      .filter(Boolean)
+    const list = keysDraft.change(text)
     update((p) => ({ ...p, ssh: { ...p.ssh, authorizedKeys: list } }))
   }
 
@@ -286,7 +286,7 @@ export function UserStep(): React.JSX.Element {
                 <TextArea
                   id={id}
                   rows={4}
-                  value={keysText}
+                  value={keysDraft.text}
                   spellCheck={false}
                   placeholder="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5... user@example"
                   onChange={(e) => setKeys(e.target.value)}

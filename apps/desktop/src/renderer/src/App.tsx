@@ -4,6 +4,7 @@ import type { MsgKey } from '@autoinstall/shared'
 import { STEP_ORDER, useStore, type StepId } from './store.js'
 import { useT } from './lib/i18n.js'
 import { Button, Callout } from './components/ui.js'
+import { ErrorBoundary } from './components/ErrorBoundary.js'
 import { ProfileBar } from './views/ProfileBar.js'
 import { IsoStep } from './views/IsoStep.js'
 import { BasicsStep } from './views/BasicsStep.js'
@@ -160,7 +161,15 @@ export function App(): React.JSX.Element {
                 </button>
               </Callout>
             )}
-            <View />
+            {/*
+              画面ごとに囲む。1 つのステップが落ちても他のステップへ移動でき、
+              白画面にはしない（プロファイルは手で編集できるので、
+              「型は合っているが中身が違う」データは実際に届く）。
+              key を step にしておくと、別のステップへ移ったときに自動で復帰する。
+            */}
+            <ErrorBoundary key={step}>
+              <View />
+            </ErrorBoundary>
           </div>
         </main>
       </div>

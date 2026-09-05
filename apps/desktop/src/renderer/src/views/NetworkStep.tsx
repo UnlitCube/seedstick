@@ -1,7 +1,18 @@
 import type { InterfaceSelector, NetworkConfig } from '@autoinstall/shared'
 import { useStore } from '../store.js'
 import { useT } from '../lib/i18n.js'
-import { Badge, Callout, Card, Field, RadioGroup, Select, Switch, TextArea, TextInput } from '../components/ui.js'
+import {
+  Badge,
+  Callout,
+  Card,
+  Field,
+  RadioGroup,
+  Select,
+  Switch,
+  TextArea,
+  TextInput,
+  useListDraft,
+} from '../components/ui.js'
 
 type Mode = NetworkConfig['mode']
 
@@ -21,6 +32,17 @@ export function NetworkStep(): React.JSX.Element {
   const update = useStore((s) => s.updateProfile)
 
   const setNetwork = (next: NetworkConfig): void => update((p) => ({ ...p, network: next }))
+
+  // カンマ区切りの欄は、正規化した配列から value を作ると区切り文字が打てない。
+  // 入力中の生テキストを保持する（useListDraft のコメント参照）。
+  const nameserversDraft = useListDraft(
+    network.mode === 'static' ? network.nameservers : [],
+    ',',
+  )
+  const searchDomainsDraft = useListDraft(
+    network.mode === 'static' ? network.searchDomains : [],
+    ',',
+  )
 
   const changeMode = (mode: Mode): void => {
     if (mode === network.mode) return
@@ -130,14 +152,11 @@ export function NetworkStep(): React.JSX.Element {
               {(id) => (
                 <TextInput
                   id={id}
-                  value={network.nameservers.join(', ')}
+                  value={nameserversDraft.text}
                   spellCheck={false}
                   placeholder="1.1.1.1, 8.8.8.8"
                   onChange={(e) =>
-                    setNetwork({
-                      ...network,
-                      nameservers: e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
-                    })
+                    setNetwork({ ...network, nameservers: nameserversDraft.change(e.target.value) })
                   }
                 />
               )}
@@ -146,13 +165,13 @@ export function NetworkStep(): React.JSX.Element {
               {(id) => (
                 <TextInput
                   id={id}
-                  value={network.searchDomains.join(', ')}
+                  value={searchDomainsDraft.text}
                   spellCheck={false}
                   placeholder="example.local"
                   onChange={(e) =>
                     setNetwork({
                       ...network,
-                      searchDomains: e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
+                      searchDomains: searchDomainsDraft.change(e.target.value),
                     })
                   }
                 />

@@ -70,7 +70,12 @@ export interface UsbLayoutPlan {
 export class LayoutError extends Error {
   constructor(
     message: string,
-    readonly reason: 'disk-too-small' | 'no-gpt' | 'not-protective-mbr' | 'cidata-too-small',
+    readonly reason:
+      | 'disk-too-small'
+      | 'no-gpt'
+      | 'not-protective-mbr'
+      | 'cidata-too-small'
+      | 'iso-truncated',
   ) {
     super(message)
     this.name = 'LayoutError'
@@ -120,6 +125,28 @@ export async function planUsbLayout(options: PlanUsbLayoutOptions): Promise<UsbL
   const isoGpt = await readGpt(isoDevice)
   if (!isoGpt) {
     throw new LayoutError('この ISO には GPT がありません。対応していない形式です。', 'no-gpt')
+  }
+
+  // **ISO のパーティションがファイルの中に収まっているかを先に確かめる。**
+  //
+  // CIDATA はファイルサイズから置き場所を決めるが、ISO のパーティション表は
+  // ISO から丸ごと写す。途中までしかダウンロードできていない ISO だと
+  // 「ファイルは 100 MB なのに ISO9660 パーティションは 3 GB」という状態になり、
+  // CIDATA が ISO9660 の内側に置かれた GPT ができあがる。
+  // しかも読み戻し検証は「書いたものが読めるか」しか見ないので成功してしまう。
+  // 出来上がるのは起動しない USB なので、ここで止める。
+  const isoSectorsTotal = Math.ceil(isoSizeBytes / SECTOR_SIZE)
+  for (const e of isoGpt.entries) {
+    if (e.endLba >= isoSectorsTotal) {
+      const needed = (e.endLba + 1) * SECTOR_SIZE
+      throw new LayoutError(
+        `この ISO は途中で切れています。パーティション "${e.name}" は ` +
+          `${(needed / 1e9).toFixed(2)} GB の位置まで続いていますが、ファイルは ` +
+          `${(isoSizeBytes / 1e9).toFixed(2)} GB しかありません。` +
+          'ダウンロードが完了しているか、SHA256 が公式のものと一致するかを確認してください。',
+        'iso-truncated',
+      )
+    }
   }
 
   // ISO 末尾（バックアップ GPT を含む）の直後、1 MiB 境界から CIDATA を置く

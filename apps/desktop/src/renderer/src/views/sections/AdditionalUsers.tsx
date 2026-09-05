@@ -15,6 +15,7 @@ import {
   Switch,
   TextArea,
   TextInput,
+  useListDraft,
 } from '../../components/ui.js'
 
 /** 追加ユーザーの一覧と編集。 */
@@ -23,9 +24,13 @@ export function AdditionalUsersSection(): React.JSX.Element {
   const locale = useStore((s) => s.locale)
   const users = useStore((s) => s.profile.postInstall.additionalUsers)
   const update = useStore((s) => s.updateProfile)
+  // カンマ区切りの欄は正規化した配列から value を作ると区切り文字が打てない
+  // （useListDraft のコメント参照）。
   const [editing, setEditing] = useState<{ index: number; user: AdditionalUser; password: string } | null>(
     null,
   )
+
+  const groupsDraft = useListDraft(editing?.user.groups ?? [], ',')
 
   const commit = async (): Promise<void> => {
     if (!editing) return
@@ -251,7 +256,7 @@ export function AdditionalUsersSection(): React.JSX.Element {
               {(id) => (
                 <TextInput
                   id={id}
-                  value={editing.user.groups.join(', ')}
+                  value={groupsDraft.text}
                   spellCheck={false}
                   placeholder="docker, adm"
                   onChange={(e) =>
@@ -259,7 +264,7 @@ export function AdditionalUsersSection(): React.JSX.Element {
                       ...editing,
                       user: {
                         ...editing.user,
-                        groups: e.target.value.split(',').map((g) => g.trim()).filter(Boolean),
+                        groups: groupsDraft.change(e.target.value),
                       },
                     })
                   }

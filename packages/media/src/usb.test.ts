@@ -354,6 +354,35 @@ describe('レイアウトの安全性', () => {
     expect(err.message).toMatch(/少なくとも [\d.]+ GB 必要/)
   })
 
+  it('途中で切れた ISO を拒否する（重なった GPT を作らない）', async () => {
+    // 途中までしかダウンロードできていない ISO を再現する。
+    // ファイルサイズは小さいのに、ISO 由来のパーティション表は元のまま大きい。
+    const iso = isoDevice('ubuntu-24.04.4-live-server-amd64')
+    const truncated = Object.create(Object.getPrototypeOf(iso) as object) as typeof iso
+    Object.assign(truncated, iso)
+    Object.defineProperty(truncated, 'size', { value: 100 * 1024 * 1024, configurable: true })
+
+    const inspection = await inspectIso(iso)
+    const patchPlan = buildIsoPatches(inspection, { args: ['autoinstall'] })
+    const err = await planUsbLayout({
+      isoDevice: truncated,
+      diskSizeBytes: USB_SIZE,
+      patches: patchPlan.patches,
+      seedFiles: SEED_FILES,
+      random: fixedRandom(),
+      timestamp: TS,
+    }).then(
+      () => null,
+      (e: unknown) => e,
+    )
+
+    // 通してしまうと CIDATA が ISO9660 パーティションの内側に置かれた GPT ができ、
+    // 読み戻し検証は「書いたものが読める」ので成功し、起動しない USB が出来上がる。
+    expect(err).toBeInstanceOf(LayoutError)
+    expect((err as LayoutError).reason).toBe('iso-truncated')
+    expect((err as LayoutError).message).toMatch(/途中で切れています/)
+  })
+
   it('必要容量の計算が実際の計画と整合する', async () => {
     const iso = isoDevice('ubuntu-24.04.4-live-server-amd64')
     const min = minimumDiskSize(iso.size)

@@ -1,10 +1,52 @@
 import { createPortal } from 'react-dom'
-import { useEffect, useId, useRef, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { AlertTriangle, Check, ChevronDown, Info, X } from 'lucide-react'
 
 // 画面共通の部品。
 // 大きな面には backdrop-blur を使わない（塗る面積に比例して GPU 負荷が上がり、
 // 全画面表示や進捗バー更新中に顕著に重くなる）。ぼかしはモーダルの覆いだけに限定する。
+
+/**
+ * カンマ／改行区切りの複数値を、制御コンポーネントで編集するための下書き。
+ *
+ * `value={list.join(', ')}` と `onChange={split → trim → filter(Boolean)}` を
+ * そのまま組み合わせると、**区切り文字を打った瞬間に消える**。
+ * 「1.1.1.1」まで打って `,` を足しても、正規化すると打つ前と同じ配列に戻るので
+ * value prop が変わらず、React が DOM の値を元へ書き戻すため。
+ * 貼り付け（一度に全体が変わる）は動くが、キーボードでは 2 個目を足せない。
+ *
+ * 入力中の生テキストを下書きとして保持し、配列は下書きから導く。
+ * プロファイルを開くなど**外から値が変わったとき**だけ下書きを作り直す。
+ */
+export function useListDraft(
+  values: readonly string[],
+  separator: ',' | '\n',
+): { text: string; change: (next: string) => string[] } {
+  const joiner = separator === ',' ? ', ' : '\n'
+  const parse = (text: string): string[] =>
+    text
+      .split(separator)
+      .map((v) => v.trim())
+      .filter(Boolean)
+  const joined = values.join(joiner)
+  const [draft, setDraft] = useState(joined)
+
+  useEffect(() => {
+    // 下書きを正規化した結果が今の値と同じなら、入力中なので触らない。
+    // 違うなら外から差し替わったので作り直す。
+    setDraft((cur) => (parse(cur).join(joiner) === joined ? cur : joined))
+    // parse / joiner は separator から決まるので、joined だけ見ればよい
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [joined])
+
+  return {
+    text: draft,
+    change: (next: string) => {
+      setDraft(next)
+      return parse(next)
+    },
+  }
+}
 
 export function Card({
   title,
@@ -320,15 +362,26 @@ export function Modal({
   footer?: ReactNode
 }): React.JSX.Element | null {
   const ref = useRef<HTMLDivElement>(null)
+  // onClose は呼び出し側でインラインの矢印関数なので、毎レンダリング別物になる。
+  // 依存に入れると effect が毎回まわり直し、モーダル内の入力欄からダイアログへ
+  // focus を奪い返してしまう（1 文字打つたびにフォーカスが飛ぶ）。
+  // 最新の onClose は ref で持ち、effect の依存からは外す。
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') onCloseRef.current()
     }
     document.addEventListener('keydown', onKey)
-    ref.current?.focus()
     return () => document.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+  }, [open])
+
+  // 初期フォーカスは「開いたとき」だけ。再レンダリングでは動かさない。
+  useEffect(() => {
+    if (open) ref.current?.focus()
+  }, [open])
 
   if (!open) return null
   return createPortal(
