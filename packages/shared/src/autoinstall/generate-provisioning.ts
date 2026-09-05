@@ -133,13 +133,20 @@ export function deploymentPackages(deployments: readonly Deployment[]): string[]
   const set = new Set<string>()
   for (const d of deployments) {
     if (d.kind !== 'archive') continue
-    for (const p of ARCHIVE_REQUIREMENTS[d.archiveFormat]) set.add(p)
+    // 手で編集された JSON には知らない形式が入りうる。ここで例外を投げると
+    // GUI が「理由の分からない空の確認画面」になる（落とし穴 23）。
+    // 読み飛ばして、検証でエラーとして伝える。
+    const required = ARCHIVE_REQUIREMENTS[d.archiveFormat] as readonly string[] | undefined
+    if (!required) continue
+    for (const pkg of required) set.add(pkg)
   }
   return [...set].sort()
 }
 
 function extractCommand(d: Deployment, sourcePath: string, targetInTarget: string): string {
   switch (d.archiveFormat) {
+    // 既定は tar.gz。知らない形式でも例外を投げない（検証がエラーを出す）。
+    default:
     case 'tar.gz':
       return `tar -xzf ${shellQuote(sourcePath)} -C ${shellQuote(targetInTarget)}`
     case 'tar.xz':

@@ -56,11 +56,23 @@ export function readFatImage(img: Buffer): FatFilesystem {
   const readChain = (start: number, size: number): Buffer => {
     if (start === 0) return Buffer.alloc(0)
     const parts: Buffer[] = []
+    const seen = new Set<number>()
     let c = start
-    let guard = 0
-    while (c >= 2 && c < eoc && guard++ < 1_000_000) {
+    // 上限は「このボリュームに存在するクラスタ数」。固定値 (1,000,000) にすると、
+    // クラスタが小さいボリュームでは正常に書けた大きなファイルを黙って打ち切り、
+    // 逆に壊れた FAT では巨大なバッファを作ろうとする。
+    // 訪問済みクラスタも覚えて、循環している FAT を検出する。
+    while (c >= 2 && c < eoc && parts.length <= clusterCount) {
+      if (seen.has(c)) {
+        throw new Error(`FAT のクラスタ鎖が循環しています (クラスタ ${c})。`)
+      }
+      seen.add(c)
       parts.push(clusterBytes(c))
       c = readFatEntry(c)
+    }
+    if (parts.length > clusterCount) {
+      // 黙って切り詰めない。切り詰めると読み戻し検証が「一致した」と言ってしまう。
+      throw new Error('FAT のクラスタ鎖がボリュームの容量を超えています。')
     }
     return Buffer.concat(parts).subarray(0, size)
   }

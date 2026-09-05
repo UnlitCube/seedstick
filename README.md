@@ -89,6 +89,7 @@ USB は次のレイアウトになります。
 4. USB メモリを選び、「消去」と入力して書き込みます。
 
 対応バージョン: Ubuntu Server **22.04 LTS / 24.04 LTS / 25.10 / 26.04 LTS**（amd64・arm64）
+ただし NVIDIA ドライバ / CUDA の導入は amd64 (x86_64) の ISO のみ。
 
 ## 開発
 
@@ -96,7 +97,7 @@ USB は次のレイアウトになります。
 npm install
 npm run dev        # 開発起動（Windows なら start-dev.bat をダブルクリックでも可）
 npm test           # typecheck + 単体テスト + 実 ISO スモークテスト
-npm run dist:win   # パッケージ（--mac / --linux も）
+npm run dist:win   # パッケージ（macOS は dist:mac、Linux は dist:linux）
 ```
 
 | ドキュメント | 内容 |

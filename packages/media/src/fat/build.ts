@@ -44,7 +44,14 @@ export interface FatImage {
 // 8.3 名と LFN
 // ---------------------------------------------------------------------------
 
-const INVALID_SHORT_CHARS = /[^A-Z0-9!#$%&'()\-@^_`{}~ ]/g
+// 判定用（`test` に使う）。**`/g` を付けてはいけない。**
+// `/g` の正規表現は `test` を呼ぶたびに lastIndex が進むため純関数でなくなり、
+// 同じ名前を続けて判定すると結果が交互に変わる（実際に再現した）。
+// LFN が必要なのに短縮名だけで書かれた FAT ができ、ルートディレクトリの
+// 予約数も名前の並び順しだいで狂う。
+const INVALID_SHORT_CHARS = /[^A-Z0-9!#$%&'()\-@^_`{}~ ]/
+// 置換用（`replace` に使う）。こちらは全置換したいので `/g` が要る。
+const INVALID_SHORT_CHARS_ALL = /[^A-Z0-9!#$%&'()\-@^_`{}~ ]/g
 
 /** LFN が必要か（8.3 にそのまま収まらないか）を判定する。 */
 export function needsLongName(name: string): boolean {
@@ -65,7 +72,7 @@ export function makeShortName(name: string, taken: ReadonlySet<string>): string 
   const dot = name.lastIndexOf('.')
   const rawBase = (dot <= 0 ? name : name.slice(0, dot)).toUpperCase()
   const rawExt = (dot <= 0 ? '' : name.slice(dot + 1)).toUpperCase()
-  const clean = (s: string): string => s.replace(/\./g, '').replace(INVALID_SHORT_CHARS, '_')
+  const clean = (s: string): string => s.replace(/\./g, '').replace(INVALID_SHORT_CHARS_ALL, '_')
   const base = clean(rawBase)
   const ext = clean(rawExt).slice(0, 3)
 

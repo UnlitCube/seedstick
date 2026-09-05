@@ -33,6 +33,25 @@ describe('8.3 名の生成', () => {
     expect(needsLongName('meta-data')).toBe(true)
     expect(needsLongName('AUTOEXEC.BAT')).toBe(false)
     expect(needsLongName('README')).toBe(false)
+  })
+
+  it('何度呼んでも同じ結果になる（正規表現の lastIndex を持ち越さない）', () => {
+    // 判定用の正規表現に `/g` が付いていると、`test` を呼ぶたびに lastIndex が進み、
+    // 同じ名前でも結果が交互に変わる。大文字で、基本名に 8.3 で使えない文字が
+    // ちょうど 1 個あるときに露見する（実際に再現した）。
+    // ルートディレクトリの予約数もこの関数で決まるので、名前の並び順しだいで
+    // LFN が必要なのに短縮名だけで書かれた FAT ができる。
+    for (let i = 0; i < 4; i++) {
+      expect(needsLongName('A+B.TXT'), `${i + 1} 回目`).toBe(true)
+    }
+    // 拡張子側に不正文字があるときも同じ
+    for (let i = 0; i < 4; i++) {
+      expect(needsLongName('AB.T+T'), `${i + 1} 回目`).toBe(true)
+    }
+    // 途中に別の名前を挟んでも影響しない
+    expect(needsLongName('A+B.TXT')).toBe(true)
+    expect(needsLongName('README')).toBe(false)
+    expect(needsLongName('A+B.TXT')).toBe(true)
     expect(needsLongName('VERYLONGNAME.TXT')).toBe(true) // 基本名 8 文字超
     expect(needsLongName('A.TOOLONG')).toBe(true) // 拡張子 3 文字超
     expect(needsLongName('a.b.c')).toBe(true) // ドットが 2 つ

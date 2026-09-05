@@ -576,6 +576,29 @@ describe('起動メニューの「無し」指定', () => {
     expect(eth['nameservers']).toBeUndefined()
   })
 
+  it('ai.dns=none は DNS だけを消す（search ドメインは残す）', () => {
+    // netplan の nameservers は addresses と search を同じ dict に持つ。
+    // nameservers ごと pop すると、プロファイルで指定した検索ドメインまで
+    // 一緒に消える。名前解決の設定が黙って変わるので気づきにくい。
+    const base = kernelArgProfile()
+    const p = {
+      ...base,
+      network: {
+        ...(base.network as Extract<AutoinstallProfile['network'], { mode: 'static' }>),
+        searchDomains: ['example.local', 'corp.internal'],
+      },
+    } as AutoinstallProfile
+
+    const out = runEarlyCommands(
+      p,
+      'autoinstall ai.hostname=web01 ai.ipv4=192.168.1.11/24 ai.gw=none ai.dns=none ---\n',
+    ) as AppliedConfig
+    const eth = Object.values(out.network?.ethernets ?? {})[0]!
+    const ns = eth['nameservers'] as { addresses?: unknown; search?: unknown } | undefined
+    expect(ns?.addresses).toBeUndefined()
+    expect(ns?.search).toEqual(['example.local', 'corp.internal'])
+  })
+
   it('値があるホストはそのまま入る', () => {
     // **プリセットを実際に入れること。** presets が空だと buildHostMenuEntries が
     // 返すのは「手入力」項目 (ai.interactive=1) だけになり、ホストの値を一度も

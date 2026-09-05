@@ -22,7 +22,12 @@ export function GpuSection(): React.JSX.Element {
   const setGpu = (patch: Partial<typeof gpu>): void =>
     update((p) => ({ ...p, software: { ...p.software, gpu: { ...p.software.gpu, ...patch } } }))
 
-  const repoAvailable = CUDA_REPO_DISTRO[series] !== null
+  // CUDA のリポジトリ URL は x86_64 固定（cudaKeyringUrl）。
+  // arm64 の ISO でも設定できてしまうと、初回起動時に keyring の取得が
+  // 404 で失敗する。ISO のアーキテクチャを見て、その場で伝える。
+  const isoArch = useStore((s) => s.iso?.identity.arch ?? null)
+  const archSupported = isoArch === null || isoArch === 'amd64'
+  const repoAvailable = CUDA_REPO_DISTRO[series] !== null && archSupported
   const packages = cudaPackages(gpu)
 
   return (
@@ -50,7 +55,15 @@ export function GpuSection(): React.JSX.Element {
         }
       />
 
-      {!repoAvailable && (
+      {!archSupported && (
+        <div className="mt-3">
+          <Callout tone="warning" title={t('gpu.unsupported')}>
+            この ISO は {isoArch} 版です。CUDA の導入は amd64 (x86_64) の ISO でのみ行えます。
+          </Callout>
+        </div>
+      )}
+
+      {archSupported && CUDA_REPO_DISTRO[series] === null && (
         <div className="mt-3">
           <Callout tone="warning" title={t('gpu.unsupported')}>
             NVIDIA は Ubuntu {series} 向けの CUDA リポジトリを公開していません。

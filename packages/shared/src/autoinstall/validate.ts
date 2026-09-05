@@ -4,6 +4,7 @@ import { SERIES_FEATURES } from './model.js'
 import { buildAutoinstallObject, collectPackages } from './generate.js'
 import { isValidSha512CryptHash, looksLikeCryptHash } from '../crypt/validate.js'
 import { getPreset } from './presets.js'
+import { ARCHIVE_REQUIREMENTS } from './provisioning.js'
 import { CUDA_REPO_DISTRO, cudaPackages, isValidServiceName } from './provisioning.js'
 import { isDebLineSource, isPpaSource, isValidSizeSpec } from './advanced.js'
 import {
@@ -64,7 +65,11 @@ const RESERVED_USERNAMES = new Set([
 const MAC_RE = /^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/
 const CIDR_RE = /^(\d{1,3}\.){3}\d{1,3}\/([0-9]|[12][0-9]|3[0-2])$/
 const IPV4_RE = /^(\d{1,3}\.){3}\d{1,3}$/
-const SSH_KEY_RE = /^(ssh-rsa|ssh-ed25519|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com)\s+[A-Za-z0-9+/=]+(\s+\S+)?$/
+// `\s` は改行も含むので、`(\s+\S+)?` のままだとコメント欄に改行を書けてしまう。
+// 生成側はヒアドキュメントをやめて printf にしたので実害は無くなったが、
+// 「1 行 1 鍵」は authorized_keys の形式そのものなので検証でも守る。
+const SSH_KEY_RE =
+  /^(ssh-rsa|ssh-ed25519|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com)[ \t]+[A-Za-z0-9+/=]+([ \t]+[^\r\n]*)?$/
 
 function isValidIPv4(value: string): boolean {
   if (!IPV4_RE.test(value)) return false
@@ -355,6 +360,21 @@ export function validateProfile(profile: AutoinstallProfile): ValidationResult {
         'storage.match',
         '複数のディスクがある機器では、シリアル番号やパスで指定する方が安全です。',
         'On machines with several disks, matching by serial number or path is safer.',
+      )
+    }
+  }
+
+  // --- アプリ展開のアーカイブ形式 ---
+  // 手で編集された JSON には知らない形式が入りうる。生成側は読み飛ばすので、
+  // 「設定したのに展開されない」ことをここで伝える。
+  for (const d of profile.postInstall.deployments) {
+    if (d.kind !== 'archive') continue
+    if (!Object.hasOwn(ARCHIVE_REQUIREMENTS, d.archiveFormat)) {
+      add(
+        'error',
+        'postInstall.deployments',
+        `展開 "${d.name}" のアーカイブ形式 "${String(d.archiveFormat)}" は対応していません。`,
+        `Deployment "${d.name}" uses an unsupported archive format "${String(d.archiveFormat)}".`,
       )
     }
   }
