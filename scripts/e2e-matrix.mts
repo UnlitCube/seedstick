@@ -583,7 +583,10 @@ async function runCase(
     check(
       `${c.id}: プロファイル検証を通る`,
       validation.issues.every((i) => i.severity !== 'error'),
-      validation.issues.filter((i) => i.severity === 'error').map((i) => i.messageJa).join(' / '),
+      validation.issues
+        .filter((i) => i.severity === 'error')
+        .map((i) => formatLocalized('ja', i.text))
+        .join(' / '),
     )
   }
 
@@ -794,7 +797,12 @@ async function main(): Promise<void> {
     }
     const dev = await FileBlockDevice.open(p, 'r')
     try {
-      const inspection = await inspectIso(dev).catch((e: unknown) => e)
+      // catch が `unknown` を返すと戻り値の型ごと unknown に潰れ、
+      // 下の `instanceof Error` で外れた側が絞り込めない（TS は unknown を否定側で絞らない）。
+      // Error に正規化して返すと `Inspection | Error` になり、両方の枝が型で守られる。
+      const inspection = await inspectIso(dev).catch((e: unknown) =>
+        e instanceof Error ? e : new Error(String(e)),
+      )
       if (inspection instanceof IsoValidationError) {
         check(`拒否: ${name}`, true)
         console.log(`  ${name} → ${inspection.reason}`)

@@ -5,6 +5,7 @@ import {
   Badge,
   Callout,
   Card,
+  Disclosure,
   Field,
   RadioGroup,
   Select,
@@ -15,6 +16,22 @@ import {
 } from '../components/ui.js'
 
 type Mode = NetworkConfig['mode']
+
+/**
+ * 「詳しい設定」の中が既定から変わっている件数。
+ *
+ * ここに入っているのは**生の netplan 上書きだけ**なので 0 か 1 になる。
+ * `createDefaultProfile()` の network は `{mode:'installer-default'}` で、
+ * 生の YAML は raw モードのときにしか存在しない。だから「raw であること」が
+ * そのまま「既定から変わっている」になる。
+ *
+ * 判別可能ユニオンを丸ごと比較しない（落とし穴 22 / 29）。**判別子だけを見る**。
+ * 深い比較にすると、`static` の nameservers を並べ替えただけで、
+ * ここに入っていない設定の変更まで数えてしまう。
+ */
+export function countNetworkAdvancedChanges(network: NetworkConfig): number {
+  return network.mode === 'raw' ? 1 : 0
+}
 
 const DEFAULT_STATIC = {
   mode: 'static' as const,
@@ -65,6 +82,8 @@ export function NetworkStep(): React.JSX.Element {
         break
     }
   }
+
+  const rawChangedCount = countNetworkAdvancedChanges(network)
 
   return (
     <div className="space-y-5">
@@ -186,30 +205,52 @@ export function NetworkStep(): React.JSX.Element {
         </Card>
       )}
 
-      {network.mode === 'raw' && (
-        <Card title={t('network.rawTitle')} description={t('network.rawDescription')}>
-          <TextArea
-            rows={14}
-            value={network.yaml}
-            spellCheck={false}
-            onChange={(e) => setNetwork({ mode: 'raw', yaml: e.target.value })}
-          />
-          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-            {tx('network.rawExample', {
-              link: (
-                <button
-                  onClick={() =>
-                    void window.autoinstall.openExternal('https://netplan.io/reference')
-                  }
-                  className="ml-1 text-sky-700 underline-offset-2 hover:underline dark:text-sky-400"
-                >
-                  {t('network.netplanReference')}
-                </button>
-              ),
-            })}
+      {/*
+        「詳しい設定」— インストーラが決して聞かないもの。ここは生の netplan 上書きだけ。
+        netplan を直接書いているときは `changedCount` が 1 になるので **必ず開いた状態**で出る
+        （閉じていると「固定 IP を設定したのに効かない」に見える。上のモード選択と
+        ここの中身が食い違って見えるのが、この画面でいちばん危ない誤解）。
+      */}
+      <Disclosure
+        title={t('network.detailsTitle')}
+        description={t('network.detailsDescription')}
+        changedCount={rawChangedCount}
+      >
+        {network.mode === 'raw' ? (
+          <div>
+            <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              {t('network.rawTitle')}
+            </h4>
+            <p className="mt-1 mb-3 text-sm text-slate-600 dark:text-slate-400">
+              {t('network.rawDescription')}
+            </p>
+            <TextArea
+              rows={14}
+              value={network.yaml}
+              spellCheck={false}
+              onChange={(e) => setNetwork({ mode: 'raw', yaml: e.target.value })}
+            />
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+              {tx('network.rawExample', {
+                link: (
+                  <button
+                    onClick={() =>
+                      void window.autoinstall.openExternal('https://netplan.io/reference')
+                    }
+                    className="ml-1 text-sky-700 underline-offset-2 hover:underline dark:text-sky-400"
+                  >
+                    {t('network.netplanReference')}
+                  </button>
+                ),
+              })}
+            </p>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            {t('network.detailsInactive')}
           </p>
-        </Card>
-      )}
+        )}
+      </Disclosure>
     </div>
   )
 }

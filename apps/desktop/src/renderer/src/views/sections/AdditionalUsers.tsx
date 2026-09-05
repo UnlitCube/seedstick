@@ -21,7 +21,6 @@ import {
 /** 追加ユーザーの一覧と編集。 */
 export function AdditionalUsersSection(): React.JSX.Element {
   const t = useT()
-  const locale = useStore((s) => s.locale)
   const users = useStore((s) => s.profile.postInstall.additionalUsers)
   const update = useStore((s) => s.updateProfile)
   // カンマ区切りの欄は正規化した配列から value を作ると区切り文字が打てない
@@ -247,7 +246,7 @@ export function AdditionalUsersSection(): React.JSX.Element {
                     onChange={(v) => setEditing({ ...editing, user: { ...editing.user, shell: v } })}
                     options={SHELL_CHOICES.map((c) => ({
                       value: c.value,
-                      label: locale === 'ja' ? c.labelJa : c.labelEn,
+                      label: t(c.label),
                     }))}
                   />
                 )}

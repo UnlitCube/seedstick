@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Eye, EyeOff, KeyRound, Upload, Wand2 } from 'lucide-react'
-import { SERIES_FEATURES, stripLineTerminators, type PrimaryUserGroups } from '@autoinstall/shared'
+import {
+  SERIES_FEATURES,
+  stripLineTerminators,
+  type AutoinstallProfile,
+  type PrimaryUserGroups,
+} from '@autoinstall/shared'
 import { useStore } from '../store.js'
 import { useT } from '../lib/i18n.js'
 import { generatePassword, passwordStrength } from '../lib/format.js'
@@ -9,6 +14,7 @@ import {
   Button,
   Callout,
   Card,
+  Disclosure,
   Field,
   Select,
   Switch,
@@ -18,6 +24,24 @@ import {
   useListDraft,
 } from '../components/ui.js'
 import { AdditionalUsersSection } from './sections/AdditionalUsers.js'
+import { ReadyToReview } from '../components/ReadyToReview.js'
+
+/**
+ * 「詳しい設定」の中が既定から変わっている件数。
+ *
+ * ここに入っているのは**管理ユーザーの追加グループだけ**なので 0 か 1 になる。
+ * `createDefaultProfile()` の `user.groups` は `{mode:'default'}` で、
+ * グループの一覧はそれ以外のモードのときにしか存在しない。だから
+ * 「mode が default でないこと」がそのまま「既定から変わっている」になる。
+ *
+ * 判別可能ユニオンを丸ごと比較しない（落とし穴 22 / 29）。**判別子だけを見る**。
+ * `{mode:'append', groups:[]}` を `{mode:'default'}` と深く比べても
+ * 「同じ」にはならないし、深い比較を持ち込むと将来ユニオンが増えたときに
+ * 「フィールドが落ちているのに 0 件」を出す側へ倒れる。
+ */
+export function countUserAdvancedChanges(profile: AutoinstallProfile): number {
+  return profile.user.groups.mode === 'default' ? 0 : 1
+}
 
 const SSH_KEY_RE =
   /^(ssh-rsa|ssh-ed25519|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com)\s+[A-Za-z0-9+/=]+(\s+\S+)?$/
@@ -67,6 +91,14 @@ export function UserStep(): React.JSX.Element {
     const merged = [...keys, ...file.content.split('\n').map((l) => l.trim()).filter(Boolean)]
     update((p) => ({ ...p, ssh: { ...p.ssh, authorizedKeys: [...new Set(merged)] } }))
   }
+
+  const groupsChangedCount = countUserAdvancedChanges(profile)
+
+  // 非対応リリース（26.04 未満）では**有効にできない**が、
+  // **無効に戻せなくはしない**（落とし穴 61）。
+  // 26.04 で作ったプロファイルを 24.04 の ISO で開くと groups は残るので、
+  // ここまで disabled にすると「このリリースでは効きません」の警告を消せなくなる。
+  const groupsLocked = !features.identityGroups && profile.user.groups.mode === 'default'
 
   const lockedOut =
     profile.ssh.installServer &&
@@ -206,65 +238,6 @@ export function UserStep(): React.JSX.Element {
             description={t('user.sudoNoPasswordHint')}
           />
         </div>
-
-        <div className="mt-5">
-          <Field
-            label={t('adv.identityGroups')}
-            hint={
-              features.identityGroups
-                ? t('user.identityGroupsHint')
-                : t('adv.identityGroupsUnsupported')
-            }
-          >
-            {(id) => (
-              <div className="space-y-2">
-                <Select
-                  value={profile.user.groups.mode}
-                  disabled={!features.identityGroups}
-                  onChange={(mode) => {
-                    const current =
-                      profile.user.groups.mode === 'default' ? [] : profile.user.groups.groups
-                    const groups: PrimaryUserGroups =
-                      mode === 'default'
-                        ? { mode: 'default' }
-                        : { mode: mode as 'append' | 'override', groups: current }
-                    update((p) => ({ ...p, user: { ...p.user, groups } }))
-                  }}
-                  options={[
-                    { value: 'default', label: t('user.groupsModeDefault') },
-                    { value: 'append', label: t('user.groupsModeAppend') },
-                    { value: 'override', label: t('user.groupsModeOverride') },
-                  ]}
-                />
-                {profile.user.groups.mode !== 'default' && (
-                  <TextInput
-                    id={id}
-                    spellCheck={false}
-                    placeholder="docker libvirt"
-                    disabled={!features.identityGroups}
-                    value={userGroupsDraft.text}
-                    onChange={(e) => {
-                      const list = userGroupsDraft.change(e.target.value)
-                      update((p) => ({
-                        ...p,
-                        user: {
-                          ...p.user,
-                          groups:
-                            p.user.groups.mode === 'default'
-                              ? p.user.groups
-                              : { mode: p.user.groups.mode, groups: list },
-                        },
-                      }))
-                    }}
-                  />
-                )}
-                {profile.user.groups.mode === 'override' && (
-                  <Callout tone="warning">{t('user.groupsOverrideWarning')}</Callout>
-                )}
-              </div>
-            )}
-          </Field>
-        </div>
       </Card>
 
       <Card title={t('ssh.title')}>
@@ -327,6 +300,80 @@ export function UserStep(): React.JSX.Element {
       </Card>
 
       <AdditionalUsersSection />
+
+      {/*
+        「詳しい設定」— インストーラが決して聞かないもの。
+        ここに入るのは管理ユーザーの追加グループ (`identity.groups`) だけ。
+        **たたむだけで、開けば今までどおり全部触れる**（落とし穴 61 / 66）。
+      */}
+      <Disclosure
+        title={t('user.detailsTitle')}
+        description={t('user.detailsDescription')}
+        changedCount={groupsChangedCount}
+      >
+        <Field
+          label={t('adv.identityGroups')}
+          hint={
+            features.identityGroups
+              ? t('user.identityGroupsHint')
+              : t('adv.identityGroupsUnsupported')
+          }
+        >
+          {(id) => (
+            <div className="space-y-2">
+              <Select
+                value={profile.user.groups.mode}
+                disabled={groupsLocked}
+                onChange={(mode) => {
+                  const current =
+                    profile.user.groups.mode === 'default' ? [] : profile.user.groups.groups
+                  const groups: PrimaryUserGroups =
+                    mode === 'default'
+                      ? { mode: 'default' }
+                      : { mode: mode as 'append' | 'override', groups: current }
+                  update((p) => ({ ...p, user: { ...p.user, groups } }))
+                }}
+                options={[
+                  { value: 'default', label: t('user.groupsModeDefault') },
+                  { value: 'append', label: t('user.groupsModeAppend') },
+                  { value: 'override', label: t('user.groupsModeOverride') },
+                ]}
+              />
+              {profile.user.groups.mode !== 'default' && (
+                <TextInput
+                  id={id}
+                  spellCheck={false}
+                  placeholder="docker libvirt"
+                  disabled={!features.identityGroups}
+                  value={userGroupsDraft.text}
+                  onChange={(e) => {
+                    const list = userGroupsDraft.change(e.target.value)
+                    update((p) => ({
+                      ...p,
+                      user: {
+                        ...p.user,
+                        groups:
+                          p.user.groups.mode === 'default'
+                            ? p.user.groups
+                            : { mode: p.user.groups.mode, groups: list },
+                      },
+                    }))
+                  }}
+                />
+              )}
+              {profile.user.groups.mode === 'override' && (
+                <Callout tone="warning">{t('user.groupsOverrideWarning')}</Callout>
+              )}
+            </div>
+          )}
+        </Field>
+      </Disclosure>
+
+      {/*
+        「必ず設定する」の最後。ここから先は既定のままでも通せることを伝える。
+        中身は `components/ReadyToReview.tsx`（設定にエラーがあるときは自分で消える）。
+      */}
+      <ReadyToReview />
     </div>
   )
 }

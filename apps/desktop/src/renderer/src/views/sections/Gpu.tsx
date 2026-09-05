@@ -14,7 +14,6 @@ import { Badge, Callout, Card, Field, RadioGroup, Select, Switch } from '../../c
 export function GpuSection(): React.JSX.Element {
   const t = useT()
   const tx = useTx()
-  const locale = useStore((s) => s.locale)
   const series = useStore((s) => s.profile.series)
   const gpu = useStore((s) => s.profile.software.gpu)
   const dockerEnabled = useStore((s) => s.profile.postInstall.presets.includes('docker-ce'))
@@ -105,7 +104,7 @@ export function GpuSection(): React.JSX.Element {
                 onChange={(toolkit) => setGpu({ toolkit })}
                 options={CUDA_TOOLKIT_CHOICES.map((c) => ({
                   value: c.value,
-                  label: locale === 'ja' ? c.labelJa : c.labelEn,
+                  label: t(c.label),
                 }))}
               />
             )}

@@ -7,6 +7,7 @@ import {
   generateMetaData,
   generateUserData,
   validateProfile,
+  formatLocalized,
   localized,
   type AutoinstallProfile,
   type GenerateOptions,
@@ -97,23 +98,33 @@ export async function buildSeedBundle(options: BuildSeedOptions): Promise<SeedBu
   // 設定の ON/OFF で結果が変わらないよう、auditRecord の値によらず常に予約する。
   const reserved = new Set([...files.map((f) => f.name.toLowerCase()), AUDIT_RECORD_NAME])
   const used = new Set(reserved)
-  // 第 2 引数は**カテゴリの判別子**であって文言ではない。日本語の語句を受け取ると
-  // `LocalizedText` の params には載せられない（params は string | number だけで、
-  // 訳文を入れ子にできない）ので、カテゴリごとに別のキーを引く。
+  // `claim` の第 2 引数は**カテゴリの判別子**であって文言ではない。カテゴリごとに
+  // 別のキーを引く（`params` に入れ子の `LocalizedText` を渡す形にもできるが、
+  // 「追加ファイルの名前」「アプリの展開の名前」は言語ごとに語順が変わるので、
+  // 文ごと分けたほうが訳しやすい）。
+  //
+  // 開発者向けの `message` は、同じキーの**日本語の訳文から作る**。以前はここに
+  // 日本語の文を直書きし、カテゴリ名だけを `whatJa` という変数で差し替えていたが、
+  // それは辞書とは別の 2 つ目の i18n 機構で、辞書だけを直しても診断は古いまま残った。
+  // `formatLocalized('ja', …)` を通せば文面は 1 か所（`ja.ts`）にしかない。
+  // 診断を日本語のまま残すのは規約どおり（HANDOFF 2.5）。
+  //
+  // 変数側にも型を書く: `never` を返す関数として制御フローを切るには、
+  // 呼ばれる名前に**明示的な型注釈**が必要（アロー側の戻り値注釈だけでは効かない）。
+  const fail: (text: LocalizedText) => never = (text) => {
+    throw new SeedBuildError(formatLocalized('ja', text), text)
+  }
   const claim = (name: string, what: 'file' | 'deployment'): void => {
     const key = name.toLowerCase()
-    const whatJa = what === 'file' ? '追加ファイル' : 'アプリの展開'
     if (reserved.has(key)) {
-      throw new SeedBuildError(
-        `${whatJa} の名前 "${name}" は設定用パーティションの予約名です。別の名前にしてください。`,
+      fail(
         localized(what === 'file' ? 'seed.reservedNameFile' : 'seed.reservedNameDeployment', { name }),
       )
     }
     if (used.has(key)) {
       // FAT は短縮名を ~1/~2 でずらすが LFN は同じままなので、
       // 同名エントリが 2 つある壊れたファイルシステムになる。
-      throw new SeedBuildError(
-        `${whatJa} の名前 "${name}" が重複しています。設定用パーティションには同じ名前を 2 つ置けません。`,
+      fail(
         localized(what === 'file' ? 'seed.duplicateNameFile' : 'seed.duplicateNameDeployment', { name }),
       )
     }
@@ -145,10 +156,7 @@ export async function buildSeedBundle(options: BuildSeedOptions): Promise<SeedBu
         const name = basename(d.source.path)
         const size = `${(info.size / 1e9).toFixed(2)} GB`
         const limit = `${Math.round(MAX_PAYLOAD_BYTES / 1024 ** 3)} GB`
-        throw new SeedBuildError(
-          `${name} は ${size} あり、USB の設定用パーティションに載せられません（上限 ${limit}）。URL からのダウンロードに切り替えてください。`,
-          localized('seed.payloadTooLarge', { name, size, limit }),
-        )
+        fail(localized('seed.payloadTooLarge', { name, size, limit }))
       }
       const content = await readFile(d.source.path)
       files.push({ name: d.name, content })

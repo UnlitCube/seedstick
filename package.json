@@ -13,7 +13,7 @@
   "scripts": {
     "dev": "npm run dev -w @autoinstall/desktop",
     "build": "npm run build -w @autoinstall/desktop",
-    "typecheck": "tsc -p packages/shared/tsconfig.json && tsc -p packages/media/tsconfig.json && tsc -p apps/desktop/tsconfig.node.json && tsc -p apps/desktop/tsconfig.json",
+    "typecheck": "tsc -p packages/shared/tsconfig.json && tsc -p packages/media/tsconfig.json && tsc -p apps/desktop/tsconfig.node.json && tsc -p apps/desktop/tsconfig.json && tsc -p scripts/tsconfig.json",
     "test:unit": "vitest run",
     "smoke": "tsx scripts/smoke-media.mts",
     "test": "npm run typecheck && npm run test:unit && npm run smoke",

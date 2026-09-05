@@ -44,6 +44,7 @@ import {
 import {
   buildGrubPlan,
   createDefaultProfile,
+  formatLocalized,
   generateMetaData,
   generateUserData,
   recognizeIso,
@@ -207,7 +208,14 @@ async function main(): Promise<void> {
     }
     const profile = buildProfile(recognized.identity.series)
     const v = validateProfile(profile)
-    check('設定が検証を通る', v.ok, v.issues.filter((i) => i.severity === 'error').map((i) => i.messageJa).join(' / '))
+    check(
+      '設定が検証を通る',
+      v.ok,
+      v.issues
+        .filter((i) => i.severity === 'error')
+        .map((i) => formatLocalized('ja', i.text))
+        .join(' / '),
+    )
 
     userData = generateUserData(profile, { comments: 'ja' })
     metaData = generateMetaData(`autoinstall-${profile.basics.hostname}`)

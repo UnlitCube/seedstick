@@ -4,6 +4,7 @@ import {
   COMMON_PACKAGES,
   KERNEL_FLAVORS,
   SERIES_FEATURES,
+  createDefaultProfile,
   isDebLineSource,
   isPpaSource,
   type AptFallback,
@@ -17,6 +18,7 @@ import {
   Badge,
   Callout,
   Card,
+  Disclosure,
   Field,
   RadioGroup,
   Select,
@@ -37,15 +39,62 @@ function nextSourceName(existing: readonly AptSource[]): string {
   }
 }
 
+/** `typeof null === 'object'`（落とし穴 30）。配列も弾く。 */
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/** 読めない形なら空のオブジェクトとして扱う。ここで投げると画面全体が落ちる。 */
+function section(value: unknown): Record<string, unknown> {
+  return isObject(value) ? value : {}
+}
+
+/**
+ * 「詳しい設定」の中で、既定から変わっているものの数。
+ *
+ * 折りたたみの Badge と「最初から開くか」の判断に使う。
+ * **数えるのは折りたたみに入っているものだけ**（カーネル・追加リポジトリ・
+ * apt の fallback / preserve・Ubuntu Pro のトークン）。表に出ている設定は
+ * 見れば分かるので数えない。
+ *
+ * 数え方は「その設定が `createDefaultProfile()` の値と違えば 1」。
+ * リストは**要素数ではなく「既定（空）と違うか」で 1 件**と数える
+ * （リポジトリを 3 件足したのは「1 か所を変えた」であって「3 か所」ではない）。
+ *
+ * **判別可能ユニオンを素朴に比較しない**（落とし穴 22 / 29）。
+ * `kernel` は `{mode:'default'}` / `{mode:'flavor',flavor}` / `{mode:'package',package}` の
+ * ユニオンなので、判別子 `mode` だけを見る。
+ *
+ * 手で編集されたプロファイルは実際に届く（落とし穴 23）ので、読めない値は
+ * **「変わっている」側に倒す**。0 と数えて折りたたんだままにすると、
+ * 壊れた設定が見えないまま書き込みまで進む。
+ */
+export function countSoftwareAdvancedChanges(profile: AutoinstallProfile): number {
+  const defaults = createDefaultProfile(profile.series)
+  const software = section(profile.software)
+  const apt = section(profile.apt)
+  let n = 0
+
+  const kernel = software['kernel']
+  if (!isObject(kernel) || kernel['mode'] !== defaults.software.kernel.mode) n++
+  if (software['ubuntuProToken'] !== defaults.software.ubuntuProToken) n++
+
+  const sources = apt['sources']
+  if (!Array.isArray(sources) || sources.length !== defaults.apt.sources.length) n++
+  if (apt['fallback'] !== defaults.apt.fallback) n++
+  if (apt['preserveSourcesList'] !== defaults.apt.preserveSourcesList) n++
+
+  return n
+}
+
 export function SoftwareStep(): React.JSX.Element {
   const t = useT()
   const tx = useTx()
-  const locale = useStore((s) => s.locale)
   const profile = useStore((s) => s.profile)
   const update = useStore((s) => s.updateProfile)
   const features = SERIES_FEATURES[profile.series]
-  const label = (c: { labelJa: string; labelEn: string }): string =>
-    locale === 'ja' ? c.labelJa : c.labelEn
+  // 折りたたみの中で既定から変わっている数。Badge と「最初から開くか」に使う。
+  const advancedChanges = countSoftwareAdvancedChanges(profile)
 
   const selected = new Set(profile.software.packages)
   const commonValues = new Set(COMMON_PACKAGES.map((p) => p.value))
@@ -141,7 +190,7 @@ export function SoftwareStep(): React.JSX.Element {
               key={pkg.value}
               checked={selected.has(pkg.value)}
               onChange={(v) => togglePackage(pkg.value, v)}
-              label={label(pkg)}
+              label={t(pkg.label)}
               description={<code className="font-mono text-[11px]">{pkg.value}</code>}
             />
           ))}
@@ -294,69 +343,6 @@ export function SoftwareStep(): React.JSX.Element {
             />
           )}
         </div>
-
-        <div className="mt-5">
-          <Field label={t('adv.kernelTitle')}>
-            {(id) => (
-              <Select
-                id={id}
-                value={
-                  profile.software.kernel.mode === 'default'
-                    ? 'default'
-                    : profile.software.kernel.mode === 'package'
-                      ? 'package'
-                      : profile.software.kernel.flavor
-                }
-                onChange={(v) => {
-                  const kernel: KernelChoice =
-                    v === 'default'
-                      ? { mode: 'default' }
-                      : v === 'package'
-                        ? {
-                            mode: 'package',
-                            package:
-                              profile.software.kernel.mode === 'package'
-                                ? profile.software.kernel.package
-                                : '',
-                          }
-                        : { mode: 'flavor', flavor: v }
-                  update((p) => ({ ...p, software: { ...p.software, kernel } }))
-                }}
-                options={[
-                  { value: 'default', label: t('adv.kernelDefault') },
-                  ...KERNEL_FLAVORS.map((f) => ({ value: f.value, label: label(f) })),
-                  { value: 'package', label: t('adv.kernelCustom') },
-                ]}
-              />
-            )}
-          </Field>
-          {profile.software.kernel.mode === 'package' && (
-            <div className="mt-3">
-              <Field label={t('adv.kernelFlavor')} required>
-                {(id) => (
-                  <TextInput
-                    id={id}
-                    spellCheck={false}
-                    placeholder="linux-generic-hwe-24.04"
-                    value={profile.software.kernel.mode === 'package' ? profile.software.kernel.package : ''}
-                    onChange={(e) =>
-                      update((p) => ({
-                        ...p,
-                        software: { ...p.software, kernel: { mode: 'package', package: e.target.value } },
-                      }))
-                    }
-                  />
-                )}
-              </Field>
-            </div>
-          )}
-          {profile.software.kernel.mode === 'flavor' &&
-            profile.software.kernel.flavor.includes('hwe') && (
-              <div className="mt-3">
-                <Callout tone="info">{t('adv.kernelHweHint')}</Callout>
-              </div>
-            )}
-        </div>
       </Card>
 
       <GpuSection />
@@ -404,7 +390,7 @@ export function SoftwareStep(): React.JSX.Element {
                   onClick={() => update((p) => ({ ...p, apt: { ...p.apt, primaryUri: m.value } }))}
                   className="rounded-full border border-slate-300 px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
                 >
-                  {label(m)}
+                  {t(m.label)}
                 </button>
               ))}
             </div>
@@ -425,125 +411,196 @@ export function SoftwareStep(): React.JSX.Element {
         </div>
       </Card>
 
-      <Card title={t('adv.aptTitle')}>
-        <Field label={t('adv.aptSources')} hint={t('adv.aptSourcesHint')}>
-          {() => (
-            <div className="space-y-2">
-              {profile.apt.sources.map((src, i) => (
-                <div key={src.id} className="flex gap-2">
-                  <TextInput
-                    value={src.source}
-                    spellCheck={false}
-                    placeholder="ppa:ondrej/php"
-                    invalid={src.source !== '' && !isPpaSource(src.source) && !isDebLineSource(src.source)}
-                    onChange={(e) => setSource(i, { source: e.target.value })}
-                  />
+      <Disclosure
+        title={t('software.advancedTitle')}
+        description={t('software.advancedHint')}
+        changedCount={advancedChanges}
+      >
+        <div className="space-y-5">
+          <Card>
+            <Field label={t('adv.kernelTitle')}>
+              {(id) => (
+                <Select
+                  id={id}
+                  value={
+                    profile.software.kernel.mode === 'default'
+                      ? 'default'
+                      : profile.software.kernel.mode === 'package'
+                        ? 'package'
+                        : profile.software.kernel.flavor
+                  }
+                  onChange={(v) => {
+                    const kernel: KernelChoice =
+                      v === 'default'
+                        ? { mode: 'default' }
+                        : v === 'package'
+                          ? {
+                              mode: 'package',
+                              package:
+                                profile.software.kernel.mode === 'package'
+                                  ? profile.software.kernel.package
+                                  : '',
+                            }
+                          : { mode: 'flavor', flavor: v }
+                    update((p) => ({ ...p, software: { ...p.software, kernel } }))
+                  }}
+                  options={[
+                    { value: 'default', label: t('adv.kernelDefault') },
+                    ...KERNEL_FLAVORS.map((f) => ({ value: f.value, label: t(f.label) })),
+                    { value: 'package', label: t('adv.kernelCustom') },
+                  ]}
+                />
+              )}
+            </Field>
+            {profile.software.kernel.mode === 'package' && (
+              <div className="mt-3">
+                <Field label={t('adv.kernelFlavor')} required>
+                  {(id) => (
+                    <TextInput
+                      id={id}
+                      spellCheck={false}
+                      placeholder="linux-generic-hwe-24.04"
+                      value={profile.software.kernel.mode === 'package' ? profile.software.kernel.package : ''}
+                      onChange={(e) =>
+                        update((p) => ({
+                          ...p,
+                          software: { ...p.software, kernel: { mode: 'package', package: e.target.value } },
+                        }))
+                      }
+                    />
+                  )}
+                </Field>
+              </div>
+            )}
+            {profile.software.kernel.mode === 'flavor' &&
+              profile.software.kernel.flavor.includes('hwe') && (
+                <div className="mt-3">
+                  <Callout tone="info">{t('adv.kernelHweHint')}</Callout>
+                </div>
+              )}
+          </Card>
+
+          <Card title={t('adv.aptTitle')}>
+            <Field label={t('adv.aptSources')} hint={t('adv.aptSourcesHint')}>
+              {() => (
+                <div className="space-y-2">
+                  {profile.apt.sources.map((src, i) => (
+                    <div key={src.id} className="flex gap-2">
+                      <TextInput
+                        value={src.source}
+                        spellCheck={false}
+                        placeholder="ppa:ondrej/php"
+                        invalid={src.source !== '' && !isPpaSource(src.source) && !isDebLineSource(src.source)}
+                        onChange={(e) => setSource(i, { source: e.target.value })}
+                      />
+                      <button
+                        type="button"
+                        aria-label={t('common.delete')}
+                        onClick={() =>
+                          update((p) => ({
+                            ...p,
+                            apt: { ...p.apt, sources: p.apt.sources.filter((_, j) => j !== i) },
+                          }))
+                        }
+                        className="shrink-0 rounded-lg p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40"
+                      >
+                        <Trash2 className="size-4" aria-hidden />
+                      </button>
+                    </div>
+                  ))}
                   <button
                     type="button"
-                    aria-label={t('common.delete')}
                     onClick={() =>
                       update((p) => ({
                         ...p,
-                        apt: { ...p.apt, sources: p.apt.sources.filter((_, j) => j !== i) },
+                        apt: {
+                          ...p.apt,
+                          sources: [
+                            ...p.apt.sources,
+                            {
+                              id: crypto.randomUUID(),
+                              // 連番だと「2 件足して 1 件消してまた足す」で名前が衝突し、
+                              // curtin の sources はマップなので片方が黙って消える。
+                              name: nextSourceName(p.apt.sources),
+                              source: '',
+                              key: '',
+                            } satisfies AptSource,
+                          ],
+                        },
                       }))
                     }
-                    className="shrink-0 rounded-lg p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm text-slate-600 transition hover:border-slate-400 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
                   >
-                    <Trash2 className="size-4" aria-hidden />
+                    <Plus className="size-4" aria-hidden />
+                    {t('common.add')}
                   </button>
                 </div>
-              ))}
-              <button
-                type="button"
-                onClick={() =>
-                  update((p) => ({
-                    ...p,
-                    apt: {
-                      ...p.apt,
-                      sources: [
-                        ...p.apt.sources,
-                        {
-                          id: crypto.randomUUID(),
-                          // 連番だと「2 件足して 1 件消してまた足す」で名前が衝突し、
-                          // curtin の sources はマップなので片方が黙って消える。
-                          name: nextSourceName(p.apt.sources),
-                          source: '',
-                          key: '',
-                        } satisfies AptSource,
-                      ],
-                    },
-                  }))
-                }
-                className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm text-slate-600 transition hover:border-slate-400 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
-              >
-                <Plus className="size-4" aria-hidden />
-                {t('common.add')}
-              </button>
-            </div>
-          )}
-        </Field>
+              )}
+            </Field>
 
-        {profile.apt.sources.some((s) => isDebLineSource(s.source)) && (
-          <div className="mt-3">
-            <Callout tone="warning">
-              {tx('software.aptDebLineKeyNote', {
-                sources: <code className="font-mono">apt.sources</code>,
-              })}
-            </Callout>
-          </div>
-        )}
-
-        <div className="mt-4 space-y-3">
-          <Field label={t('adv.aptFallback')}>
-            {(id) => (
-              <Select
-                id={id}
-                value={profile.apt.fallback}
-                onChange={(v) => update((p) => ({ ...p, apt: { ...p.apt, fallback: v as AptFallback } }))}
-                options={APT_FALLBACK_CHOICES.map((c) => ({ value: c.value, label: label(c) }))}
-              />
+            {profile.apt.sources.some((s) => isDebLineSource(s.source)) && (
+              <div className="mt-3">
+                <Callout tone="warning">
+                  {tx('software.aptDebLineKeyNote', {
+                    sources: <code className="font-mono">apt.sources</code>,
+                  })}
+                </Callout>
+              </div>
             )}
-          </Field>
-          <Switch
-            checked={profile.apt.preserveSourcesList}
-            onChange={(preserveSourcesList) =>
-              update((p) => ({ ...p, apt: { ...p.apt, preserveSourcesList } }))
-            }
-            label={t('adv.aptPreserve')}
-            description={t('adv.aptPreserveHint')}
-          />
-        </div>
-      </Card>
 
-      <Card title={t('software.ubuntuPro')}>
-        <Field
-          label={t('software.ubuntuProTokenLabel')}
-          hint={t('software.ubuntuProTokenHint')}
-        >
-          {(id) => (
-            <TextInput
-              id={id}
-              value={profile.software.ubuntuProToken}
-              spellCheck={false}
-              placeholder="C1a2b3..."
-              onChange={(e) =>
-                update((p) => ({ ...p, software: { ...p.software, ubuntuProToken: e.target.value.trim() } }))
-              }
-            />
-          )}
-        </Field>
-        {!features.ubuntuPro && profile.software.ubuntuProToken && (
-          <div className="mt-3">
-            <Callout tone="info">
-              {tx('software.ubuntuProKeyNote', {
-                series: profile.series,
-                advantage: <code className="font-mono">ubuntu-advantage</code>,
-                pro: <code className="font-mono">ubuntu-pro</code>,
-              })}
-            </Callout>
-          </div>
-        )}
-      </Card>
+            <div className="mt-4 space-y-3">
+              <Field label={t('adv.aptFallback')}>
+                {(id) => (
+                  <Select
+                    id={id}
+                    value={profile.apt.fallback}
+                    onChange={(v) => update((p) => ({ ...p, apt: { ...p.apt, fallback: v as AptFallback } }))}
+                    options={APT_FALLBACK_CHOICES.map((c) => ({ value: c.value, label: t(c.label) }))}
+                  />
+                )}
+              </Field>
+              <Switch
+                checked={profile.apt.preserveSourcesList}
+                onChange={(preserveSourcesList) =>
+                  update((p) => ({ ...p, apt: { ...p.apt, preserveSourcesList } }))
+                }
+                label={t('adv.aptPreserve')}
+                description={t('adv.aptPreserveHint')}
+              />
+            </div>
+          </Card>
+
+          <Card title={t('software.ubuntuPro')}>
+            <Field
+              label={t('software.ubuntuProTokenLabel')}
+              hint={t('software.ubuntuProTokenHint')}
+            >
+              {(id) => (
+                <TextInput
+                  id={id}
+                  value={profile.software.ubuntuProToken}
+                  spellCheck={false}
+                  placeholder="C1a2b3..."
+                  onChange={(e) =>
+                    update((p) => ({ ...p, software: { ...p.software, ubuntuProToken: e.target.value.trim() } }))
+                  }
+                />
+              )}
+            </Field>
+            {!features.ubuntuPro && profile.software.ubuntuProToken && (
+              <div className="mt-3">
+                <Callout tone="info">
+                  {tx('software.ubuntuProKeyNote', {
+                    series: profile.series,
+                    advantage: <code className="font-mono">ubuntu-advantage</code>,
+                    pro: <code className="font-mono">ubuntu-pro</code>,
+                  })}
+                </Callout>
+              </div>
+            )}
+          </Card>
+        </div>
+      </Disclosure>
     </div>
   )
 }

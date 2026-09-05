@@ -88,6 +88,49 @@ export async function open() {
       if (!ok) throw new Error(`select が見つかりません: ${selector}[${nth}]`)
       await new Promise((r) => setTimeout(r, 120))
     },
+    /**
+     * 各ステップの「詳しい設定」（`<Disclosure>`）を開く。
+     *
+     * **既定では閉じている**ので、中の入力欄（swap のサイズなど）に触る前に必ず呼ぶ。
+     * 閉じている間は中身が DOM に存在しない（`{open && children}`）ので、
+     * `fillByPlaceholder` は「入力欄が見つかりません」で落ちる。
+     *
+     * 探すのは**表示文言ではなく `data-disclosure` の目印**（`components/ui.tsx`）。
+     * 「詳しい設定」という訳文で探すと、文言を変えた瞬間にまた壊れる。
+     *
+     * @param {number|null} nth 何番目の折りたたみか。null なら画面上の全部を開く。
+     * @returns {Promise<number>} 実際に開いた数（もともと開いていたものは数えない）。
+     */
+    async openDisclosure(nth = null) {
+      const sel = 'main [data-disclosure]'
+      const total = await c.eval(`return document.querySelectorAll(${JSON.stringify(sel)}).length`)
+      if (total === 0) throw new Error(`折りたたみ (${sel}) が 1 つも見つかりません`)
+      if (nth !== null && nth >= total) {
+        throw new Error(`折りたたみ ${nth} 番目がありません（${total} 個しかない）`)
+      }
+      const targets = nth === null ? [...Array(total).keys()] : [nth]
+      let opened = 0
+      for (const i of targets) {
+        // 開く／閉じるは `aria-expanded` に出る。既に開いていたら触らない
+        // （もう一度クリックすると閉じてしまう）。
+        const isOpen = await c.eval(`
+          const el = document.querySelectorAll(${JSON.stringify(sel)})[${i}]
+          return el ? el.getAttribute('aria-expanded') === 'true' : true
+        `)
+        if (isOpen) continue
+        await this.click(sel, null, i)
+        await new Promise((r) => setTimeout(r, 250))
+        const nowOpen = await c.eval(`
+          const el = document.querySelectorAll(${JSON.stringify(sel)})[${i}]
+          return el ? el.getAttribute('aria-expanded') === 'true' : false
+        `)
+        // 黙って開かないまま進むと、この下の「入力欄が見つかりません」で
+        // 原因の分からない失敗になる。ここで落とす。
+        if (!nowOpen) throw new Error(`折りたたみ ${i} 番目を開けませんでした`)
+        opened += 1
+      }
+      return opened
+    },
     async wait(ms) {
       await new Promise((r) => setTimeout(r, ms))
     },

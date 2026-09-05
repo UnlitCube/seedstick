@@ -3,14 +3,13 @@ import { AlertTriangle, CheckCircle2, Copy, Download, FolderOpen, Info, Save, Up
 import type { ValidationIssue } from '@autoinstall/shared'
 import { useStore } from '../store.js'
 import { formatBytes } from '../lib/format.js'
-import { useT } from '../lib/i18n.js'
+import { useT, useTl } from '../lib/i18n.js'
 import { Badge, Button, Callout, Card, CodeBlock } from '../components/ui.js'
 
 type Tab = 'user-data' | 'autoinstall' | 'grub'
 
 export function ReviewStep(): React.JSX.Element {
   const t = useT()
-  const locale = useStore((s) => s.locale)
   const { config, configBusy, profile, iso } = useStore()
   const loadProfileFromDisk = useStore((s) => s.loadProfileFromDisk)
   const [tab, setTab] = useState<Tab>('user-data')
@@ -57,7 +56,7 @@ export function ReviewStep(): React.JSX.Element {
         <Card title={t('review.issues')}>
           <ul className="space-y-2">
             {[...errors, ...warnings, ...infos].map((issue, i) => (
-              <IssueRow key={`${issue.field}-${i}`} issue={issue} locale={locale} />
+              <IssueRow key={`${issue.field}-${i}`} issue={issue} />
             ))}
           </ul>
         </Card>
@@ -266,7 +265,8 @@ function Summary({ label, children }: { label: string; children: React.ReactNode
   )
 }
 
-function IssueRow({ issue, locale }: { issue: ValidationIssue; locale: 'ja' | 'en' }): React.JSX.Element {
+function IssueRow({ issue }: { issue: ValidationIssue }): React.JSX.Element {
+  const tl = useTl()
   const Icon = issue.severity === 'error' ? AlertTriangle : issue.severity === 'warning' ? AlertTriangle : Info
   const color =
     issue.severity === 'error'
@@ -283,7 +283,7 @@ function IssueRow({ issue, locale }: { issue: ValidationIssue; locale: 'ja' | 'e
       )}
       <div className="min-w-0">
         <p className="text-sm text-slate-800 dark:text-slate-200">
-          {locale === 'ja' ? issue.messageJa : issue.messageEn}
+          {tl(issue.text)}
         </p>
         {/* 開発者向けの生の診断。訳文には連結せず、別の行として出す
             （`WriteStatus.detail` と同じ 2 本立て）。 */}

@@ -1,6 +1,7 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from 'react'
 import { FileArchive, FolderInput, Package, Trash2 } from 'lucide-react'
 import {
+  deploymentOwnership,
   detectArchiveFormat,
   type ArchiveFormat,
   type Deployment,
@@ -79,6 +80,7 @@ export function DeploymentsSection(): React.JSX.Element {
         <ul className="space-y-2">
           {deployments.map((d, i) => {
             const isMissing = d.source.kind === 'host-file' && missing.has(d.source.path)
+            const ownership = deploymentOwnership(d)
             return (
               <li
                 key={d.id}
@@ -108,7 +110,9 @@ export function DeploymentsSection(): React.JSX.Element {
                           })
                         : t('deploy.summaryHostFile', { size: formatBytes(d.source.sizeBytes) })}
                     {d.kind === 'archive' && ` · ${d.archiveFormat}`}
-                    {d.owner !== 'root' && ` · ${d.owner}:${d.group}`}
+                    {/* 表示は生成側と同じ関数から作る。ここで条件を書き写すと必ず食い違う
+                        （owner だけを見ていたので、chgrp だけ出る設定が表示されなかった）。 */}
+                    {ownership && ` · ${ownership.owner || 'root'}:${ownership.group}`}
                   </p>
                   {isMissing && (
                     <p className="mt-1 text-xs font-medium text-rose-700 dark:text-rose-300">
@@ -428,6 +432,7 @@ function DeploymentEditor({
               checked={item.chownRecursive}
               onChange={(v) => set({ chownRecursive: v })}
               label={t('deploy.chownRecursive')}
+              description={t('deploy.chownRecursiveHint')}
             />
             <Field label={t('deploy.postCommand')} hint={t('deploy.postCommandHint')}>
               {(id) => (

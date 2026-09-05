@@ -106,6 +106,31 @@ export function RuntimeStep(): React.JSX.Element {
 
   return (
     <div className="space-y-5">
+      {/*
+        **説明を先に、設定を後に置く。**
+        このステップで扱う「起動メニューで値を差し替える」は、Ubuntu のインストーラを
+        通したことがある人にとっても未知の概念で、名前（実行時に決める値）からは
+        何のためのものか分からない。目的（USB 1 本を複数台に使い回す）→ 仕組み →
+        設定、の順にする。以前は仕組みの Card が**ページの最後**にあり、
+        読む前に選択を迫られる並びになっていた。
+      */}
+      <Card title={t('runtime.purposeTitle')}>
+        <p className="text-sm text-slate-700 dark:text-slate-300">{t('runtime.purposeBody')}</p>
+        <p className="mt-2 text-sm text-slate-700 dark:text-slate-300">{t('runtime.purposeSkip')}</p>
+        <h4 className="mt-5 text-sm font-semibold text-slate-900 dark:text-slate-100">
+          {t('runtime.howItWorks')}
+        </h4>
+        <p className="mt-1 text-sm text-slate-700 dark:text-slate-300">{t('runtime.howItWorksBody')}</p>
+        <div className="mt-3">
+          <CodeBlock
+            code={Object.values(KERNEL_ARG)
+              .map((a) => `${a}=...`)
+              .join('\n')}
+            maxHeight="10rem"
+          />
+        </div>
+      </Card>
+
       {prerequisites.length > 0 && (
         <Callout tone="warning" title={t('runtime.prereqTitle')}>
           <ul className="list-disc space-y-1 pl-5">
@@ -288,18 +313,6 @@ export function RuntimeStep(): React.JSX.Element {
           )}
         </Card>
       )}
-
-      <Card title={t('runtime.howItWorks')}>
-        <p className="text-sm text-slate-700 dark:text-slate-300">{t('runtime.howItWorksBody')}</p>
-        <div className="mt-3">
-          <CodeBlock
-            code={Object.values(KERNEL_ARG)
-              .map((a) => `${a}=...`)
-              .join('\n')}
-            maxHeight="10rem"
-          />
-        </div>
-      </Card>
     </div>
   )
 }

@@ -58,7 +58,10 @@ await d.click('main label', '固定 IP アドレスを使う')
 await d.wait(600)
 const netDom = await d.eval(`return [...document.querySelectorAll('main input')].map(e => e.placeholder).filter(Boolean)`)
 console.log('ネットワーク入力欄:', JSON.stringify(netDom))
-await d.fillByPlaceholder('192.168.1.50/24', '192.168.1.50/24').catch(() => {})
+// placeholder は `NetworkStep.tsx` の実物と一致していること。
+// ここは長らく `192.168.1.50/24`（実物は `.10/24`）を探していて、
+// `.catch(() => {})` が握り潰すので**空振りしたまま緑**だった。握り潰さない。
+await d.fillByPlaceholder('192.168.1.10/24', '192.168.1.50/24')
 await d.wait(400)
 await d.shot('.e2e/32-network.png')
 
@@ -68,6 +71,10 @@ await d.select('main select', 'serial', 0)
 await d.wait(500)
 const diskDom = await d.eval(`return [...document.querySelectorAll('main input')].map(e => e.placeholder).filter(Boolean)`)
 console.log('ディスク入力欄:', JSON.stringify(diskDom))
+// swap は「詳しい設定」（<Disclosure>）の中で、**既定では閉じている**。
+// 閉じている間は中身が DOM に無いので、開かずに触ると必ず落ちる。
+await d.openDisclosure()
+await d.wait(300)
 await d.select('main select', 'size', 1)
 await d.wait(400)
 await d.fillByPlaceholder('4G', '4G')

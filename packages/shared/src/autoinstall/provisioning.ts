@@ -3,6 +3,7 @@
 // user-data に落として実現する。
 
 import type { UbuntuSeries } from './model.js'
+import type { Choice } from './presets.js'
 
 // ---------------------------------------------------------------------------
 // 追加ユーザー
@@ -32,11 +33,12 @@ export interface AdditionalUser {
   readonly systemAccount: boolean
 }
 
-export const SHELL_CHOICES = [
-  { value: '/bin/bash', labelJa: 'bash（標準）', labelEn: 'bash (default)' },
-  { value: '/bin/sh', labelJa: 'sh', labelEn: 'sh' },
-  { value: '/usr/sbin/nologin', labelJa: 'ログイン不可（サービス用）', labelEn: 'No login (for services)' },
-] as const
+// 選択肢の表示名は辞書のキーで持つ（`presets.ts` の `Choice` と同じ規約）。
+export const SHELL_CHOICES: readonly Choice[] = [
+  { value: '/bin/bash', label: 'users.shellBash' },
+  { value: '/bin/sh', label: 'users.shellSh' },
+  { value: '/usr/sbin/nologin', label: 'users.shellNologin' },
+]
 
 // ---------------------------------------------------------------------------
 // アプリの展開
@@ -81,6 +83,12 @@ export interface Deployment {
   readonly source: DeploymentSource
   /** `file` なら配置先の絶対パス、`archive` なら展開先ディレクトリ */
   readonly targetPath: string
+  /**
+   * 配置先 / 展開先を所有するユーザー。空か `root` なら所有者は変えない。
+   * `archive` でも **`chownRecursive` に関係なく展開先そのものには適用する**
+   * （GUI が常に表示している値なので、適用しないと「設定したのに効かない」になる）。
+   * 実際に何が起きるかは `deploymentOwnership()` が決める。
+   */
   readonly owner: string
   readonly group: string
   /** `file` のパーミッション（8 進数） */
@@ -89,7 +97,11 @@ export interface Deployment {
   readonly archiveFormat: ArchiveFormat
   /** 展開後に targetPath で実行するコマンド（空なら何もしない） */
   readonly postCommand: string
-  /** 展開先を丸ごと owner:group にする */
+  /**
+   * **中身（展開されたファイル）まで** owner:group にする (`chown -R`)。
+   * false でも展開先ディレクトリそのものは owner:group になり、
+   * 中身はアーカイブが持っている所有者のまま残る。
+   */
   readonly chownRecursive: boolean
 }
 
@@ -188,17 +200,17 @@ export const CUDA_REPO_DISTRO: Record<UbuntuSeries, string | null> = {
 }
 
 /** リポジトリに存在することを確認済みのツールキット。新しい順。 */
-export const CUDA_TOOLKIT_CHOICES = [
-  { value: 'latest', labelJa: '最新版 (cuda-toolkit)', labelEn: 'Latest (cuda-toolkit)' },
-  { value: 'cuda-toolkit-13-3', labelJa: 'CUDA 13.3', labelEn: 'CUDA 13.3' },
-  { value: 'cuda-toolkit-13-2', labelJa: 'CUDA 13.2', labelEn: 'CUDA 13.2' },
-  { value: 'cuda-toolkit-13-1', labelJa: 'CUDA 13.1', labelEn: 'CUDA 13.1' },
-  { value: 'cuda-toolkit-13-0', labelJa: 'CUDA 13.0', labelEn: 'CUDA 13.0' },
-  { value: 'cuda-toolkit-12-9', labelJa: 'CUDA 12.9', labelEn: 'CUDA 12.9' },
-  { value: 'cuda-toolkit-12-8', labelJa: 'CUDA 12.8', labelEn: 'CUDA 12.8' },
-  { value: 'cuda-toolkit-12-6', labelJa: 'CUDA 12.6', labelEn: 'CUDA 12.6' },
-  { value: 'none', labelJa: 'ツールキットを入れない（ドライバのみ）', labelEn: 'Driver only' },
-] as const
+export const CUDA_TOOLKIT_CHOICES: readonly Choice[] = [
+  { value: 'latest', label: 'gpu.toolkitLatest' },
+  { value: 'cuda-toolkit-13-3', label: 'gpu.toolkitCuda133' },
+  { value: 'cuda-toolkit-13-2', label: 'gpu.toolkitCuda132' },
+  { value: 'cuda-toolkit-13-1', label: 'gpu.toolkitCuda131' },
+  { value: 'cuda-toolkit-13-0', label: 'gpu.toolkitCuda130' },
+  { value: 'cuda-toolkit-12-9', label: 'gpu.toolkitCuda129' },
+  { value: 'cuda-toolkit-12-8', label: 'gpu.toolkitCuda128' },
+  { value: 'cuda-toolkit-12-6', label: 'gpu.toolkitCuda126' },
+  { value: 'none', label: 'gpu.toolkitNone' },
+]
 
 /** CUDA のインストールに必要な apt パッケージ名を組み立てる。 */
 export function cudaPackages(gpu: GpuConfig): string[] {

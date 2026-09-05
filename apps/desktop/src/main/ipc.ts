@@ -161,8 +161,7 @@ async function generate(profile: AutoinstallProfile): Promise<GeneratedConfig> {
         {
           severity: 'error' as const,
           field: 'runtimeValues.presets',
-          messageJa: `起動メニューが 1 セクタ (2048 バイト) に収まりません（あと ${-grubFreeBytes} バイト超過）。ホストの件数を減らすか、メニュー名を短くしてください。`,
-          messageEn: `The boot menu does not fit in one sector (2048 bytes); it is ${-grubFreeBytes} bytes too large. Remove hosts or shorten the menu names.`,
+          text: localized('validate.grubMenuTooLarge', { bytes: -grubFreeBytes }),
         },
       ]
     : validation.issues

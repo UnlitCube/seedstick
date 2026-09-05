@@ -36,6 +36,7 @@ import {
   collectFirstBootCommands,
   collectLateCommands,
   createDefaultProfile,
+  formatLocalized,
   generateUserData,
   generateMetaData,
   recognizeIso,
@@ -86,7 +87,10 @@ async function checkRejection(path: string): Promise<void> {
   console.log(`\n[拒否されるべき] ${basename(path)}`)
   const dev = await FileBlockDevice.open(path, 'r')
   try {
-    const inspection = await inspectIso(dev).catch((err: unknown) => err)
+    // e2e-matrix.mts と同じ理由で Error に正規化する（unknown のままだと絞り込めない）。
+    const inspection = await inspectIso(dev).catch((err: unknown) =>
+      err instanceof Error ? err : new Error(String(err)),
+    )
     if (inspection instanceof IsoValidationError) {
       check('分かるエラーで拒否される', true)
       console.log(`       理由: ${inspection.reason} — ${inspection.message}`)
@@ -204,7 +208,11 @@ async function checkFullWrite(path: string): Promise<void> {
       },
     }
     const validation = validateProfile(profile)
-    check('生成した設定が検証を通る', validation.ok, validation.issues.map((i) => i.messageJa).join(' / '))
+    check(
+      '生成した設定が検証を通る',
+      validation.ok,
+      validation.issues.map((i) => formatLocalized('ja', i.text)).join(' / '),
+    )
     const userData = generateUserData(profile, { comments: 'ja' })
     const metaData = generateMetaData('autoinstall-smoke')
     check('user-data が #cloud-config で始まる', userData.startsWith('#cloud-config\n'))

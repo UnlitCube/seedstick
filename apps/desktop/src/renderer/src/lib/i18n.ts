@@ -93,8 +93,9 @@ export function useTx(): (key: MsgKey, nodes: Readonly<Record<string, React.Reac
   }
 }
 
-/** プリセット等の「ja/en 両方持つオブジェクト」から現在の言語を選ぶ。 */
-export function useLocalized(): <T>(pair: { ja: T; en: T }) => T {
-  const locale = useStore((s) => s.locale)
-  return <T,>(pair: { ja: T; en: T }): T => (locale === 'ja' ? pair.ja : pair.en)
-}
+// ここには以前 `useLocalized()`（`{ja, en}` の対から現在の言語を選ぶフック）があった。
+// 選択肢のラベルが `labelJa` / `labelEn` を直接持っていた頃の道具で、いまは
+// `presets.ts` / `provisioning.ts` / `advanced.ts` の選択肢が辞書のキー（`MsgKey`）を
+// 持ち、`t(c.label)` で引く。**死んだ機構を残すと次の人がまたそれを使う**ので消した。
+// 「ja / en を両方持つオブジェクト」を新たに作りたくなったら、それは i18n の機構を
+// 2 つに戻す変更なので、まず `ja.ts` / `en.ts` にキーを足せないかを考えること。

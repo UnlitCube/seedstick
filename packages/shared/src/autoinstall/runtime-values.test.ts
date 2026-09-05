@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { parse, stringify } from 'yaml'
 import { createDefaultProfile } from './defaults.js'
+import { formatLocalized } from '../i18n/index.js'
 import { buildAutoinstallObject, collectEarlyCommands, generateUserData } from './generate.js'
 import {
   KERNEL_ARG,
@@ -514,7 +515,7 @@ describe('検証', () => {
         }),
       })),
     )
-    expect(r.ok, r.issues.map((i) => i.messageJa).join(' / ')).toBe(true)
+    expect(r.ok, r.issues.map((i) => formatLocalized('ja', i.text)).join(' / ')).toBe(true)
   })
 })
 

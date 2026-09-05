@@ -33,6 +33,10 @@ await d.select('main select', 'serial', 0)
 await d.wait(500)
 await d.fillByPlaceholder('CT500MX*', 'FALLBACKSERIAL01')
 await d.wait(300)
+// swap は「詳しい設定」（<Disclosure>）の中で、**既定では閉じている**。
+// 閉じている間は中身が DOM に無いので、開かずに触ると必ず落ちる。
+await d.openDisclosure()
+await d.wait(300)
 await d.select('main select', 'size', 1)
 await d.wait(400)
 await d.fillByPlaceholder('4G', '4G')
@@ -79,7 +83,9 @@ if (free) console.log('grub.cfg 残り:', free[1], 'bytes')
 
 // ------------------------------------------------------------- 8. 上級者向け
 await step('インストール後')
-await d.click('main button', '上級者向け')
+// 「上級者向け」はタブではなく折りたたみになった。文言でボタンを探すと
+// 訳文を変えた瞬間に壊れるうえ、既に開いていると**閉じてしまう**ので目印で開く。
+await d.openDisclosure()
 await d.wait(500)
 await d.select('main select', 'webhook', 0)
 await d.wait(400)

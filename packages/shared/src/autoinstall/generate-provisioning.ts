@@ -165,6 +165,55 @@ function parentDir(p: string): string {
   return i <= 0 ? '/' : p.slice(0, i)
 }
 
+/** 展開 / 配置で実際に適用される所有者。何も変えないなら null。 */
+export interface DeploymentOwnership {
+  /** 空なら所有者は root のまま（`chgrp` だけを出す） */
+  readonly owner: string
+  readonly group: string
+  /** 中身（展開されたファイル）まで変えるか（`chown -R`） */
+  readonly recursive: boolean
+}
+
+/**
+ * `owner` / `group` / `chownRecursive` から「実際に何が起きるか」を決める。
+ *
+ * **表示と出力を 1 か所から作るための関数。** GUI は展開の一覧と編集画面で
+ * owner / group を常に出しているのに、以前はアーカイブの `chownRecursive` が
+ * false だと `chown` を 1 つも出さず、設定が完全に死んでいた
+ * （「設定したのに効かない」。しかも検証は `chown` が出る前提で
+ * 「所有者が実在しない」と警告していたので、警告のほうも嘘になっていた）。
+ *
+ * いまは **`chownRecursive` は「中身まで」の意味**に統一してある:
+ *   - off … 展開先ディレクトリそのものを `owner:group` にする
+ *           （中身はアーカイブが持っている所有者のまま）
+ *   - on  … `-R` で中身も含めて変える
+ * `kind: 'file'` は 1 ファイルなので再帰の余地が無く、常に非再帰。
+ *
+ * renderer はこの関数の戻り値を要約に出す。分岐を書き写すと必ず食い違うので、
+ * **表示側で条件を再実装しないこと。**
+ */
+export function deploymentOwnership(d: Deployment): DeploymentOwnership | null {
+  // 手で編集された JSON では文字列とは限らない（落とし穴 23）。
+  const owner = typeof d.owner === 'string' ? d.owner : ''
+  const group = typeof d.group === 'string' ? d.group : ''
+  const recursive = d.kind === 'archive' && d.chownRecursive === true
+  if (owner && owner !== 'root') return { owner, group: group || owner, recursive }
+  // 所有者は root のままでグループだけ変えたい設定も成立する
+  if (group && group !== 'root') return { owner: '', group, recursive }
+  return null
+}
+
+/**
+ * 所有者を変えるコマンド。パスは自由入力（`startsWith('/')` しか検証していない）なので
+ * 必ずクォートする。owner / group は検証が `^[a-z_][a-z0-9_-]{0,31}$` に限っている。
+ */
+function chownCommand(o: DeploymentOwnership, targetPath: string): string {
+  const r = o.recursive ? ' -R' : ''
+  return o.owner
+    ? `chown${r} ${o.owner}:${o.group} ${shellQuote(targetPath)}`
+    : `chgrp${r} ${o.group} ${shellQuote(targetPath)}`
+}
+
 /** USB 同梱のペイロードを新システムへ展開する late-commands。 */
 export function deploymentCommands(d: Deployment): string[] {
   if (d.source.kind === 'url') return [] // URL 取得は初回起動時に行う
@@ -178,16 +227,12 @@ export function deploymentCommands(d: Deployment): string[] {
       `cp ${shellQuote(seedFile)} ${shellQuote(dest)}`,
       `chmod ${d.mode} ${shellQuote(dest)}`,
     )
-    // targetPath は `startsWith('/')` しか検証していない自由入力なので必ずクォートする。
-    // ここだけ 3 巡目のクォート修正から漏れており、`/opt/my app` のような普通のパスでも
-    // late-command が失敗し、`;` や `$( )` では root の任意コマンド実行になっていた。
-    if (d.owner && d.owner !== 'root') {
-      cmds.push(inTarget(`chown ${d.owner}:${d.group || d.owner} ${shellQuote(d.targetPath)}`))
-    } else if (d.group && d.group !== 'root') {
-      // URL 経路（deploymentFirstBootCommands）と揃える。所有者は root のまま
-      // グループだけ変えたい設定を、USB 同梱の経路だけ黙って捨てていた。
-      cmds.push(inTarget(`chgrp ${d.group} ${shellQuote(d.targetPath)}`))
-    }
+    // targetPath は `startsWith('/')` しか検証していない自由入力なので必ずクォートする
+    // （`chownCommand` の中でクォートしている）。ここは 3 巡目のクォート修正から漏れており、
+    // `/opt/my app` のような普通のパスでも late-command が失敗し、
+    // `;` や `$( )` では root の任意コマンド実行になっていた。
+    const own = deploymentOwnership(d)
+    if (own) cmds.push(inTarget(chownCommand(own, d.targetPath)))
     return cmds
   }
 
@@ -201,14 +246,9 @@ export function deploymentCommands(d: Deployment): string[] {
     inTargetSh(extractCommand(d, `/var/tmp/autoinstall-${d.name}`, d.targetPath)),
     `rm -f ${shellQuote(staged)}`,
   )
-  if (d.chownRecursive) {
-    if (d.owner && d.owner !== 'root') {
-      cmds.push(inTarget(`chown -R ${d.owner}:${d.group || d.owner} ${shellQuote(d.targetPath)}`))
-    } else if (d.group && d.group !== 'root') {
-      // 所有者は root のままでグループだけ変えたい設定も成立する
-      cmds.push(inTarget(`chgrp -R ${d.group} ${shellQuote(d.targetPath)}`))
-    }
-  }
+  // `chownRecursive` が false でも展開先そのものは owner:group にする（`deploymentOwnership`）。
+  const own = deploymentOwnership(d)
+  if (own) cmds.push(inTarget(chownCommand(own, d.targetPath)))
   if (d.postCommand.trim()) {
     cmds.push(inTargetSh(`cd ${shellQuote(d.targetPath)} && ${d.postCommand.trim()}`))
   }
@@ -241,25 +281,18 @@ export function deploymentFirstBootCommands(d: Deployment): string[] {
       `mv ${shellQuote(tmp)} ${shellQuote(d.targetPath)}`,
       `chmod ${d.mode} ${shellQuote(d.targetPath)}`,
     )
-    if (d.owner && d.owner !== 'root') {
-      steps.push(`chown ${d.owner}:${d.group || d.owner} ${shellQuote(d.targetPath)}`)
-    } else if (d.group && d.group !== 'root') {
-      // 所有者は root のままでグループだけ変えたい、という設定も成立する
-      steps.push(`chgrp ${d.group} ${shellQuote(d.targetPath)}`)
-    }
+    const own = deploymentOwnership(d)
+    if (own) steps.push(chownCommand(own, d.targetPath))
   } else {
     steps.push(
       `mkdir -p ${shellQuote(d.targetPath)}`,
       extractCommand(d, tmp, d.targetPath),
       `rm -f ${shellQuote(tmp)}`,
     )
-    if (d.chownRecursive) {
-      if (d.owner && d.owner !== 'root') {
-        steps.push(`chown -R ${d.owner}:${d.group || d.owner} ${shellQuote(d.targetPath)}`)
-      } else if (d.group && d.group !== 'root') {
-        steps.push(`chgrp -R ${d.group} ${shellQuote(d.targetPath)}`)
-      }
-    }
+    // late 経路（deploymentCommands）と同じ規則。`chownRecursive` が false でも
+    // 展開先そのものは owner:group にする。
+    const own = deploymentOwnership(d)
+    if (own) steps.push(chownCommand(own, d.targetPath))
     if (d.postCommand.trim()) {
       steps.push(`cd ${shellQuote(d.targetPath)}`, d.postCommand.trim())
     }

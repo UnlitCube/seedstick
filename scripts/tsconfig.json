@@ -1,0 +1,18 @@
+{
+  // scripts/ は長らく型検査の対象外だった。`ValidationIssue` から `messageJa` が
+  // 消えたのに 4 本が読み続け、検証が落ちたときの理由が undefined になっていたのを
+  // 機械が止められなかったのはこれが理由（落とし穴 74）。
+  // ここで拾うのは scripts/ の *.mts だけ。既存の 4 つの tsconfig には触らない。
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": ["node"],
+    // scripts は tsx で直接動かすので、`./lib/git-revision.mts` のように
+    // TS の拡張子のまま import している。noEmit なので許可してよい。
+    "allowImportingTsExtensions": true
+  },
+  // scripts/dev/ は .gitignore された使い捨ての調査用スクリプト置き場で、
+  // renderer のソース（DOM lib と react の型が要る）を直接 import する。
+  // ここに混ぜると renderer に node の型を持ち込むことになるので外す。
+  "include": ["*.mts", "lib/**/*.mts"]
+}

@@ -1,26 +1,33 @@
+import type { MsgKey } from '../i18n/index.js'
 import type { PostInstallPresetId, UbuntuSeries } from './model.js'
 
 // GUI に並べる選択肢と、インストール後処理のプリセット。
 // 「初心者が意味を理解して選べる」ことを最優先に、説明文（日本語・英語）を必ず持たせる。
+//
+// **表示名は辞書のキーで持つ。** 以前はここに `labelJa` / `labelEn` を直接書いていたが、
+// i18n の機構が 2 つあると、新しい文言を足すときに片方だけが更新される
+// （`ja.ts` に足しても、この配列は誰も見に来ない）。訳文は `ja.ts` / `en.ts` にあり、
+// ここが持つのは**どのキーを引くか**だけ。`value` は autoinstall に出る設定そのものなので
+// 表示名の運び方を変えても触らない。
 
 export interface Choice {
   readonly value: string
-  readonly labelJa: string
-  readonly labelEn: string
+  /** 画面に出す名前。`ja.ts` / `en.ts` の実在するキーであること（テストが全要素を検査する）。 */
+  readonly label: MsgKey
 }
 
 /** autoinstall の `locale` キーに入れる値の候補（UI 表示言語の LOCALES とは別物）。 */
 export const LOCALE_CHOICES: readonly Choice[] = [
-  { value: 'en_US.UTF-8', labelJa: '英語 (アメリカ)', labelEn: 'English (US)' },
-  { value: 'ja_JP.UTF-8', labelJa: '日本語', labelEn: 'Japanese' },
-  { value: 'en_GB.UTF-8', labelJa: '英語 (イギリス)', labelEn: 'English (UK)' },
-  { value: 'de_DE.UTF-8', labelJa: 'ドイツ語', labelEn: 'German' },
-  { value: 'fr_FR.UTF-8', labelJa: 'フランス語', labelEn: 'French' },
-  { value: 'es_ES.UTF-8', labelJa: 'スペイン語', labelEn: 'Spanish' },
-  { value: 'pt_BR.UTF-8', labelJa: 'ポルトガル語 (ブラジル)', labelEn: 'Portuguese (Brazil)' },
-  { value: 'zh_CN.UTF-8', labelJa: '中国語 (簡体)', labelEn: 'Chinese (Simplified)' },
-  { value: 'ko_KR.UTF-8', labelJa: '韓国語', labelEn: 'Korean' },
-  { value: 'C.UTF-8', labelJa: 'ロケールなし (C.UTF-8)', labelEn: 'No locale (C.UTF-8)' },
+  { value: 'en_US.UTF-8', label: 'basics.localeEnUs' },
+  { value: 'ja_JP.UTF-8', label: 'basics.localeJaJp' },
+  { value: 'en_GB.UTF-8', label: 'basics.localeEnGb' },
+  { value: 'de_DE.UTF-8', label: 'basics.localeDeDe' },
+  { value: 'fr_FR.UTF-8', label: 'basics.localeFrFr' },
+  { value: 'es_ES.UTF-8', label: 'basics.localeEsEs' },
+  { value: 'pt_BR.UTF-8', label: 'basics.localePtBr' },
+  { value: 'zh_CN.UTF-8', label: 'basics.localeZhCn' },
+  { value: 'ko_KR.UTF-8', label: 'basics.localeKoKr' },
+  { value: 'C.UTF-8', label: 'basics.localeC' },
 ]
 
 export interface KeyboardChoice extends Choice {
@@ -30,29 +37,29 @@ export interface KeyboardChoice extends Choice {
 
 /** keyboard.layout / variant の候補。日本語配列は variant を空にする。 */
 export const KEYBOARDS: readonly KeyboardChoice[] = [
-  { value: 'us:', layout: 'us', variant: '', labelJa: '英語 (US)', labelEn: 'English (US)' },
-  { value: 'jp:', layout: 'jp', variant: '', labelJa: '日本語 (JIS)', labelEn: 'Japanese (JIS)' },
-  { value: 'us:dvorak', layout: 'us', variant: 'dvorak', labelJa: '英語 (Dvorak)', labelEn: 'English (Dvorak)' },
-  { value: 'gb:', layout: 'gb', variant: '', labelJa: '英語 (UK)', labelEn: 'English (UK)' },
-  { value: 'de:', layout: 'de', variant: '', labelJa: 'ドイツ語', labelEn: 'German' },
-  { value: 'fr:', layout: 'fr', variant: '', labelJa: 'フランス語', labelEn: 'French' },
-  { value: 'es:', layout: 'es', variant: '', labelJa: 'スペイン語', labelEn: 'Spanish' },
-  { value: 'kr:kr104', layout: 'kr', variant: 'kr104', labelJa: '韓国語 (104キー)', labelEn: 'Korean (104-key)' },
-  { value: 'cn:', layout: 'cn', variant: '', labelJa: '中国語', labelEn: 'Chinese' },
+  { value: 'us:', layout: 'us', variant: '', label: 'basics.keyboardUs' },
+  { value: 'jp:', layout: 'jp', variant: '', label: 'basics.keyboardJp' },
+  { value: 'us:dvorak', layout: 'us', variant: 'dvorak', label: 'basics.keyboardUsDvorak' },
+  { value: 'gb:', layout: 'gb', variant: '', label: 'basics.keyboardGb' },
+  { value: 'de:', layout: 'de', variant: '', label: 'basics.keyboardDe' },
+  { value: 'fr:', layout: 'fr', variant: '', label: 'basics.keyboardFr' },
+  { value: 'es:', layout: 'es', variant: '', label: 'basics.keyboardEs' },
+  { value: 'kr:kr104', layout: 'kr', variant: 'kr104', label: 'basics.keyboardKr104' },
+  { value: 'cn:', layout: 'cn', variant: '', label: 'basics.keyboardCn' },
 ]
 
 /** timezone の候補。`geoip` は IP から自動判定。 */
 export const TIMEZONES: readonly Choice[] = [
-  { value: 'Asia/Tokyo', labelJa: '東京 (JST)', labelEn: 'Tokyo (JST)' },
-  { value: 'UTC', labelJa: 'UTC (協定世界時)', labelEn: 'UTC' },
-  { value: 'geoip', labelJa: 'IP アドレスから自動判定', labelEn: 'Detect from IP address' },
-  { value: 'America/Los_Angeles', labelJa: 'ロサンゼルス', labelEn: 'Los Angeles' },
-  { value: 'America/New_York', labelJa: 'ニューヨーク', labelEn: 'New York' },
-  { value: 'Europe/London', labelJa: 'ロンドン', labelEn: 'London' },
-  { value: 'Europe/Berlin', labelJa: 'ベルリン', labelEn: 'Berlin' },
-  { value: 'Asia/Singapore', labelJa: 'シンガポール', labelEn: 'Singapore' },
-  { value: 'Asia/Seoul', labelJa: 'ソウル', labelEn: 'Seoul' },
-  { value: 'Australia/Sydney', labelJa: 'シドニー', labelEn: 'Sydney' },
+  { value: 'Asia/Tokyo', label: 'basics.timezoneTokyo' },
+  { value: 'UTC', label: 'basics.timezoneUtc' },
+  { value: 'geoip', label: 'basics.timezoneGeoip' },
+  { value: 'America/Los_Angeles', label: 'basics.timezoneLosAngeles' },
+  { value: 'America/New_York', label: 'basics.timezoneNewYork' },
+  { value: 'Europe/London', label: 'basics.timezoneLondon' },
+  { value: 'Europe/Berlin', label: 'basics.timezoneBerlin' },
+  { value: 'Asia/Singapore', label: 'basics.timezoneSingapore' },
+  { value: 'Asia/Seoul', label: 'basics.timezoneSeoul' },
+  { value: 'Australia/Sydney', label: 'basics.timezoneSydney' },
 ]
 
 // ---------------------------------------------------------------------------
@@ -61,10 +68,10 @@ export const TIMEZONES: readonly Choice[] = [
 
 export interface PostInstallPreset {
   readonly id: PostInstallPresetId
-  readonly titleJa: string
-  readonly titleEn: string
-  readonly descriptionJa: string
-  readonly descriptionEn: string
+  /** 見出し。`ja.ts` / `en.ts` の実在するキーであること。 */
+  readonly title: MsgKey
+  /** 説明文。同上。 */
+  readonly description: MsgKey
   /** 危険度。`caution` は GUI で警告色にする。 */
   readonly risk: 'safe' | 'caution'
   /** インストール完了後・初回起動前に curtin の in-target で実行するコマンド */
@@ -90,12 +97,8 @@ export function shellQuote(value: string): string {
 export const POST_INSTALL_PRESETS: readonly PostInstallPreset[] = [
   {
     id: 'sudo-nopasswd',
-    titleJa: 'sudo をパスワード無しにする',
-    titleEn: 'Passwordless sudo',
-    descriptionJa:
-      '作成したユーザーが sudo をパスワード入力なしで使えるようにします。自動化には便利ですが、そのユーザーのログインを奪われると即座に root 権限を取られます。',
-    descriptionEn:
-      'Lets the created user run sudo without a password. Convenient for automation, but anyone who gets that login gets root immediately.',
+    title: 'postinstall.presetSudoNopasswdTitle',
+    description: 'postinstall.presetSudoNopasswdDesc',
     risk: 'caution',
     needsNetwork: false,
     lateCommands: (ctx) => [
@@ -105,12 +108,8 @@ export const POST_INSTALL_PRESETS: readonly PostInstallPreset[] = [
   },
   {
     id: 'ssh-harden',
-    titleJa: 'SSH のパスワード認証を無効にする',
-    titleEn: 'Disable SSH password authentication',
-    descriptionJa:
-      '公開鍵認証のみ許可し、root の SSH ログインも禁止します。事前に SSH 公開鍵を登録していないとログインできなくなるので注意してください。',
-    descriptionEn:
-      'Allows public-key authentication only and forbids root SSH login. You will be locked out unless an SSH key is registered.',
+    title: 'postinstall.presetSshHardenTitle',
+    description: 'postinstall.presetSshHardenDesc',
     risk: 'caution',
     needsNetwork: false,
     lateCommands: () => [
@@ -120,12 +119,8 @@ export const POST_INSTALL_PRESETS: readonly PostInstallPreset[] = [
   },
   {
     id: 'unattended-upgrades',
-    titleJa: 'セキュリティ更新を自動適用する',
-    titleEn: 'Automatic security updates',
-    descriptionJa:
-      'unattended-upgrades を有効にして、セキュリティ更新を自動で適用します。再起動が必要な更新でも自動再起動はしません。',
-    descriptionEn:
-      'Enables unattended-upgrades so security updates install automatically. It does not reboot on its own.',
+    title: 'postinstall.presetUnattendedUpgradesTitle',
+    description: 'postinstall.presetUnattendedUpgradesDesc',
     risk: 'safe',
     needsNetwork: true,
     packages: ['unattended-upgrades'],
@@ -135,12 +130,8 @@ export const POST_INSTALL_PRESETS: readonly PostInstallPreset[] = [
   },
   {
     id: 'qemu-guest-agent',
-    titleJa: '仮想マシン用ゲストエージェントを入れる',
-    titleEn: 'Install QEMU guest agent',
-    descriptionJa:
-      'KVM / Proxmox / QEMU の仮想マシンにインストールする場合に選びます。ホスト側からシャットダウンや IP 取得ができるようになります。',
-    descriptionEn:
-      'For KVM / Proxmox / QEMU guests. Lets the host shut the VM down cleanly and read its IP address.',
+    title: 'postinstall.presetQemuGuestAgentTitle',
+    description: 'postinstall.presetQemuGuestAgentDesc',
     risk: 'safe',
     needsNetwork: true,
     packages: ['qemu-guest-agent'],
@@ -148,12 +139,8 @@ export const POST_INSTALL_PRESETS: readonly PostInstallPreset[] = [
   },
   {
     id: 'docker-ce',
-    titleJa: 'Docker を入れる (Ubuntu 標準リポジトリ版)',
-    titleEn: 'Install Docker (Ubuntu repository build)',
-    descriptionJa:
-      'docker.io と docker-compose-v2 をインストールし、作成したユーザーを docker グループに入れます。docker グループは実質 root 権限と同等です。',
-    descriptionEn:
-      'Installs docker.io and docker-compose-v2 and adds the created user to the docker group. The docker group is effectively root.',
+    title: 'postinstall.presetDockerCeTitle',
+    description: 'postinstall.presetDockerCeDesc',
     risk: 'caution',
     needsNetwork: true,
     packages: ['docker.io', 'docker-compose-v2'],
@@ -164,10 +151,8 @@ export const POST_INSTALL_PRESETS: readonly PostInstallPreset[] = [
   },
   {
     id: 'chrony-ntp',
-    titleJa: '時刻同期 (chrony) を入れる',
-    titleEn: 'Install time sync (chrony)',
-    descriptionJa: 'chrony をインストールして時刻を自動同期します。ログの時刻ずれや証明書エラーを防ぎます。',
-    descriptionEn: 'Installs chrony for accurate clock sync, avoiding log skew and certificate errors.',
+    title: 'postinstall.presetChronyNtpTitle',
+    description: 'postinstall.presetChronyNtpDesc',
     risk: 'safe',
     needsNetwork: true,
     packages: ['chrony'],
@@ -175,11 +160,8 @@ export const POST_INSTALL_PRESETS: readonly PostInstallPreset[] = [
   },
   {
     id: 'ufw-allow-ssh',
-    titleJa: 'ファイアウォールを有効にして SSH だけ許可する',
-    titleEn: 'Enable firewall, allow SSH only',
-    descriptionJa:
-      'ufw を有効にし、22/tcp のみ許可します。他のポートで待ち受けるサービスを後から入れる場合は自分で開放が必要です。',
-    descriptionEn: 'Enables ufw and allows only 22/tcp. Other services will need their ports opened manually.',
+    title: 'postinstall.presetUfwAllowSshTitle',
+    description: 'postinstall.presetUfwAllowSshDesc',
     risk: 'caution',
     needsNetwork: false,
     packages: ['ufw'],
@@ -190,12 +172,8 @@ export const POST_INSTALL_PRESETS: readonly PostInstallPreset[] = [
   },
   {
     id: 'disable-cloud-init-net',
-    titleJa: 'インストール後は cloud-init にネットワークを触らせない',
-    titleEn: 'Stop cloud-init from managing the network',
-    descriptionJa:
-      '固定 IP を設定した物理サーバー向け。再起動のたびに cloud-init がネットワーク設定を書き戻すのを防ぎます。',
-    descriptionEn:
-      'For physical servers with a static IP. Prevents cloud-init from rewriting the network config on each boot.',
+    title: 'postinstall.presetDisableCloudInitNetTitle',
+    description: 'postinstall.presetDisableCloudInitNetDesc',
     risk: 'safe',
     needsNetwork: false,
     lateCommands: () => [
@@ -205,10 +183,8 @@ export const POST_INSTALL_PRESETS: readonly PostInstallPreset[] = [
   },
   {
     id: 'ja-locale',
-    titleJa: '日本語ロケールと日本語マニュアルを入れる',
-    titleEn: 'Install Japanese locale and manpages',
-    descriptionJa: 'language-pack-ja と manpages-ja をインストールします。サーバーの表示は英語のままです。',
-    descriptionEn: 'Installs language-pack-ja and manpages-ja. The server UI language itself stays English.',
+    title: 'postinstall.presetJaLocaleTitle',
+    description: 'postinstall.presetJaLocaleDesc',
     risk: 'safe',
     needsNetwork: true,
     packages: ['language-pack-ja', 'manpages-ja'],
@@ -238,24 +214,24 @@ export function getPreset(id: PostInstallPresetId): PostInstallPreset {
 // ---------------------------------------------------------------------------
 
 export const APT_MIRROR_PRESETS: readonly Choice[] = [
-  { value: 'http://jp.archive.ubuntu.com/ubuntu', labelJa: '日本 (jp.archive.ubuntu.com)', labelEn: 'Japan' },
-  { value: 'http://archive.ubuntu.com/ubuntu', labelJa: '既定 (archive.ubuntu.com)', labelEn: 'Default' },
-  { value: 'http://ftp.jaist.ac.jp/pub/Linux/ubuntu', labelJa: '日本 JAIST', labelEn: 'Japan (JAIST)' },
-  { value: 'http://ftp.riken.jp/Linux/ubuntu', labelJa: '日本 理研', labelEn: 'Japan (RIKEN)' },
-  { value: 'http://us.archive.ubuntu.com/ubuntu', labelJa: 'アメリカ', labelEn: 'United States' },
-  { value: 'http://de.archive.ubuntu.com/ubuntu', labelJa: 'ドイツ', labelEn: 'Germany' },
+  { value: 'http://jp.archive.ubuntu.com/ubuntu', label: 'software.aptMirrorPresetJp' },
+  { value: 'http://archive.ubuntu.com/ubuntu', label: 'software.aptMirrorPresetDefault' },
+  { value: 'http://ftp.jaist.ac.jp/pub/Linux/ubuntu', label: 'software.aptMirrorPresetJaist' },
+  { value: 'http://ftp.riken.jp/Linux/ubuntu', label: 'software.aptMirrorPresetRiken' },
+  { value: 'http://us.archive.ubuntu.com/ubuntu', label: 'software.aptMirrorPresetUs' },
+  { value: 'http://de.archive.ubuntu.com/ubuntu', label: 'software.aptMirrorPresetDe' },
 ]
 
 /** よく入れるパッケージ（チェックボックスで選ばせる）。 */
 export const COMMON_PACKAGES: readonly (Choice & { readonly needsNetwork: boolean })[] = [
-  { value: 'openssh-server', labelJa: 'SSH サーバー', labelEn: 'SSH server', needsNetwork: false },
-  { value: 'vim', labelJa: 'vim エディタ', labelEn: 'vim editor', needsNetwork: true },
-  { value: 'curl', labelJa: 'curl', labelEn: 'curl', needsNetwork: true },
-  { value: 'git', labelJa: 'git', labelEn: 'git', needsNetwork: true },
-  { value: 'htop', labelJa: 'htop (プロセス監視)', labelEn: 'htop', needsNetwork: true },
-  { value: 'tmux', labelJa: 'tmux', labelEn: 'tmux', needsNetwork: true },
-  { value: 'net-tools', labelJa: 'net-tools (ifconfig 等)', labelEn: 'net-tools', needsNetwork: true },
-  { value: 'build-essential', labelJa: 'build-essential (コンパイラ一式)', labelEn: 'build-essential', needsNetwork: true },
-  { value: 'nfs-common', labelJa: 'NFS クライアント', labelEn: 'NFS client', needsNetwork: true },
-  { value: 'lm-sensors', labelJa: 'lm-sensors (温度監視)', labelEn: 'lm-sensors', needsNetwork: true },
+  { value: 'openssh-server', label: 'software.packageOpensshServer', needsNetwork: false },
+  { value: 'vim', label: 'software.packageVim', needsNetwork: true },
+  { value: 'curl', label: 'software.packageCurl', needsNetwork: true },
+  { value: 'git', label: 'software.packageGit', needsNetwork: true },
+  { value: 'htop', label: 'software.packageHtop', needsNetwork: true },
+  { value: 'tmux', label: 'software.packageTmux', needsNetwork: true },
+  { value: 'net-tools', label: 'software.packageNetTools', needsNetwork: true },
+  { value: 'build-essential', label: 'software.packageBuildEssential', needsNetwork: true },
+  { value: 'nfs-common', label: 'software.packageNfsCommon', needsNetwork: true },
+  { value: 'lm-sensors', label: 'software.packageLmSensors', needsNetwork: true },
 ]

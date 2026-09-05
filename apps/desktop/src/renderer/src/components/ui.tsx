@@ -1,6 +1,6 @@
 import { createPortal } from 'react-dom'
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
-import { AlertTriangle, Check, ChevronDown, Info, X } from 'lucide-react'
+import { AlertTriangle, Check, ChevronDown, ChevronRight, Info, X } from 'lucide-react'
 import { useT } from '../lib/i18n.js'
 
 // 画面共通の部品。
@@ -98,6 +98,113 @@ export function Card({
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">{description}</p>
       )}
       <div className={title !== undefined || description !== undefined ? 'mt-4' : ''}>{children}</div>
+    </section>
+  )
+}
+
+/**
+ * 「詳しい設定」の折りたたみ。**インストーラが決して聞かないもの**をここへ入れる。
+ *
+ * `<details>` / `<summary>` は使わない。開閉の見た目を自分で制御したいのと、
+ * `<summary>` の中に `<Badge>` のような要素を置いたときの扱いがブラウザで違うため。
+ * `<button>` + `aria-expanded` + `aria-controls` で書くので、キーボードでも開閉できる
+ * （`div` + `onClick` にすると Tab で到達できず Enter でも開かない）。
+ *
+ * **閉じているときは中身を描画しない**（`hidden` で残さない）。実際に両方作って
+ * 試した結果は次のとおり:
+ *
+ *   - 描画しない … 閉じている間だけ `useListDraft` の下書きが消える。
+ *     再び開くと「正規化した値」が出る（`1.1.1.1,` と打ちかけていたら `1.1.1.1`）。
+ *     **確定した値は消えない**（`change()` の時点でプロファイルへ入っている）ので、
+ *     失われるのは正規化を通らない途中の入力だけ。
+ *   - `hidden` で残す … 下書きは保たれるが、閉じている画面の副作用（`useEffect`）と
+ *     再描画が profile を触るたびに走り続け、**壊れた値で落ちるのも閉じたまま**になる。
+ *     `postinstall` の「上級者向け」だけでコマンド 3 種・ファイル・ユーザー・展開・
+ *     サービスが全部その対象になる。
+ *
+ * 後者の「閉じた画面のせいでステップ全体が Error Boundary に落ちる」ほうが
+ * 実害が大きい（手で編集したプロファイルは実際に届く。落とし穴 23 / 60）ので、
+ * 描画しないほうを採った。`aria-controls` が指す領域そのものは常に置いておく
+ * （参照先が無い `aria-controls` は支援技術にとって壊れた参照になる）。
+ */
+export function Disclosure({
+  title,
+  description,
+  changedCount = 0,
+  defaultOpen,
+  children,
+}: {
+  title: ReactNode
+  description?: ReactNode
+  /** 既定から変わっている件数。0 なら Badge を出さない。 */
+  changedCount?: number
+  /**
+   * 既定で開くか。省略すると **`changedCount > 0` なら開く**。
+   * 保存済みプロファイルを開いたときに、設定したはずのものが隠れていると
+   * 「消えた」と誤解される。省略時の既定はその事故が起きない側に倒してある。
+   */
+  defaultOpen?: boolean
+  children: ReactNode
+}): React.JSX.Element {
+  const t = useT()
+  const regionId = useId()
+  const [open, setOpen] = useState(defaultOpen ?? changedCount > 0)
+
+  // 閉じたまま「既定から変わった」状態になったら開く。
+  // ステップを移動すると `App.tsx` の `key={step}` で作り直されるが、
+  // **同じステップに居るままプロファイルを開いた**ときは作り直されないので、
+  // ここが無いと変更が折りたたみの中に隠れる。
+  // 依存はプリミティブだけにする（インラインのコールバックを入れない。落とし穴 59）。
+  const hadChanges = useRef(changedCount > 0)
+  useEffect(() => {
+    const has = changedCount > 0
+    if (has && !hadChanges.current) setOpen(true)
+    hadChanges.current = has
+  }, [changedCount])
+
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
+      <h3>
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={regionId}
+          // GUI の E2E ヘルパ（`.e2e/drive.mjs` の `openDisclosure`）が
+          // **表示文言ではなくこの目印で**見出しを探す。訳文を変えるたびに
+          // E2E が壊れるのを避けるため。見た目と振る舞いには影響しない。
+          data-disclosure=""
+          onClick={() => setOpen(!open)}
+          className="flex w-full items-start gap-2.5 rounded-xl px-5 py-4 text-left transition hover:bg-slate-50 dark:hover:bg-slate-700/50"
+        >
+          <ChevronRight
+            className={`mt-0.5 size-4 shrink-0 text-slate-400 transition-transform ${open ? 'rotate-90' : ''}`}
+            aria-hidden
+          />
+          <span className="min-w-0 flex-1">
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                {title}
+              </span>
+              {changedCount > 0 && (
+                <Badge tone="info">{t('nav.changedCount', { n: changedCount })}</Badge>
+              )}
+            </span>
+            {description !== undefined && (
+              <span className="mt-1 block text-sm text-slate-600 dark:text-slate-400">
+                {description}
+              </span>
+            )}
+          </span>
+        </button>
+      </h3>
+      <div
+        id={regionId}
+        role="region"
+        hidden={!open}
+        className="border-t border-slate-200 px-5 py-4 dark:border-slate-700"
+      >
+        {open && children}
+      </div>
     </section>
   )
 }

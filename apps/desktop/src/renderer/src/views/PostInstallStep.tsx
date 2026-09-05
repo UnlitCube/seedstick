@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import {
+  createDefaultProfile,
   POST_INSTALL_PRESETS,
   SERIES_FEATURES,
+  type AutoinstallProfile,
   type PostInstallPresetId,
   type ProvisionFile,
   type ReportingTarget,
@@ -14,6 +16,7 @@ import {
   Button,
   Callout,
   Card,
+  Disclosure,
   Field,
   Modal,
   Select,
@@ -25,7 +28,12 @@ import {
 import { DeploymentsSection } from './sections/Deployments.js'
 import { ServicesSection } from './sections/Services.js'
 
-type Tab = 'presets' | 'deploy' | 'services' | 'files' | 'advanced'
+// 「上級者向け」はタブから外し、タブ群の**下**の折りたたみへ移した。
+// インストーラが決して聞かない設定（失敗時のコマンド・debconf・通知先・
+// Active Directory・生の YAML）は、タブの並びに置くと「見なければならないもの」に
+// 見える。折りたたむが、**開けば今までどおり全部触れる**
+// （無効化して「切れない」状態を作らない。落とし穴 61 / 66）。
+type Tab = 'presets' | 'deploy' | 'services' | 'files'
 
 /**
  * インストール後の設定。項目が多いのでタブで分ける。
@@ -40,13 +48,15 @@ export function PostInstallStep(): React.JSX.Element {
   const commandCount = useStore(
     (s) => s.profile.postInstall.lateCommands.length + s.profile.postInstall.firstBootCommands.length,
   )
+  // セレクタが返すのは**数**なので、折りたたみの件数が変わったときだけ再描画される
+  // （`s.profile` を購読すると 1 文字打つたびにこの画面全体が描き直される）。
+  const advancedChanges = useStore((s) => countAdvancedChanges(s.profile))
 
   const tabs: { id: Tab; label: string; count?: number }[] = [
     { id: 'presets', label: t('postinstall.tabPresets') },
     { id: 'deploy', label: t('postinstall.tabDeploy'), count: deployCount },
     { id: 'services', label: t('postinstall.tabServices'), count: serviceCount },
     { id: 'files', label: t('postinstall.tabFiles'), count: fileCount + commandCount },
-    { id: 'advanced', label: t('postinstall.tabAdvanced') },
   ]
 
   return (
@@ -72,15 +82,74 @@ export function PostInstallStep(): React.JSX.Element {
       {tab === 'deploy' && <DeploymentsSection />}
       {tab === 'services' && <ServicesSection />}
       {tab === 'files' && <FilesTab />}
-      {tab === 'advanced' && <AdvancedTab />}
+
+      <Disclosure
+        title={t('postinstall.tabAdvanced')}
+        description={t('postinstall.advancedHint')}
+        changedCount={advancedChanges}
+      >
+        <AdvancedTab />
+      </Disclosure>
     </div>
   )
+}
+
+/** 判別可能ユニオンや壊れた JSON を触るときに使う。`typeof null === 'object'`（落とし穴 30）。 */
+function asObject(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {}
+}
+
+/**
+ * 「上級者向け」の中で、**既定から変わっている設定の数**。
+ *
+ * 基準は `createDefaultProfile()` の値。既定値をここに書き写さない
+ * （書き写すと既定を変えたときに片方だけ古くなり、変わっているのに
+ * 「変更なし」と出る）。
+ *
+ * 判別可能ユニオン（`behavior.reporting`）は**まとめて比較しない**。
+ * 判別子だけを見る（落とし穴 22 / 29）。オブジェクトの深い比較は
+ * キーの順序や欠けたキーで簡単に嘘をつく。
+ *
+ * 手で編集された JSON は型が違う値も運んでくる（落とし穴 23）。
+ * そういう値は**既定とは違う**ので「変更あり」に倒す。
+ * 数えられないからと 0 にすると、変更が折りたたみの中に隠れたまま
+ * 気づけなくなる（落とし穴 50）。
+ */
+export function countAdvancedChanges(profile: AutoinstallProfile): number {
+  const base = createDefaultProfile(profile.series)
+  const raw = asObject(profile)
+  const post = asObject(raw['postInstall'])
+  const behavior = asObject(raw['behavior'])
+  const ad = asObject(raw['activeDirectory'])
+  const advanced = asObject(raw['advanced'])
+
+  // 「上級者向け」の中で操作できる設定を 1 つずつ。ここに並べたものと
+  // 折りたたみの中身が食い違わないよう、Card の順に並べる。
+  const changed: boolean[] = [
+    post['collectLogsOnError'] !== base.postInstall.collectLogsOnError,
+    !Array.isArray(post['errorCommands']) ||
+      post['errorCommands'].length !== base.postInstall.errorCommands.length,
+    post['debconfSelections'] !== base.postInstall.debconfSelections,
+    asObject(behavior['reporting'])['kind'] !== base.behavior.reporting.kind,
+    ad['enabled'] !== base.activeDirectory.enabled,
+    // 無効のときのドメイン名／管理者名は生成物に出ないので数えない。
+    // 数えると「開いても入力欄が無いのに 1 件変更」になる（手で編集された JSON で起きる）。
+    ad['enabled'] === true && ad['domainName'] !== base.activeDirectory.domainName,
+    ad['enabled'] === true && ad['adminName'] !== base.activeDirectory.adminName,
+    behavior['refreshInstaller'] !== base.behavior.refreshInstaller,
+    behavior['refreshInstallerChannel'] !== base.behavior.refreshInstallerChannel,
+    behavior['interactiveAll'] !== base.behavior.interactiveAll,
+    advanced['rawOverlayYaml'] !== base.advanced.rawOverlayYaml,
+    advanced['extraKernelArgs'] !== base.advanced.extraKernelArgs,
+  ]
+  return changed.filter(Boolean).length
 }
 
 function PresetsTab(): React.JSX.Element {
   const t = useT()
   const tx = useTx()
-  const locale = useStore((s) => s.locale)
   const presets = useStore((s) => s.profile.postInstall.presets)
   const aptFullUpgrade = useStore((s) => s.profile.postInstall.aptFullUpgrade)
   const update = useStore((s) => s.updateProfile)
@@ -112,11 +181,11 @@ function PresetsTab(): React.JSX.Element {
               tone={preset.risk === 'caution' ? 'warning' : 'default'}
               label={
                 <span className="flex flex-wrap items-center gap-2">
-                  {locale === 'ja' ? preset.titleJa : preset.titleEn}
+                  {t(preset.title)}
                   {preset.needsNetwork && <Badge tone="info">{t('postinstall.needsNetwork')}</Badge>}
                 </span>
               }
-              description={locale === 'ja' ? preset.descriptionJa : preset.descriptionEn}
+              description={t(preset.description)}
             />
           ))}
         </div>
@@ -479,7 +548,15 @@ function AdvancedTab(): React.JSX.Element {
           checked={profile.activeDirectory.enabled}
           tone="warning"
           onChange={(enabled) =>
-            update((p) => ({ ...p, activeDirectory: { ...p.activeDirectory, enabled } }))
+            // 無効に戻すときは値も消す（落とし穴 66。暗号化パスフレーズと同じ扱い）。
+            // 残すと入力欄は隠れているのに「1 件変更」が消えず、開いても
+            // 直す先が無い。保存される JSON にもドメイン名が残り続ける。
+            update((p) => ({
+              ...p,
+              activeDirectory: enabled
+                ? { ...p.activeDirectory, enabled }
+                : { ...p.activeDirectory, enabled, domainName: '', adminName: '' },
+            }))
           }
           label={t('adv.adTitle')}
           description={t('adv.adWarning')}

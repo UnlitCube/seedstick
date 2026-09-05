@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   createDefaultProfile,
+  formatLocalized,
   validateProfile,
   type AppSettings,
   type AutoinstallProfile,
@@ -95,13 +96,13 @@ describe('generateConfig が生成に失敗したとき', () => {
     expect(config.ok).toBe(false)
     expect(config.issues.length).toBeGreaterThan(0)
     for (const i of config.issues) {
+      // 指摘は辞書のキーで運ばれてくる。画面に出るのは訳したあとの文字列なので、
+      // 見るのもそちら（`text` を en で訳した結果）。
+      const en = formatLocalized('en', i.text)
+      expect(HIRAGANA_KATAKANA_KANJI.test(en), `en の総括に日本語が残っている: ${en}`).toBe(false)
       expect(
-        HIRAGANA_KATAKANA_KANJI.test(i.messageEn),
-        `messageEn に日本語が残っている: ${i.messageEn}`,
-      ).toBe(false)
-      expect(
-        FULLWIDTH_PUNCTUATION.test(i.messageEn),
-        `messageEn に全角の約物が残っている: ${i.messageEn}`,
+        FULLWIDTH_PUNCTUATION.test(en),
+        `en の総括に全角の約物が残っている: ${en}`,
       ).toBe(false)
     }
   })

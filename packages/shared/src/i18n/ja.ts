@@ -121,6 +121,40 @@ export const ja = {
   'basics.hostnameHint': 'ネットワーク上でこのサーバーを識別する名前です（例: web-01）',
   'basics.hostnameInvalid': '英数字とハイフンのみ、先頭と末尾は英数字にしてください',
 
+  // 選択肢のラベル（`presets.ts` の LOCALE_CHOICES / KEYBOARDS / TIMEZONES）。
+  // 以前は配列の要素が labelJa / labelEn を直接持っていた。i18n の機構が 2 つあると
+  // 片方だけ更新されるので、表示名は必ずここを通す。`value`（autoinstall に出る値）は
+  // 変えていない。
+  'basics.localeEnUs': '英語 (アメリカ)',
+  'basics.localeJaJp': '日本語',
+  'basics.localeEnGb': '英語 (イギリス)',
+  'basics.localeDeDe': 'ドイツ語',
+  'basics.localeFrFr': 'フランス語',
+  'basics.localeEsEs': 'スペイン語',
+  'basics.localePtBr': 'ポルトガル語 (ブラジル)',
+  'basics.localeZhCn': '中国語 (簡体)',
+  'basics.localeKoKr': '韓国語',
+  'basics.localeC': 'ロケールなし (C.UTF-8)',
+  'basics.keyboardUs': '英語 (US)',
+  'basics.keyboardJp': '日本語 (JIS)',
+  'basics.keyboardUsDvorak': '英語 (Dvorak)',
+  'basics.keyboardGb': '英語 (UK)',
+  'basics.keyboardDe': 'ドイツ語',
+  'basics.keyboardFr': 'フランス語',
+  'basics.keyboardEs': 'スペイン語',
+  'basics.keyboardKr104': '韓国語 (104キー)',
+  'basics.keyboardCn': '中国語',
+  'basics.timezoneTokyo': '東京 (JST)',
+  'basics.timezoneUtc': 'UTC (協定世界時)',
+  'basics.timezoneGeoip': 'IP アドレスから自動判定',
+  'basics.timezoneLosAngeles': 'ロサンゼルス',
+  'basics.timezoneNewYork': 'ニューヨーク',
+  'basics.timezoneLondon': 'ロンドン',
+  'basics.timezoneBerlin': 'ベルリン',
+  'basics.timezoneSingapore': 'シンガポール',
+  'basics.timezoneSeoul': 'ソウル',
+  'basics.timezoneSydney': 'シドニー',
+
   // --- ユーザー ---
   'user.title': '最初のユーザーを作ります',
   'user.description': 'このユーザーが管理者 (sudo が使える) になります。',
@@ -147,6 +181,8 @@ export const ja = {
   'user.sudoNoPasswordHint':
     '自動化には便利ですが、このユーザーのログインを奪われると即座に root 権限を取られます。',
   'user.usernameInvalid': '使えない文字が含まれています',
+  'user.detailsTitle': '詳しい設定',
+  'user.detailsDescription': 'インストーラは聞きません。既定のままで問題ありません。',
 
   // --- SSH ---
   'ssh.title': 'SSH の設定',
@@ -203,6 +239,10 @@ export const ja = {
   'network.staticCloudInitNote':
     '固定 IP を設定した物理サーバーでは、「インストール後は cloud-init にネットワークを触らせない」（インストール後の設定）も合わせて有効にすることをおすすめします。再起動のたびに設定が書き戻されるのを防げます。',
   'network.staticTitle': '固定 IP の設定',
+  'network.detailsTitle': '詳しい設定',
+  'network.detailsDescription': 'インストーラは聞きません。既定のままで問題ありません。',
+  'network.detailsInactive':
+    '上で「netplan の YAML を直接書く」を選ぶと、ここに編集欄が出ます。',
 
   // --- ストレージ ---
   'storage.title': 'ディスクの使い方',
@@ -232,7 +272,12 @@ export const ja = {
   'storage.partitionTable': 'パーティション形式',
   'storage.ptableDefault': '自動 (GPT)',
   'storage.ptableMsdos': 'MBR（古い BIOS 機向け）',
-  'storage.detailsTitle': '詳細',
+  'storage.detailsTitle': '詳しい設定',
+  'storage.detailsDescription': 'インストーラは聞きません。既定のままで問題ありません。',
+  'storage.detailsRawActive':
+    'curtin の設定を直接書いている間は、スワップ・暗号化・復旧用パーティションの設定は使われません。下の YAML がそのまま autoinstall の storage になります。',
+  'storage.detailsRawInactive':
+    '上で「curtin の設定を直接書く」を選ぶと、ここに編集欄が出ます。',
   'storage.encryptHint':
     '盗難時にデータを守れますが、起動のたびにパスフレーズの入力が必要になります。',
   'storage.layoutDirectHint': 'パーティションを直接切ります。構成が単純で分かりやすくなります。',
@@ -303,6 +348,29 @@ export const ja = {
   'software.ubuntuProTokenLabel': 'トークン',
   'software.updatesDriversTitle': '更新とドライバ',
 
+  // 「詳しい設定」の折りたたみ（インストーラが決して聞かない項目）。
+  'software.advancedTitle': '詳しい設定',
+  'software.advancedHint':
+    'インストーラが聞かない項目です。カーネルの種類・追加リポジトリ・Ubuntu Pro のトークン。',
+
+  // 選択肢のラベル（`presets.ts` の APT_MIRROR_PRESETS / COMMON_PACKAGES）
+  'software.aptMirrorPresetJp': '日本 (jp.archive.ubuntu.com)',
+  'software.aptMirrorPresetDefault': '既定 (archive.ubuntu.com)',
+  'software.aptMirrorPresetJaist': '日本 JAIST',
+  'software.aptMirrorPresetRiken': '日本 理研',
+  'software.aptMirrorPresetUs': 'アメリカ',
+  'software.aptMirrorPresetDe': 'ドイツ',
+  'software.packageOpensshServer': 'SSH サーバー',
+  'software.packageVim': 'vim エディタ',
+  'software.packageCurl': 'curl',
+  'software.packageGit': 'git',
+  'software.packageHtop': 'htop (プロセス監視)',
+  'software.packageTmux': 'tmux',
+  'software.packageNetTools': 'net-tools (ifconfig 等)',
+  'software.packageBuildEssential': 'build-essential (コンパイラ一式)',
+  'software.packageNfsCommon': 'NFS クライアント',
+  'software.packageLmSensors': 'lm-sensors (温度監視)',
+
   // --- インストール後 ---
   'postinstall.title': 'インストール後にすること',
   'postinstall.presets': 'よく使う設定',
@@ -350,6 +418,36 @@ export const ja = {
   'postinstall.refreshChannelHint': '空なら subiquity の既定チャンネルを使います。',
   'postinstall.reportingIgnored': '対話セクションがあると subiquity は reporting を無視します。',
   'postinstall.systemUpdate': 'システムの更新',
+
+  // インストール後処理プリセットの見出しと説明（`presets.ts` の POST_INSTALL_PRESETS）。
+  // キーの末尾は `PostInstallPresetId` に対応する（`sudo-nopasswd` → `SudoNopasswd`）。
+  'postinstall.presetSudoNopasswdTitle': 'sudo をパスワード無しにする',
+  'postinstall.presetSudoNopasswdDesc':
+    '作成したユーザーが sudo をパスワード入力なしで使えるようにします。自動化には便利ですが、そのユーザーのログインを奪われると即座に root 権限を取られます。',
+  'postinstall.presetSshHardenTitle': 'SSH のパスワード認証を無効にする',
+  'postinstall.presetSshHardenDesc':
+    '公開鍵認証のみ許可し、root の SSH ログインも禁止します。事前に SSH 公開鍵を登録していないとログインできなくなるので注意してください。',
+  'postinstall.presetUnattendedUpgradesTitle': 'セキュリティ更新を自動適用する',
+  'postinstall.presetUnattendedUpgradesDesc':
+    'unattended-upgrades を有効にして、セキュリティ更新を自動で適用します。再起動が必要な更新でも自動再起動はしません。',
+  'postinstall.presetQemuGuestAgentTitle': '仮想マシン用ゲストエージェントを入れる',
+  'postinstall.presetQemuGuestAgentDesc':
+    'KVM / Proxmox / QEMU の仮想マシンにインストールする場合に選びます。ホスト側からシャットダウンや IP 取得ができるようになります。',
+  'postinstall.presetDockerCeTitle': 'Docker を入れる (Ubuntu 標準リポジトリ版)',
+  'postinstall.presetDockerCeDesc':
+    'docker.io と docker-compose-v2 をインストールし、作成したユーザーを docker グループに入れます。docker グループは実質 root 権限と同等です。',
+  'postinstall.presetChronyNtpTitle': '時刻同期 (chrony) を入れる',
+  'postinstall.presetChronyNtpDesc':
+    'chrony をインストールして時刻を自動同期します。ログの時刻ずれや証明書エラーを防ぎます。',
+  'postinstall.presetUfwAllowSshTitle': 'ファイアウォールを有効にして SSH だけ許可する',
+  'postinstall.presetUfwAllowSshDesc':
+    'ufw を有効にし、22/tcp のみ許可します。他のポートで待ち受けるサービスを後から入れる場合は自分で開放が必要です。',
+  'postinstall.presetDisableCloudInitNetTitle': 'インストール後は cloud-init にネットワークを触らせない',
+  'postinstall.presetDisableCloudInitNetDesc':
+    '固定 IP を設定した物理サーバー向け。再起動のたびに cloud-init がネットワーク設定を書き戻すのを防ぎます。',
+  'postinstall.presetJaLocaleTitle': '日本語ロケールと日本語マニュアルを入れる',
+  'postinstall.presetJaLocaleDesc':
+    'language-pack-ja と manpages-ja をインストールします。サーバーの表示は英語のままです。',
 
   // --- 確認 ---
   'review.title': '設定の確認',
@@ -667,6 +765,11 @@ export const ja = {
   'users.passwordAlreadySet': 'パスワードは設定済みです。変更する場合だけ入力してください。',
   'users.sshKeyCount': 'SSH 鍵 {n}',
 
+  // 選択肢のラベル（`provisioning.ts` の SHELL_CHOICES）
+  'users.shellBash': 'bash（標準）',
+  'users.shellSh': 'sh',
+  'users.shellNologin': 'ログイン不可（サービス用）',
+
   // --- アプリの展開 ---
   'deploy.title': 'アプリ / ファイルの展開',
   'deploy.description':
@@ -692,6 +795,8 @@ export const ja = {
   'deploy.owner': '所有者',
   'deploy.group': 'グループ',
   'deploy.chownRecursive': '展開先を丸ごとこの所有者にする',
+  'deploy.chownRecursiveHint':
+    'オフでも、展開先ディレクトリそのものは上の所有者になります（中身はアーカイブが持っている所有者のまま）。オンにすると展開されたファイルもすべて変更します。',
   'deploy.postCommand': '展開後に実行するコマンド',
   'deploy.postCommandHint': '展開先ディレクトリで実行されます。例: npm ci --omit=dev',
   'deploy.content': '内容',
@@ -775,6 +880,18 @@ export const ja = {
   'gpu.unsupportedSeries': 'Ubuntu {series} には CUDA リポジトリがありません',
   'gpu.willInstall': 'インストールされるもの',
 
+  // 選択肢のラベル（`provisioning.ts` の CUDA_TOOLKIT_CHOICES）。
+  // バージョン番号は製品名なので両言語で同じ。
+  'gpu.toolkitLatest': '最新版 (cuda-toolkit)',
+  'gpu.toolkitCuda133': 'CUDA 13.3',
+  'gpu.toolkitCuda132': 'CUDA 13.2',
+  'gpu.toolkitCuda131': 'CUDA 13.1',
+  'gpu.toolkitCuda130': 'CUDA 13.0',
+  'gpu.toolkitCuda129': 'CUDA 12.9',
+  'gpu.toolkitCuda128': 'CUDA 12.8',
+  'gpu.toolkitCuda126': 'CUDA 12.6',
+  'gpu.toolkitNone': 'ツールキットを入れない（ドライバのみ）',
+
   // --- その他 ---
   'postinstall.aptFullUpgrade': '全パッケージを最新にする (apt full-upgrade)',
   'postinstall.aptFullUpgradeHint':
@@ -784,8 +901,19 @@ export const ja = {
   'postinstall.tabServices': 'サービス',
   'postinstall.tabFiles': 'ファイルとコマンド',
   'postinstall.tabAdvanced': '上級者向け',
+  'postinstall.advancedHint':
+    'インストーラが聞かない設定です。ふつうは開かなくてかまいません。',
 
   // --- 実行時に決める値（ホストごとに違う項目） ---
+  //
+  // このステップだけは「インストーラを一度でも通したことがある人」に前提が無い。
+  // 起動メニューで値を差し替える仕組みは Ubuntu のインストーラには存在しないので、
+  // 用語（kernel-arg / autoinstall.yaml）ではなく**目的**から書き起こす。
+  'runtime.purposeTitle': 'このステップは何のためにあるか',
+  'runtime.purposeBody':
+    'USB を 1 本だけ作って何台にもインストールすると、ホスト名も IP アドレスも全台で同じになります。このステップは、その「機械ごとに違う値」だけを、USB を作り直さずに機械ごとに決められるようにするものです。台数ぶんの USB も、台数ぶんの設定ファイルも要りません。',
+  'runtime.purposeSkip':
+    '1 台だけインストールするなら、ここは既定（すべてこの設定の値を使う）のままで構いません。',
   'runtime.title': '実行時に決める値',
   'runtime.intro':
     'IP アドレスやホスト名のように「同じ USB を挿しても機械ごとに変えたい」項目は、ここで決め方を選べます。',
@@ -895,6 +1023,16 @@ export const ja = {
   'adv.identityGroups': '管理ユーザーを追加のグループに入れる',
   'adv.identityGroupsUnsupported': 'このバージョンでは指定できません (26.04 以降)',
 
+  // 選択肢のラベル（`advanced.ts` の KERNEL_FLAVORS / APT_FALLBACK_CHOICES）。
+  // `adv.kernelFlavor` / `adv.aptFallback` は入力欄の見出しで、こちらは選択肢の名前。
+  'adv.kernelFlavorGeneric': '標準 (generic)',
+  'adv.kernelFlavorHwe': 'HWE（新しいハードウェア向け）',
+  'adv.kernelFlavorGenericHwe': 'generic-hwe',
+  'adv.kernelFlavorLowlatency': '低レイテンシ (lowlatency)',
+  'adv.aptFallbackChoiceAbort': 'インストールを中止する（既定）',
+  'adv.aptFallbackChoiceOffline': 'ネットワーク無しで続行する',
+  'adv.aptFallbackChoiceContinue': '壊れたミラー設定のまま続行する',
+
   // --- エラー境界 ---
   'boundary.body':
     '設定の内容が想定と違うため、画面の描画に失敗しました。手で編集したプロファイルや、別のバージョンで保存されたプロファイルを開くと起こることがあります。',
@@ -936,6 +1074,256 @@ export const ja = {
   'migrate.category.user': '追加ユーザー',
   'migrate.category.service': 'サービス',
   'migrate.category.deployment': 'アプリ展開',
+
+
+  // --- 設定の検証（`validate.ts` の指摘） ---
+  // ここは `ValidationIssue.text` が運ぶ。訳すのは renderer が描画するときだけ。
+  // 文の中に差し込む「項目名」は入れ子の LocalizedText にする
+  // （語順の違う言語でも成立させるため。ja と en で差し込み名の集合が揃う）。
+  'validate.fieldOwner': '所有者',
+  'validate.fieldGroup': 'グループ',
+  'validate.hostFieldHostname': 'ホスト名',
+  'validate.hostFieldIpv4': 'IP アドレス',
+  'validate.hostFieldGateway': 'ゲートウェイ',
+  'validate.hostFieldNameservers': 'DNS',
+  'validate.hostFieldDisk': 'ディスク',
+
+  'validate.unknownPreset': '知らない設定 "{id}" が含まれています。新しい版で作られたプロファイルかもしれません。',
+  'validate.hostnameEmpty': 'ホスト名を入力してください。',
+  'validate.hostnameInvalid': 'ホスト名は英数字とハイフンのみ、先頭と末尾は英数字、63 文字以内です。',
+  'validate.localeEmpty': 'ロケールを選んでください。',
+  'validate.keyboardEmpty': 'キーボード配列を選んでください。',
+  'validate.usernameEmpty': 'ユーザー名を入力してください。',
+  'validate.usernameInvalid': 'ユーザー名は小文字英字かアンダースコアで始まり、小文字英数字・ハイフン・アンダースコアのみ、32 文字以内です。',
+  'validate.usernameReserved': '"{username}" はシステムが予約している名前です。別の名前にしてください。',
+  'validate.usernameSameAsHostname': 'ユーザー名とホスト名が同じです。インストーラが拒否する場合があります。',
+  'validate.passwordMissing': 'パスワードを設定してください（ハッシュ化して保存されます）。',
+  'validate.passwordPlainText': 'パスワードが平文のままです。crypt(3) ハッシュ（$6$ で始まる文字列）が必要です。',
+  'validate.passwordHashNotSha512': 'パスワードハッシュが SHA-512 crypt の標準形式ではありません。ログインできるか確認してください。',
+  'validate.sshKeyMalformed': '{n} 番目の SSH 公開鍵の形式が正しくありません（"ssh-ed25519 AAAA..." のような 1 行）。',
+  'validate.sshKeysWithoutServer': 'SSH 公開鍵を登録していますが SSH サーバーをインストールしない設定です。リモートログインできません。',
+  'validate.sshHardenWithoutKeys': 'SSH のパスワード認証を無効にする設定ですが、公開鍵が 1 つも登録されていません。SSH でログインできなくなります。',
+  'validate.sshNoPasswordNoKey': 'SSH のパスワードログインを許可せず、公開鍵も登録されていません。SSH でログインできなくなります。',
+  'validate.networkAddressInvalid': 'IP アドレスは "192.168.1.10/24" のように、サブネットマスクの長さを付けて入力してください。',
+  'validate.networkGatewayInvalid': 'ゲートウェイの IP アドレスが不正です。',
+  'validate.networkGatewayMissing': 'デフォルトゲートウェイが未設定です。外部ネットワークに接続できません。',
+  'validate.networkNameserverInvalid': 'DNS サーバー #{n} の IP アドレスが不正です。',
+  'validate.networkNameserversMissing': 'DNS サーバーが未設定です。名前解決ができず apt が失敗します。',
+  'validate.networkYamlSyntax': 'ネットワーク YAML の構文エラー: {detail}',
+  'validate.storageYamlSyntax': 'ストレージ YAML の構文エラー: {detail}',
+  'validate.zfsEncryptionUnverified': 'ZFS レイアウトでの暗号化はインストーラのバージョンによって挙動が異なります。実機で確認してください。',
+  'validate.encryptionPassphraseTooShort': 'ディスク暗号化のパスフレーズが短すぎます（8 文字以上）。',
+  'validate.encryptionPassphrasePlainInYaml':
+    'ディスク暗号化のパスフレーズは autoinstall の YAML に平文で書かれます。USB の取り扱いに注意してください。',
+  'validate.encryptionRequiresLvm': 'ディスク暗号化は LVM レイアウトでのみ使えます（{mode} では無視されます）。',
+  'validate.diskMatchEmpty': 'ディスクの指定方法を選んだので、その値も入れてください（空だと一致するディスクがありません）。',
+  'validate.diskMatchAny':
+    'インストール先を「どのディスクでもよい」にしています。複数のディスクがある機器では、どれが消えるか分かりません。シリアル番号やパスで指定してください。',
+  'validate.diskMatchSizeBased': '複数のディスクがある機器では、シリアル番号やパスで指定する方が安全です。',
+  'validate.archiveFormatUnsupported': '展開 "{name}" のアーカイブ形式 "{format}" は対応していません。',
+  'validate.fileOwnerNotCreated':
+    'ファイル "{name}" の所有者 "{owner}" はこの設定では作成されません（既存のユーザーでなければ、インストールが最後の段階で失敗します）。',
+  'validate.deploymentOwnerNotCreated':
+    '展開 "{name}" の所有者 "{owner}" はこの設定では作成されません（既存のユーザーでなければ、インストールが最後の段階で失敗します）。',
+  'validate.resetPartitionUnsupported': 'Ubuntu {series} にはリセットパーティションがありません（設定は無視されます）。',
+  'validate.aptSourceNameInvalid': '追加リポジトリの名前 "{name}" が不正です（英数字と . _ - で書いてください）。',
+  'validate.aptSourceNameDuplicated': '追加リポジトリの名前 "{name}" が重複しています（後のものが前のものを消します）。',
+  'validate.aptFallbackUnsupported': 'Ubuntu {series} では「ミラーが使えないときの動作」を指定できません（無視されます）。',
+  'validate.cudaToolkitNameInvalid': 'CUDA ツールキット名 "{toolkit}" が apt のパッケージ名として不正です。',
+  'validate.fileOwnerInvalid': 'ファイル "{name}" の所有者 "{owner}" が不正です（ユーザー名、または user:group で書いてください）。',
+  'validate.deploymentOwnerFieldInvalid': '展開 "{name}" の{field} "{value}" が不正です。',
+  'validate.interfaceNameEmpty': 'ネットワークカードの名前が空です（netplan のキーになるので必須です）。',
+  'validate.interfaceNameInvalid': 'ネットワークカードの名前 "{name}" が不正です（英字で始まり、英数字と . _ - のみ）。',
+  'validate.macAddressInvalid': 'MAC アドレスは "aa:bb:cc:dd:ee:ff" の形式で入力してください。',
+  'validate.aptMirrorUriEmpty': 'ミラーの URL を入力してください（空だと既定のミラーが使われます）。',
+  'validate.overlayOverridesDangerousKeys':
+    '上書き YAML が {keys} を書き換えています。画面のディスク・ユーザー設定は無効になり、ここに書いた内容が使われます。',
+  'validate.packagesWithoutGateway': '追加パッケージ/snap を指定していますが、ゲートウェイが無いためインターネットに到達できません。',
+  'validate.ubuntuProTokenInvalid': 'Ubuntu Pro のトークン形式が正しくありません（C で始まる 24〜30 文字）。',
+  'validate.sourceKeyUnsupported':
+    'Ubuntu {series} の autoinstall には source キーがありません。最小構成の指定は無視されます。',
+  'validate.kernelCrashDumpsUnsupported': 'kernel-crash-dumps は Ubuntu {series} では未対応です。無視されます。',
+  'validate.fileTargetPathNotAbsolute': '追加ファイル #{n} の配置先は絶対パスにしてください。',
+  'validate.fileModeInvalid': '追加ファイル #{n} のパーミッションは 0644 のような 8 進数で指定してください。',
+  'validate.fileNameInvalid': '追加ファイル #{n} のファイル名に使えない文字があります。',
+  'validate.sudoNopasswdWarning': 'パスワード無し sudo を有効にしています。そのユーザーを奪われると即座に root 権限を取られます。',
+  'validate.additionalUserNameEmpty': '追加ユーザー #{n} の名前が空です。',
+  'validate.additionalUserNameInvalid': '追加ユーザー "{username}" の名前に使えない文字があります。',
+  'validate.additionalUserNameReserved': '"{username}" はシステムが予約している名前です。',
+  'validate.additionalUserNameDuplicated': 'ユーザー名 "{username}" が重複しています。',
+  'validate.additionalUserPasswordPlainText': '追加ユーザー "{username}" のパスワードが平文のままです。',
+  'validate.additionalUserNoLogin': '"{username}" はパスワードも SSH 鍵も無いためログインできません（アカウントはロックされます）。',
+  'validate.additionalUserSshKeyMalformed': '"{username}" の {n} 番目の SSH 公開鍵の形式が正しくありません。',
+  'validate.additionalUserSudoNopasswd': '"{username}" はパスワード無しで sudo を使えます。',
+  'validate.deploymentTargetPathNotAbsolute': '展開 #{n} の配置先は絶対パスにしてください。',
+  'validate.deploymentNameInvalid': '展開 #{n} のファイル名に使えない文字があります。',
+  'validate.deploymentModeInvalid': '展開 #{n} のパーミッションは 0644 のような 8 進数で指定してください。',
+  'validate.deploymentUrlInvalid': '展開 #{n} の URL が正しくありません。',
+  'validate.deploymentSha256Missing': '展開 #{n} は URL から取得しますが SHA-256 が未設定です。改ざんを検出できません。',
+  'validate.deploymentSha256Invalid': '展開 #{n} の SHA-256 は 64 桁の 16 進数です。',
+  'validate.deploymentSourceFileMissing': '展開 #{n} の元ファイルが選ばれていません。',
+  'validate.serviceNameInvalid': 'サービス #{n} の名前が不正です（英数字と . _ - @ のみ、末尾に .service は付けません）。',
+  'validate.serviceNameDuplicated': 'サービス名 "{name}" が重複しています。',
+  'validate.serviceExecStartEmpty': 'サービス "{name}" の実行コマンドが空です。',
+  'validate.serviceExecStartNotAbsolute':
+    'サービス "{name}" の実行コマンドは絶対パスにしてください（systemd は PATH を解決しません）。',
+  'validate.serviceUserNotCreated': 'サービス "{name}" が使うユーザー "{user}" はこの設定では作成されません。',
+  'validate.serviceGroupNotCreated':
+    'サービス "{name}" のグループ "{group}" はこの設定では作成されません（既存のグループなら問題ありません）。',
+  'validate.serviceEnvironmentInvalid': 'サービス "{name}" の環境変数は KEY=VALUE の形式で書いてください。',
+  'validate.cudaRepoMissingForSeries':
+    'NVIDIA は Ubuntu {series} 向けの CUDA リポジトリを提供していません。LTS 版（22.04 / 24.04 / 26.04）を使ってください。',
+  'validate.gpuNothingSelected': 'GPU 設定が有効ですが、ドライバもツールキットも選ばれていません。',
+  'validate.containerToolkitWithoutDocker':
+    'コンテナから GPU を使う設定ですが、Docker がインストールされません。「インストール後」で Docker を有効にしてください。',
+  'validate.cudaDownloadsOnFirstBoot': 'CUDA は初回起動時にインターネットから数 GB をダウンロードします。完了後に自動で再起動します。',
+  'validate.interactiveAllUnverified':
+    'Ubuntu {series} では interactive-sections: ["*"] の展開が確認できていないため、この指定は出力しません。個別の項目を「インストーラの画面で入力する」に設定してください。',
+  'validate.rsyslogNotImplemented':
+    'rsyslog への送信は subiquity にまだ実装がありません（公式リファレンスに明記）。進捗は届かない可能性があります。',
+  'validate.interactiveSectionsUnsupported':
+    'Ubuntu {series} には interactive-sections がありません。値が渡されなかったときに手入力へ切り替えることができず、既定値が使われます。',
+  'validate.hostsWithoutKernelArgs':
+    'ホストを {n} 件登録していますが、どの項目も「固定値」なので起動メニューは作られません。この一覧は使われません。',
+  'validate.kernelArgsWithoutHosts':
+    'カーネル引数で値を渡す設定ですが、ホストが 1 つも登録されていません。起動時に GRUB で e キーを押して自分で入力することになります。',
+  'validate.hostLabelInvalid': 'ホスト #{n} の表示名に使えない文字があります（" $ 改行は使えません、40 文字まで）。',
+  'validate.hostLabelDuplicated': 'ホスト名 "{label}" が重複しています。',
+  'validate.hostHostnameInvalid': 'ホスト "{label}" のホスト名は英数字とハイフンで書いてください。',
+  'validate.hostGatewayInvalid': 'ホスト "{label}" のゲートウェイは "192.168.1.1" のように書いてください。',
+  'validate.hostNameserverInvalid': 'ホスト "{label}" の DNS "{ns}" は IP アドレスの形式ではありません。',
+  'validate.hostDiskNotSerial': 'ホスト "{label}" のディスクにはシリアル番号を書いてください（"/dev/sda" のようなパスは一致しません）。',
+  'validate.hostFieldEmpty': 'ホスト "{label}" の{field}が空です。',
+  'validate.hostFieldInvalidChars': 'ホスト "{label}" の{field}に使えない文字が含まれています（英数字と . _ : / , - のみ）。',
+  'validate.hostIpv4Invalid': 'ホスト "{label}" の IP アドレスは "192.168.1.10/24" のように書いてください。',
+  'validate.grubMenuHostSelection':
+    '起動時に GRUB のメニューからホストを選ぶと、その値が使われます。一覧に無いホストは e キーで引数を編集してください。',
+  'validate.diskKernelArgWithRawStorage': 'ディスクをカーネル引数で渡す設定は、curtin の生 YAML と併用できません。',
+  'validate.networkKernelArgWithRawNetplan': 'IP をカーネル引数で渡す設定は、netplan の生 YAML と併用できません。',
+  'validate.networkKernelArgNeedsStatic':
+    'IP を起動メニューで決める場合は、ネットワークの設定を「固定 IP」にして既定値も入れてください。引数なしで起動されたときに使われます。',
+  'validate.defaultGatewayMissingForKernelArg':
+    'ゲートウェイが空です。引数なしで起動した機械は外部と通信できません（閉じたネットワークなら問題ありません）。',
+  'validate.defaultNameserversMissingForKernelArg':
+    'DNS が空です。引数なしで起動した機械は名前解決ができません（閉じたネットワークなら問題ありません）。',
+  'validate.diskKernelArgNeedsSerialMatch':
+    'ディスクを起動メニューで決める場合は、ディスクの指定方法を「シリアル番号」にして既定値も入れてください。引数なしで起動されたときに使われます。',
+  'validate.interactiveAllOverridesKernelArgs': 'すべての画面を出す設定なので、カーネル引数で渡した値は「既定値」として表示されるだけになります。',
+  'validate.kernelFlavorEmpty': 'カーネルの flavor を入力してください。',
+  'validate.kernelPackageEmpty': 'カーネルのパッケージ名を入力してください。',
+  'validate.oemConflictsWithKernel': 'OEM メタパッケージはカーネルを入れ替えることがあり、カーネル指定と競合してインストールが失敗する場合があります。',
+  'validate.aptSourceEmpty': '追加リポジトリ #{n} が空です。',
+  'validate.aptSourceFormatInvalid':
+    '追加リポジトリ #{n} は "ppa:user/name" か "deb https://... " の形式で書いてください。',
+  'validate.aptSourceKeyMissing': '追加リポジトリ #{n} に GPG 公開鍵が設定されていません。署名検証ができず apt が失敗する可能性があります。',
+  'validate.preserveSourcesListIgnoresMirror': 'sources.list を書き換えない設定なので、指定したミラーは反映されません。',
+  'validate.swapSizeInvalid': 'swap のサイズは 4G のように書いてください。',
+  'validate.resetPartitionSizeInvalid': 'リセットパーティションのサイズは 12G のように書いてください。',
+  'validate.identityGroupsUnsupported':
+    'identity.groups は Ubuntu 26.04 で追加された項目です。{series} では無視されます。',
+  'validate.groupOverrideWithoutSudo': 'グループを上書きする設定で sudo が含まれていません。管理者ユーザーが sudo を使えなくなります。',
+  'validate.activeDirectoryUnsupported': 'active-directory は Ubuntu {series} では使えません。無視されます。',
+  'validate.adDomainNameEmpty': 'ドメイン名を入力してください。',
+  'validate.adAdminNameEmpty': 'ドメイン参加に使う管理者名を入力してください。',
+  'validate.adPasswordPrompt': 'AD 参加のパスワードは設定ファイルに書けず、インストール中に入力を求められます。完全無人にはなりません。',
+  'validate.webhookUrlInvalid': 'Webhook の URL が正しくありません。',
+  'validate.rsyslogDestinationEmpty': 'rsyslog の送信先を入力してください（例: @192.168.0.1）。',
+  'validate.reportingIgnoredWhenInteractive': '対話セクションがある場合、インストーラは reporting の設定を無視します。',
+  'validate.kernelArgsSpecialChars': 'カーネル引数に grub.cfg で特別な意味を持つ文字 (" # $ \' { } \\ < > `) は使えません。',
+  'validate.kernelArgsCommandChars': 'カーネル引数に ; & | は使えません（GRUB の設定行が壊れます）。',
+  'validate.interactiveSectionsPause': '対話セクションが指定されているため、インストールは途中で入力待ちになります。',
+
+  'validate.grubMenuTooLarge':
+    '起動メニューが 1 セクタ (2048 バイト) に収まりません（あと {bytes} バイト超過）。ホストの件数を減らすか、メニュー名を短くしてください。',
+
+  // --- ナビゲーション（サイドバーのグループ分けと 1 行の要約） ---
+  //
+  // 要約はサイドバーに出す「いまの設定」。**既定のままであることが一目で分かる**
+  // ことが目的なので、既定のときは必ず `nav.summaryDefault` で包む
+  // （中身は入れ子の `LocalizedText` として差し込む）。
+  // 折りたたんだものが何に設定されているか分からないのは、折りたたまないより悪い。
+  'nav.groupRequired': '必ず設定する',
+  'nav.groupRequiredHint': 'インストーラが必ず聞くことです。',
+  'nav.groupOptional': '必要なら変える',
+  'nav.groupOptionalHint': '既定のままでも動きます。',
+  'nav.groupExtra': 'このツールが足すこと',
+  'nav.groupExtraHint': 'インストーラには無い機能です。既定では何もしません。',
+  'nav.groupFinish': '仕上げ',
+  'nav.groupFinishHint': '設定を確かめて USB に書きます。',
+
+  'nav.changedCount': '{n} 件変更',
+  'nav.summaryDefault': '既定のまま（{detail}）',
+  'nav.summaryUnknown': '読み取れない設定（{value}）',
+  'nav.summaryJoin2': '{a}・{b}',
+  'nav.summaryJoin3': '{a}・{b}・{c}',
+  'nav.summaryJoin4': '{a}・{b}・{c}・{d}',
+  'nav.summaryMore': 'ほか {n} 件',
+  'nav.summaryOther': 'その他 {n} 件',
+
+  'nav.summaryNetworkInstallerDefault': 'DHCP（自動）',
+  'nav.summaryNetworkDhcp': 'DHCP（NIC を指定）',
+  'nav.summaryNetworkStatic': '静的 IP {address}',
+  'nav.summaryNetworkRaw': 'netplan を直接指定',
+
+  'nav.summaryStorageRaw': 'curtin を直接指定',
+  'nav.summaryDiskLargest': '最大のディスク',
+  'nav.summaryDiskSmallest': '最小のディスク',
+  'nav.summaryDiskSsd': 'SSD を優先',
+  'nav.summaryDiskAny': '任意のディスク',
+  'nav.summaryDiskPath': 'パス {path}',
+  'nav.summaryDiskSerial': 'シリアル {serial}',
+  'nav.summaryDiskModel': 'モデル {model}',
+  'nav.summaryLayoutLvm': 'LVM',
+  'nav.summaryLayoutDirect': 'そのまま',
+  'nav.summaryLayoutZfs': 'ZFS',
+  'nav.summaryEncryptionOn': '暗号化あり',
+  'nav.summaryEncryptionOff': '暗号化なし',
+  'nav.summaryWholeDisk': 'ディスク全体を使用',
+  'nav.summarySwapCustom': 'swap を指定',
+  'nav.summaryPartitionTable': 'パーティション表 {table}',
+  'nav.summaryResetPartition': 'リセット領域あり',
+
+  'nav.summarySoftwareNone': '追加なし',
+  'nav.summaryPackages': 'パッケージ {n} 件',
+  'nav.summarySnaps': 'snap {n} 件',
+  'nav.summarySourceMinimal': '最小構成',
+  'nav.summaryUpdatesAll': 'すべての更新',
+  'nav.summaryDrivers': 'ドライバ自動導入',
+  'nav.summaryGpuOn': 'GPU 有効',
+  'nav.summaryKernelCustom': 'カーネル指定',
+  'nav.summaryUbuntuPro': 'Ubuntu Pro',
+  'nav.summaryMirrorCustom': 'ミラー指定',
+  'nav.summaryAptSources': '追加リポジトリ {n} 件',
+
+  'nav.summaryPostInstallNone': '何もしない',
+  'nav.summaryPresets': 'よくある設定 {n} 件',
+  'nav.summaryFiles': 'ファイル {n} 件',
+  'nav.summaryUsers': '追加ユーザー {n} 件',
+  'nav.summaryDeployments': '展開 {n} 件',
+  'nav.summaryServices': 'サービス {n} 件',
+  'nav.summaryCommands': 'コマンド {n} 件',
+  'nav.summaryFullUpgrade': '全体を更新',
+  'nav.summaryDebconf': 'debconf 指定',
+  'nav.summaryActiveDirectory': 'AD 参加',
+  'nav.summaryReporting': '進捗の送信先を指定',
+  'nav.summaryRefreshInstaller': 'インストーラを更新',
+  'nav.summaryInteractiveAll': '全画面で入力を待つ',
+  'nav.summaryRawOverlay': 'YAML で上書き',
+  'nav.summaryExtraKernelArgs': 'カーネル引数を追加',
+  'nav.summaryNoLogCollect': '失敗ログを集めない',
+
+  'nav.summaryRuntimeFixed': 'すべて固定値',
+  'nav.summaryRuntimeKernelArg': '{field}を起動メニューで選ぶ',
+  'nav.summaryRuntimeInteractive': '{field}をインストーラで入力',
+  'nav.summaryRuntimeFieldHostname': 'ホスト名',
+  'nav.summaryRuntimeFieldNetwork': 'ネットワーク',
+  'nav.summaryRuntimeFieldDisk': 'ディスク',
+  'nav.summaryRuntimeHosts': 'ホスト {n} 件',
+
+  'nav.readyTitle': 'ここまでで足ります',
+  'nav.readyBody':
+    'あとは既定のままでよければ、そのまま確認へ進めます。ネットワークやディスクは、あとから戻って変えられます。',
+  'nav.readyButton': '確認へ進む',
 
   // --- エラー ---
   'error.isoTooBig': 'USB メモリの容量が足りません',

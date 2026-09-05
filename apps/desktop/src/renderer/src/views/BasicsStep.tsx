@@ -5,11 +5,8 @@ import { Card, Field, Select, TextInput } from '../components/ui.js'
 
 export function BasicsStep(): React.JSX.Element {
   const t = useT()
-  const locale = useStore((s) => s.locale)
   const profile = useStore((s) => s.profile)
   const update = useStore((s) => s.updateProfile)
-  const label = (c: { labelJa: string; labelEn: string }): string =>
-    locale === 'ja' ? c.labelJa : c.labelEn
 
   const hostnameInvalid =
     profile.basics.hostname.length > 0 &&
@@ -29,7 +26,10 @@ export function BasicsStep(): React.JSX.Element {
                 onChange={(v) =>
                   update((p) => ({ ...p, basics: { ...p.basics, locale: v } }))
                 }
-                options={LOCALE_CHOICES.map((c) => ({ value: c.value, label: `${label(c)} (${c.value})` }))}
+                options={LOCALE_CHOICES.map((c) => ({
+                  value: c.value,
+                  label: `${t(c.label)} (${c.value})`,
+                }))}
               />
             )}
           </Field>
@@ -50,7 +50,7 @@ export function BasicsStep(): React.JSX.Element {
                     },
                   }))
                 }}
-                options={KEYBOARDS.map((k) => ({ value: k.value, label: label(k) }))}
+                options={KEYBOARDS.map((k) => ({ value: k.value, label: t(k.label) }))}
               />
             )}
           </Field>
@@ -61,7 +61,7 @@ export function BasicsStep(): React.JSX.Element {
                 id={id}
                 value={profile.basics.timezone}
                 onChange={(v) => update((p) => ({ ...p, basics: { ...p.basics, timezone: v } }))}
-                options={TIMEZONES.map((z) => ({ value: z.value, label: label(z) }))}
+                options={TIMEZONES.map((z) => ({ value: z.value, label: t(z.label) }))}
               />
             )}
           </Field>

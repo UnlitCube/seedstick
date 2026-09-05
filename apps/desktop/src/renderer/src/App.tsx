@@ -1,8 +1,8 @@
 import { useEffect } from 'react'
 import { Check, ChevronLeft, ChevronRight, Disc3, Languages } from 'lucide-react'
-import type { MsgKey } from '@autoinstall/shared'
-import { STEP_ORDER, useStore, type StepId } from './store.js'
+import { STEP_GROUPS, STEP_LABELS, STEP_ORDER, useStore, type StepId } from './store.js'
 import { useT, useTl } from './lib/i18n.js'
+import { summarizeStep } from './lib/summary.js'
 import { Button, Callout } from './components/ui.js'
 import { ErrorBoundary } from './components/ErrorBoundary.js'
 import { ProfileBar } from './views/ProfileBar.js'
@@ -16,19 +16,6 @@ import { SoftwareStep } from './views/SoftwareStep.js'
 import { PostInstallStep } from './views/PostInstallStep.js'
 import { ReviewStep } from './views/ReviewStep.js'
 import { WriteStep } from './views/WriteStep.js'
-
-const STEP_LABELS: Record<StepId, MsgKey> = {
-  iso: 'step.iso',
-  basics: 'step.basics',
-  user: 'step.user',
-  network: 'step.network',
-  storage: 'step.storage',
-  runtime: 'step.runtime',
-  software: 'step.software',
-  postinstall: 'step.postinstall',
-  review: 'step.review',
-  write: 'step.write',
-}
 
 const STEP_VIEWS: Record<StepId, () => React.JSX.Element> = {
   iso: IsoStep,
@@ -52,12 +39,16 @@ export function App(): React.JSX.Element {
   const step = useStore((s) => s.step)
   const setStep = useStore((s) => s.setStep)
   const iso = useStore((s) => s.iso)
+  // サイドバーの 1 行要約はプロファイルから導く（純粋関数なので描画のたびに作る）
+  const profile = useStore((s) => s.profile)
   const config = useStore((s) => s.config)
   const locale = useStore((s) => s.locale)
   const setLocale = useStore((s) => s.setLocale)
   const writeStatus = useStore((s) => s.writeStatus)
   const profileNotes = useStore((s) => s.profileNotes)
   const dismissProfileNotes = useStore((s) => s.dismissProfileNotes)
+  // プロファイルを丸ごと差し替えた回数。画面の `key` に混ぜて作り直す理由は下記。
+  const profileGeneration = useStore((s) => s.profileGeneration)
 
   useEffect(() => {
     void init()
@@ -109,41 +100,74 @@ export function App(): React.JSX.Element {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <nav className="w-52 shrink-0 overflow-y-auto border-r border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800">
-          <ol className="space-y-1">
-            {STEP_ORDER.map((id, i) => {
-              const done = i < index
-              const current = id === step
-              // 書き込み中はステップ移動を禁じる（設定が変わると危険なため）
-              const reachable = !writing && (i <= index || iso !== null)
-              return (
-                <li key={id}>
-                  <button
-                    disabled={!reachable}
-                    onClick={() => setStep(id)}
-                    className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition disabled:cursor-not-allowed disabled:opacity-40 ${
-                      current
-                        ? 'bg-sky-100 font-medium text-sky-900 dark:bg-sky-900/60 dark:text-sky-100'
-                        : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700'
-                    }`}
-                  >
-                    <span
-                      className={`flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${
-                        done
-                          ? 'bg-emerald-500 text-white'
-                          : current
-                            ? 'bg-sky-600 text-white'
-                            : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400'
-                      }`}
-                    >
-                      {done ? <Check className="size-3" aria-hidden /> : i + 1}
-                    </span>
-                    <span className="truncate">{t(STEP_LABELS[id])}</span>
-                  </button>
-                </li>
-              )
-            })}
-          </ol>
+        {/*
+          サイドバーは 4 つのグループに分ける。
+          「必ず設定する」を通り終えれば、残りは既定のままでも動く——という道筋を
+          見出しそのもので示す。**番号は全体の通し番号のまま**にする
+          （グループごとに 1 から振り直すと、いま全体の何番目かが分からなくなる）。
+          到達可能性の規則は変えていない（`STEP_ORDER` 上の位置で決める）。
+        */}
+        <nav className="w-64 shrink-0 space-y-4 overflow-y-auto border-r border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800">
+          {STEP_GROUPS.map((group) => (
+            <section key={group.id}>
+              <h2 className="px-2 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                {t(group.title)}
+              </h2>
+              <p className="px-2 pb-1 text-[11px] leading-snug text-slate-500 dark:text-slate-400">
+                {t(group.hint)}
+              </p>
+              <ol className="space-y-1">
+                {group.steps.map((id) => {
+                  const i = STEP_ORDER.indexOf(id)
+                  const done = i < index
+                  const current = id === step
+                  // 書き込み中はステップ移動を禁じる（設定が変わると危険なため）
+                  const reachable = !writing && (i <= index || iso !== null)
+                  // 折りたたんだ先が何になっているか分からないのは、
+                  // 折りたたまないより悪い。いまの設定を 1 行で出す。
+                  const summary = summarizeStep(id, profile)
+                  const summaryText = summary === null ? '' : tl(summary)
+                  return (
+                    <li key={id}>
+                      <button
+                        disabled={!reachable}
+                        onClick={() => setStep(id)}
+                        className={`flex w-full items-start gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                          current
+                            ? 'bg-sky-100 font-medium text-sky-900 dark:bg-sky-900/60 dark:text-sky-100'
+                            : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700'
+                        }`}
+                      >
+                        <span
+                          className={`mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${
+                            done
+                              ? 'bg-emerald-500 text-white'
+                              : current
+                                ? 'bg-sky-600 text-white'
+                                : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400'
+                          }`}
+                        >
+                          {done ? <Check className="size-3" aria-hidden /> : i + 1}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate">{t(STEP_LABELS[id])}</span>
+                          {summaryText !== '' && (
+                            // 幅に収まらない要約は切るが、title で全文が読める。
+                            <span
+                              title={summaryText}
+                              className="mt-0.5 block truncate text-[11px] font-normal text-slate-500 dark:text-slate-400"
+                            >
+                              {summaryText}
+                            </span>
+                          )}
+                        </span>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ol>
+            </section>
+          ))}
         </nav>
 
         <main className="min-w-0 flex-1 overflow-y-auto">
@@ -168,8 +192,17 @@ export function App(): React.JSX.Element {
               白画面にはしない（プロファイルは手で編集できるので、
               「型は合っているが中身が違う」データは実際に届く）。
               key を step にしておくと、別のステップへ移ったときに自動で復帰する。
+
+              key には **プロファイルの世代** も混ぜる。画面の中には
+              「開いた時点の設定」から初期値を決めるものがあり（`Disclosure` の
+              開閉が代表）、`profile` を差し替えただけでは作り直されない。
+              `Disclosure` は件数が 0 をまたいだときに開き直すが、
+              **件数が同じなら**（2 件のプロファイルを閉じて、別の 2 件の
+              プロファイルを開く）何も起きず、設定が折りたたみの中に隠れる。
+              世代は丸ごと差し替えた 3 か所でしか増えないので、
+              ただの編集で作り直されることはない（下書きは消えない）。
             */}
-            <ErrorBoundary key={step}>
+            <ErrorBoundary key={`${step}:${profileGeneration}`}>
               <View />
             </ErrorBoundary>
           </div>

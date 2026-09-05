@@ -10,7 +10,7 @@ import type { AutoinstallProfile, ValidationIssue } from '../index.js'
 //     Failed to generate YAML: 上書き YAML の構文エラー: ...
 //
 // `generate.ts` の例外メッセージ（開発者向けの日本語の診断）を、そのまま
-// `messageEn` に連結していたのが原因。English を選んでいる利用者には
+// 英語の総括に連結していたのが原因。English を選んでいる利用者には
 // 半分日本語の行だけが見えていた。
 //
 // ソースを ASCII に保つため、判定は \u エスケープで書く（落とし穴 44）。
@@ -40,6 +40,16 @@ function expectNoJapanese(text: string, what: string): void {
   expect(FULLWIDTH_PUNCTUATION.test(text), `${what} に全角の約物が残っている: ${text}`).toBe(false)
 }
 
+/**
+ * 指摘の総括をその言語で読む。
+ *
+ * 以前は `messageJa` / `messageEn` という 2 本の文字列を直接見ていた。
+ * いまは `text`（辞書のキー + 差し込み値）なので、訳してから見る。
+ * **見ている性質は同じ**（英文に日本語が混ざらないこと）。
+ */
+const jaOf = (i: ValidationIssue): string => formatLocalized('ja', i.text)
+const enOf = (i: ValidationIssue): string => formatLocalized('en', i.text)
+
 /** 上書き YAML についての指摘だけを取り出す。 */
 function overlayIssues(p: AutoinstallProfile): ValidationIssue[] {
   return validateProfile(p)
@@ -52,30 +62,30 @@ const BROKEN = ['a:\n  - b\n c: [', '{{{', 'a: [1, 2']
 const NOT_A_MAPPING = ['- 1\n- 2', 'plain string', '42']
 
 describe('上書き YAML のエラーは英文に日本語を混ぜない', () => {
-  it('構文エラーの messageEn に日本語が 1 文字も無い', () => {
+  it('構文エラーの英語の総括に日本語が 1 文字も無い', () => {
     for (const yaml of BROKEN) {
       const issues = overlayIssues(withOverlay(yaml))
       expect(issues.length, `指摘が出ていない: ${yaml}`).toBeGreaterThan(0)
-      for (const i of issues) expectNoJapanese(i.messageEn, `messageEn (${yaml})`)
+      for (const i of issues) expectNoJapanese(enOf(i), `en の総括 (${yaml})`)
     }
   })
 
-  it('マッピングでない上書きの messageEn に日本語が 1 文字も無い', () => {
+  it('マッピングでない上書きの英語の総括に日本語が 1 文字も無い', () => {
     for (const yaml of NOT_A_MAPPING) {
       const issues = overlayIssues(withOverlay(yaml))
       expect(issues.length, `指摘が出ていない: ${yaml}`).toBeGreaterThan(0)
-      for (const i of issues) expectNoJapanese(i.messageEn, `messageEn (${yaml})`)
+      for (const i of issues) expectNoJapanese(enOf(i), `en の総括 (${yaml})`)
     }
   })
 
-  it('messageJa と messageEn が同じ情報を伝える', () => {
+  it('日本語と英語の総括が同じ情報を伝える', () => {
     for (const yaml of [...BROKEN, ...NOT_A_MAPPING]) {
       const issues = overlayIssues(withOverlay(yaml))
       for (const i of issues) {
         // 日本語の方は日本語であること（英文をそのまま流用していない）
-        expect(HIRAGANA_KATAKANA_KANJI.test(i.messageJa), `messageJa が日本語でない: ${i.messageJa}`).toBe(true)
+        expect(HIRAGANA_KATAKANA_KANJI.test(jaOf(i)), `ja の総括が日本語でない: ${jaOf(i)}`).toBe(true)
         // 中身が違うこと（同じ文字列なら片方が訳されていない）
-        expect(i.messageEn).not.toBe(i.messageJa)
+        expect(enOf(i)).not.toBe(jaOf(i))
       }
     }
   })
@@ -95,8 +105,8 @@ describe('上書き YAML のエラーは英文に日本語を混ぜない', () =
     const issues = overlayIssues(withOverlay(yaml))
     expect(issues.length).toBeGreaterThan(0)
     for (const i of issues) {
-      expect(i.messageJa).toContain(detail)
-      expect(i.messageEn).toContain(detail)
+      expect(jaOf(i)).toContain(detail)
+      expect(enOf(i)).toContain(detail)
     }
   })
 
@@ -117,28 +127,28 @@ describe('generateErrorIssue', () => {
   it('GenerateError は両方の言語をキーから引く', () => {
     const err = new GenerateError('日本語の診断', localized('generate.overlayNotMapping'), 'advanced.rawOverlayYaml')
     const issue = generateErrorIssue(err)
-    expect(issue.messageJa).toBe(formatLocalized('ja', err.text))
-    expect(issue.messageEn).toBe(formatLocalized('en', err.text))
+    expect(jaOf(issue)).toBe(formatLocalized('ja', err.text))
+    expect(enOf(issue)).toBe(formatLocalized('en', err.text))
     // 開発者向けの日本語（`Error.message`）は画面の文言に混ぜない
-    expect(issue.messageJa).not.toContain('日本語の診断')
-    expect(issue.messageEn).not.toContain('日本語の診断')
+    expect(jaOf(issue)).not.toContain('日本語の診断')
+    expect(enOf(issue)).not.toContain('日本語の診断')
     expect(issue.detail).toBeUndefined()
-    expectNoJapanese(issue.messageEn, 'messageEn')
+    expectNoJapanese(enOf(issue), 'en の総括')
   })
 
   it('訳せない例外は総括を訳し、生の診断は detail に分ける', () => {
     const issue = generateErrorIssue(new TypeError('e.trim is not a function'))
     expect(issue.field).toBe('generate')
-    expect(issue.messageJa).toBe(formatLocalized('ja', localized('generate.failed')))
-    expect(issue.messageEn).toBe(formatLocalized('en', localized('generate.failed')))
-    expectNoJapanese(issue.messageEn, 'messageEn')
+    expect(jaOf(issue)).toBe(formatLocalized('ja', localized('generate.failed')))
+    expect(enOf(issue)).toBe(formatLocalized('en', localized('generate.failed')))
+    expectNoJapanese(enOf(issue), 'en の総括')
     expect(issue.detail).toBe('e.trim is not a function')
   })
 
   it('Error でない値でも落ちない', () => {
     const issue = generateErrorIssue('文字列が投げられた')
     expect(issue.detail).toBe('文字列が投げられた')
-    expectNoJapanese(issue.messageEn, 'messageEn')
+    expectNoJapanese(enOf(issue), 'en の総括')
   })
 })
 

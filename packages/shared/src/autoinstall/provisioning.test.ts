@@ -13,8 +13,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { parse } from 'yaml'
 import { createDefaultProfile } from './defaults.js'
+import { formatLocalized } from '../i18n/index.js'
 import { collectFirstBootCommands, collectLateCommands, collectPackages, generateUserData } from './generate.js'
-import { SEED_MOUNT_PATH, deploymentFirstBootCommands } from './generate-provisioning.js'
+import {
+  SEED_MOUNT_PATH,
+  deploymentFirstBootCommands,
+  deploymentOwnership,
+} from './generate-provisioning.js'
 import { migrateProfile, summarizeProfile } from './migrate.js'
 import {
   CUDA_REPO_DISTRO,
@@ -517,7 +522,7 @@ describe('生成された YAML の整合性', () => {
       },
     }))
     const r = validateProfile(p)
-    expect(r.ok, r.issues.map((i) => i.messageJa).join(' / ')).toBe(true)
+    expect(r.ok, r.issues.map((i) => formatLocalized('ja', i.text)).join(' / ')).toBe(true)
   })
 
   it('存在しないユーザーでサービスを動かすと警告する', () => {
@@ -786,13 +791,80 @@ describe('展開の所有者とグループ', () => {
     expect(late).not.toContain('chgrp')
   })
 
-  it('アーカイブは chownRecursive が false なら owner を反映しない', () => {
-    // UI は「owner:group」を表示するのに、chownRecursive が false だと
-    // 何も出ない。表示と出力が食い違う（今は仕様として固定する）。
+  // 回帰: chownRecursive が false のとき、アーカイブは chown を 1 つも出していなかった。
+  // GUI は owner / group を一覧でも編集画面でも常に出しているので、
+  // 「設定したのに効かない」になる（しかも validate は chown が出る前提で
+  // 「所有者が実在しない」と警告するので、警告のほうも嘘になっていた）。
+  // いまは **chownRecursive は「中身まで」の意味**で、off でも展開先そのものは変える。
+  it('アーカイブは chownRecursive が false でも展開先そのものを chown する', () => {
     const off = commandsFor(deployment({ chownRecursive: false, owner: 'deploy', group: 'staff' }))
-    expect(off.late).not.toContain('chown')
+    expect(off.late).toContain("chown deploy:staff '/opt/myapp'")
+    // 「中身まで」ではないので -R は付かない
+    expect(off.late).not.toContain('chown -R')
+  })
+
+  it('アーカイブは chownRecursive が true なら -R で中身も変える', () => {
     const on = commandsFor(deployment({ chownRecursive: true, owner: 'deploy', group: 'staff' }))
     expect(on.late).toContain("chown -R deploy:staff '/opt/myapp'")
+  })
+
+  it('アーカイブでグループだけ変える設定も、再帰の有無に関わらず出る', () => {
+    const off = commandsFor(deployment({ chownRecursive: false, owner: 'root', group: 'staff' }))
+    expect(off.late).toContain("chgrp staff '/opt/myapp'")
+    const on = commandsFor(deployment({ chownRecursive: true, owner: 'root', group: 'staff' }))
+    expect(on.late).toContain("chgrp -R staff '/opt/myapp'")
+  })
+
+  it('所有者が root でグループも空なら、アーカイブでも何も出さない', () => {
+    for (const chownRecursive of [false, true]) {
+      const { late } = commandsFor(deployment({ chownRecursive, owner: 'root', group: '' }))
+      expect(late).not.toContain('chown')
+      expect(late).not.toContain('chgrp')
+    }
+  })
+
+  it('URL 取得のアーカイブも late 経路と同じ規則で出す', () => {
+    // 2 か所に分岐を書き写していたので、片方だけ直すと必ず食い違う。
+    // どちらも deploymentOwnership を通していることを、生成物で確かめる。
+    const { firstBoot } = commandsFor(
+      deployment({
+        chownRecursive: false,
+        owner: 'deploy',
+        group: 'staff',
+        source: { kind: 'url', url: 'https://example.com/app.tar.gz', sha256: 'a'.repeat(64) },
+      }),
+    )
+    // runcmd は 1 エントリの `sh -e -c` に包むので、内側の ' は '\\'' になる
+    expect(firstBoot).toContain(String.raw`chown deploy:staff '\''/opt/myapp'\''`)
+    expect(firstBoot).not.toContain('chown -R')
+  })
+
+  // 表示（renderer の一覧）と出力を 1 か所から作るための関数。
+  // renderer 側で条件を書き写すと、また食い違う。
+  it('deploymentOwnership が「実際に何が起きるか」を返す', () => {
+    expect(deploymentOwnership(deployment({ owner: 'deploy', group: 'staff' }))).toEqual({
+      owner: 'deploy',
+      group: 'staff',
+      recursive: true,
+    })
+    expect(
+      deploymentOwnership(deployment({ owner: 'deploy', group: '', chownRecursive: false })),
+    ).toEqual({ owner: 'deploy', group: 'deploy', recursive: false })
+    // 所有者は root のままグループだけ変える
+    expect(deploymentOwnership(deployment({ owner: 'root', group: 'staff' }))).toEqual({
+      owner: '',
+      group: 'staff',
+      recursive: true,
+    })
+    // 単一ファイルに再帰は無い（chownRecursive が true でも -R は付けない）
+    expect(
+      deploymentOwnership(deployment({ kind: 'file', owner: 'deploy', chownRecursive: true })),
+    ).toEqual({ owner: 'deploy', group: 'deploy', recursive: false })
+    expect(deploymentOwnership(deployment({ owner: 'root', group: 'root' }))).toBeNull()
+    // 手で編集された JSON で型が壊れていても例外を投げない（落とし穴 23）
+    expect(
+      deploymentOwnership({ ...deployment(), owner: 42, group: null } as unknown as Deployment),
+    ).toBeNull()
   })
 
   it('URL 取得でも同じ扱いになる（late と runcmd で食い違わない）', () => {

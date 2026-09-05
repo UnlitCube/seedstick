@@ -2,6 +2,8 @@
 // すべて公式リファレンス (autoinstall-reference.rst) と subiquity の
 // autoinstall-schema.json に対応している。
 
+import type { Choice } from './presets.js'
+
 // ---------------------------------------------------------------------------
 // kernel
 // ---------------------------------------------------------------------------
@@ -19,12 +21,14 @@ export type KernelChoice =
   /** `kernel: {package: ...}` */
   | { readonly mode: 'package'; readonly package: string }
 
-export const KERNEL_FLAVORS = [
-  { value: 'generic', labelJa: '標準 (generic)', labelEn: 'Standard (generic)' },
-  { value: 'hwe', labelJa: 'HWE（新しいハードウェア向け）', labelEn: 'HWE (newer hardware)' },
-  { value: 'generic-hwe', labelJa: 'generic-hwe', labelEn: 'generic-hwe' },
-  { value: 'lowlatency', labelJa: '低レイテンシ (lowlatency)', labelEn: 'Low latency' },
-] as const
+// 選択肢の表示名は辞書のキーで持つ（`presets.ts` の `Choice` と同じ規約）。
+// 訳文は `ja.ts` / `en.ts` にあり、ここが持つのは「どのキーを引くか」だけ。
+export const KERNEL_FLAVORS: readonly Choice[] = [
+  { value: 'generic', label: 'adv.kernelFlavorGeneric' },
+  { value: 'hwe', label: 'adv.kernelFlavorHwe' },
+  { value: 'generic-hwe', label: 'adv.kernelFlavorGenericHwe' },
+  { value: 'lowlatency', label: 'adv.kernelFlavorLowlatency' },
+]
 
 // ---------------------------------------------------------------------------
 // apt
@@ -47,23 +51,11 @@ export interface AptSource {
 /** 主ミラーがどれも使えなかったときの挙動。 */
 export type AptFallback = 'abort' | 'continue-anyway' | 'offline-install'
 
-export const APT_FALLBACK_CHOICES = [
-  {
-    value: 'abort',
-    labelJa: 'インストールを中止する（既定）',
-    labelEn: 'Abort the install (default)',
-  },
-  {
-    value: 'offline-install',
-    labelJa: 'ネットワーク無しで続行する',
-    labelEn: 'Continue offline',
-  },
-  {
-    value: 'continue-anyway',
-    labelJa: '壊れたミラー設定のまま続行する',
-    labelEn: 'Continue with the broken mirror',
-  },
-] as const
+export const APT_FALLBACK_CHOICES: readonly (Choice & { readonly value: AptFallback })[] = [
+  { value: 'abort', label: 'adv.aptFallbackChoiceAbort' },
+  { value: 'offline-install', label: 'adv.aptFallbackChoiceOffline' },
+  { value: 'continue-anyway', label: 'adv.aptFallbackChoiceContinue' },
+]
 
 /** `ppa:` 形式か。 */
 export function isPpaSource(source: string): boolean {

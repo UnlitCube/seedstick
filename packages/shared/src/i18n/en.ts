@@ -124,6 +124,37 @@ export const en = {
   'basics.hostnameInvalid':
     'Use only letters, digits, and hyphens, and start and end with a letter or a digit',
 
+  // Option labels (LOCALE_CHOICES / KEYBOARDS / TIMEZONES in presets.ts)
+  'basics.localeEnUs': 'English (US)',
+  'basics.localeJaJp': 'Japanese',
+  'basics.localeEnGb': 'English (UK)',
+  'basics.localeDeDe': 'German',
+  'basics.localeFrFr': 'French',
+  'basics.localeEsEs': 'Spanish',
+  'basics.localePtBr': 'Portuguese (Brazil)',
+  'basics.localeZhCn': 'Chinese (Simplified)',
+  'basics.localeKoKr': 'Korean',
+  'basics.localeC': 'No locale (C.UTF-8)',
+  'basics.keyboardUs': 'English (US)',
+  'basics.keyboardJp': 'Japanese (JIS)',
+  'basics.keyboardUsDvorak': 'English (Dvorak)',
+  'basics.keyboardGb': 'English (UK)',
+  'basics.keyboardDe': 'German',
+  'basics.keyboardFr': 'French',
+  'basics.keyboardEs': 'Spanish',
+  'basics.keyboardKr104': 'Korean (104-key)',
+  'basics.keyboardCn': 'Chinese',
+  'basics.timezoneTokyo': 'Tokyo (JST)',
+  'basics.timezoneUtc': 'UTC',
+  'basics.timezoneGeoip': 'Detect from IP address',
+  'basics.timezoneLosAngeles': 'Los Angeles',
+  'basics.timezoneNewYork': 'New York',
+  'basics.timezoneLondon': 'London',
+  'basics.timezoneBerlin': 'Berlin',
+  'basics.timezoneSingapore': 'Singapore',
+  'basics.timezoneSeoul': 'Seoul',
+  'basics.timezoneSydney': 'Sydney',
+
   // --- user ---
   'user.title': 'Create the first user',
   'user.description': 'This user becomes the administrator and can use sudo.',
@@ -150,6 +181,8 @@ export const en = {
   'user.sudoNoPasswordHint':
     'Convenient for automation, but anyone who takes over this login has root immediately.',
   'user.usernameInvalid': 'Contains characters that cannot be used',
+  'user.detailsTitle': 'Advanced settings',
+  'user.detailsDescription': 'The installer never asks about these. Leaving them alone is fine.',
 
   // --- SSH ---
   'ssh.title': 'SSH settings',
@@ -208,6 +241,11 @@ export const en = {
   'network.staticCloudInitNote':
     'On a physical server with a static IP, we recommend also turning on "Stop cloud-init from managing the network" in the After install settings. It keeps the configuration from being written back on every reboot.',
   'network.staticTitle': 'Static IP settings',
+  'network.detailsTitle': 'Advanced settings',
+  'network.detailsDescription':
+    'The installer never asks about these. Leaving them alone is fine.',
+  'network.detailsInactive':
+    'Choose "Write the netplan YAML directly" above and the editor appears here.',
 
   // --- storage ---
   'storage.title': 'Disk layout',
@@ -236,7 +274,12 @@ export const en = {
   'storage.partitionTable': 'Partition table',
   'storage.ptableDefault': 'Automatic (GPT)',
   'storage.ptableMsdos': 'MBR (for older BIOS machines)',
-  'storage.detailsTitle': 'Details',
+  'storage.detailsTitle': 'Advanced settings',
+  'storage.detailsDescription': 'The installer never asks about these. Leaving them alone is fine.',
+  'storage.detailsRawActive':
+    'While you write the curtin config directly, the swap, encryption and recovery partition settings are not used. The YAML below becomes the autoinstall storage section exactly as written.',
+  'storage.detailsRawInactive':
+    'Choose "Write the curtin config directly" above and the editor appears here.',
   'storage.encryptHint':
     'Protects the data if the machine is stolen, but the passphrase has to be typed at every boot.',
   'storage.layoutDirectHint':
@@ -309,6 +352,29 @@ export const en = {
   'software.ubuntuProTokenLabel': 'Token',
   'software.updatesDriversTitle': 'Updates and drivers',
 
+  // The "advanced settings" disclosure (things the installer never asks about).
+  'software.advancedTitle': 'Advanced settings',
+  'software.advancedHint':
+    'Things the installer never asks about: kernel flavor, extra repositories, Ubuntu Pro token.',
+
+  // Option labels (APT_MIRROR_PRESETS / COMMON_PACKAGES in presets.ts)
+  'software.aptMirrorPresetJp': 'Japan',
+  'software.aptMirrorPresetDefault': 'Default',
+  'software.aptMirrorPresetJaist': 'Japan (JAIST)',
+  'software.aptMirrorPresetRiken': 'Japan (RIKEN)',
+  'software.aptMirrorPresetUs': 'United States',
+  'software.aptMirrorPresetDe': 'Germany',
+  'software.packageOpensshServer': 'SSH server',
+  'software.packageVim': 'vim editor',
+  'software.packageCurl': 'curl',
+  'software.packageGit': 'git',
+  'software.packageHtop': 'htop',
+  'software.packageTmux': 'tmux',
+  'software.packageNetTools': 'net-tools',
+  'software.packageBuildEssential': 'build-essential',
+  'software.packageNfsCommon': 'NFS client',
+  'software.packageLmSensors': 'lm-sensors',
+
   // --- after install ---
   'postinstall.title': 'What to do after installing',
   'postinstall.presets': 'Common options',
@@ -357,6 +423,35 @@ export const en = {
   'postinstall.reportingIgnored':
     'subiquity ignores reporting as soon as any section is interactive.',
   'postinstall.systemUpdate': 'System updates',
+
+  // Post-install preset titles and descriptions (POST_INSTALL_PRESETS in presets.ts)
+  'postinstall.presetSudoNopasswdTitle': 'Passwordless sudo',
+  'postinstall.presetSudoNopasswdDesc':
+    'Lets the created user run sudo without a password. Convenient for automation, but anyone who gets that login gets root immediately.',
+  'postinstall.presetSshHardenTitle': 'Disable SSH password authentication',
+  'postinstall.presetSshHardenDesc':
+    'Allows public-key authentication only and forbids root SSH login. You will be locked out unless an SSH key is registered.',
+  'postinstall.presetUnattendedUpgradesTitle': 'Automatic security updates',
+  'postinstall.presetUnattendedUpgradesDesc':
+    'Enables unattended-upgrades so security updates install automatically. It does not reboot on its own.',
+  'postinstall.presetQemuGuestAgentTitle': 'Install QEMU guest agent',
+  'postinstall.presetQemuGuestAgentDesc':
+    'For KVM / Proxmox / QEMU guests. Lets the host shut the VM down cleanly and read its IP address.',
+  'postinstall.presetDockerCeTitle': 'Install Docker (Ubuntu repository build)',
+  'postinstall.presetDockerCeDesc':
+    'Installs docker.io and docker-compose-v2 and adds the created user to the docker group. The docker group is effectively root.',
+  'postinstall.presetChronyNtpTitle': 'Install time sync (chrony)',
+  'postinstall.presetChronyNtpDesc':
+    'Installs chrony for accurate clock sync, avoiding log skew and certificate errors.',
+  'postinstall.presetUfwAllowSshTitle': 'Enable firewall, allow SSH only',
+  'postinstall.presetUfwAllowSshDesc':
+    'Enables ufw and allows only 22/tcp. Other services will need their ports opened manually.',
+  'postinstall.presetDisableCloudInitNetTitle': 'Stop cloud-init from managing the network',
+  'postinstall.presetDisableCloudInitNetDesc':
+    'For physical servers with a static IP. Prevents cloud-init from rewriting the network config on each boot.',
+  'postinstall.presetJaLocaleTitle': 'Install Japanese locale and manpages',
+  'postinstall.presetJaLocaleDesc':
+    'Installs language-pack-ja and manpages-ja. The server UI language itself stays English.',
 
   // --- review ---
   'review.title': 'Review your settings',
@@ -673,6 +768,11 @@ Date: {date}`,
     'A password is already set. Fill this in only if you want to change it.',
   'users.sshKeyCount': '{n} SSH keys',
 
+  // Option labels (SHELL_CHOICES in provisioning.ts)
+  'users.shellBash': 'bash (default)',
+  'users.shellSh': 'sh',
+  'users.shellNologin': 'No login (for services)',
+
   // --- deployments ---
   'deploy.title': 'Deploy apps and files',
   'deploy.description':
@@ -698,6 +798,8 @@ Date: {date}`,
   'deploy.owner': 'Owner',
   'deploy.group': 'Group',
   'deploy.chownRecursive': 'Set this owner on the whole destination',
+  'deploy.chownRecursiveHint':
+    'Even when off, the destination directory itself gets the owner above (its contents keep whatever the archive carries). Turn it on to change every extracted file as well.',
   'deploy.postCommand': 'Command to run after extracting',
   'deploy.postCommandHint': 'Runs in the destination directory, e.g. npm ci --omit=dev',
   'deploy.content': 'Content',
@@ -782,6 +884,17 @@ Date: {date}`,
   'gpu.unsupportedSeries': 'No CUDA repository exists for Ubuntu {series}',
   'gpu.willInstall': 'What gets installed',
 
+  // Option labels (CUDA_TOOLKIT_CHOICES in provisioning.ts)
+  'gpu.toolkitLatest': 'Latest (cuda-toolkit)',
+  'gpu.toolkitCuda133': 'CUDA 13.3',
+  'gpu.toolkitCuda132': 'CUDA 13.2',
+  'gpu.toolkitCuda131': 'CUDA 13.1',
+  'gpu.toolkitCuda130': 'CUDA 13.0',
+  'gpu.toolkitCuda129': 'CUDA 12.9',
+  'gpu.toolkitCuda128': 'CUDA 12.8',
+  'gpu.toolkitCuda126': 'CUDA 12.6',
+  'gpu.toolkitNone': 'Driver only',
+
   // --- misc ---
   'postinstall.aptFullUpgrade': 'Upgrade every package (apt full-upgrade)',
   'postinstall.aptFullUpgradeHint':
@@ -791,8 +904,15 @@ Date: {date}`,
   'postinstall.tabServices': 'Services',
   'postinstall.tabFiles': 'Files and commands',
   'postinstall.tabAdvanced': 'Advanced',
+  'postinstall.advancedHint':
+    'Settings the installer never asks about. You can usually leave this closed.',
 
   // --- Runtime values (per-host settings) ---
+  'runtime.purposeTitle': 'What this step is for',
+  'runtime.purposeBody':
+    'One USB used to install several machines gives every machine the same hostname and the same IP address. This step lets the values that differ from machine to machine be decided while each machine installs, without building another USB. No USB per machine, and no configuration file per machine.',
+  'runtime.purposeSkip':
+    'If you are installing a single machine, leave this step at its default: every value comes from this profile.',
   'runtime.title': 'Values decided at install time',
   'runtime.intro':
     'Settings such as IP address and hostname differ per machine. Choose how each one is decided.',
@@ -902,6 +1022,15 @@ Date: {date}`,
   'adv.identityGroups': 'Add the admin user to extra groups',
   'adv.identityGroupsUnsupported': 'Not available on this release (26.04 and later)',
 
+  // Option labels (KERNEL_FLAVORS / APT_FALLBACK_CHOICES in advanced.ts)
+  'adv.kernelFlavorGeneric': 'Standard (generic)',
+  'adv.kernelFlavorHwe': 'HWE (newer hardware)',
+  'adv.kernelFlavorGenericHwe': 'generic-hwe',
+  'adv.kernelFlavorLowlatency': 'Low latency',
+  'adv.aptFallbackChoiceAbort': 'Abort the install (default)',
+  'adv.aptFallbackChoiceOffline': 'Continue offline',
+  'adv.aptFallbackChoiceContinue': 'Continue with the broken mirror',
+
   // --- error boundary ---
   'boundary.body':
     'Rendering failed because the settings are not in the shape this screen expects. This can happen when you open a profile that was edited by hand or saved by a different version of this tool.',
@@ -944,6 +1073,302 @@ Date: {date}`,
   'migrate.category.user': 'extra users',
   'migrate.category.service': 'services',
   'migrate.category.deployment': 'app deployments',
+
+
+  // --- Profile validation (`validate.ts` issues) ---
+  'validate.fieldOwner': 'owner',
+  'validate.fieldGroup': 'group',
+  'validate.hostFieldHostname': 'hostname',
+  'validate.hostFieldIpv4': 'ipv4',
+  'validate.hostFieldGateway': 'gateway',
+  'validate.hostFieldNameservers': 'nameservers',
+  'validate.hostFieldDisk': 'disk',
+
+  'validate.unknownPreset':
+    'Unknown preset "{id}". The profile may have been created by a newer version.',
+  'validate.hostnameEmpty': 'Enter a hostname.',
+  'validate.hostnameInvalid':
+    'Hostname may contain only letters, digits and hyphens, must start and end alphanumeric, max 63 chars.',
+  'validate.localeEmpty': 'Choose a locale.',
+  'validate.keyboardEmpty': 'Choose a keyboard layout.',
+  'validate.usernameEmpty': 'Enter a username.',
+  'validate.usernameInvalid':
+    'Username must start with a lowercase letter or underscore and contain only lowercase letters, digits, hyphens and underscores (max 32).',
+  'validate.usernameReserved': '"{username}" is reserved by the system. Choose another name.',
+  'validate.usernameSameAsHostname':
+    'Username and hostname are identical; the installer may reject this.',
+  'validate.passwordMissing': 'Set a password. It is stored hashed.',
+  'validate.passwordPlainText':
+    'The password is plain text. A crypt(3) hash starting with $6$ is required.',
+  'validate.passwordHashNotSha512':
+    'The password hash is not standard SHA-512 crypt. Verify that login works.',
+  'validate.sshKeyMalformed':
+    'SSH public key #{n} is malformed. Expected one line like "ssh-ed25519 AAAA...".',
+  'validate.sshKeysWithoutServer':
+    'SSH keys are configured but the SSH server will not be installed, so remote login is impossible.',
+  'validate.sshHardenWithoutKeys':
+    'SSH password authentication is disabled but no public key is registered. You would be locked out of SSH.',
+  'validate.sshNoPasswordNoKey':
+    'SSH password login is disabled and no public key is registered. You would be locked out of SSH.',
+  'validate.networkAddressInvalid':
+    'Enter the IP address with a prefix length, e.g. "192.168.1.10/24".',
+  'validate.networkGatewayInvalid': 'The gateway address is invalid.',
+  'validate.networkGatewayMissing':
+    'No default gateway is set; the machine cannot reach other networks.',
+  'validate.networkNameserverInvalid': 'DNS server #{n} is not a valid IP address.',
+  'validate.networkNameserversMissing': 'No DNS server is set; name resolution and apt will fail.',
+  'validate.networkYamlSyntax': 'Network YAML syntax error: {detail}',
+  'validate.storageYamlSyntax': 'Storage YAML syntax error: {detail}',
+  'validate.zfsEncryptionUnverified':
+    'Encryption with the ZFS layout behaves differently across installer versions. Verify on real hardware.',
+  'validate.encryptionPassphraseTooShort':
+    'The disk encryption passphrase is too short (minimum 8 characters).',
+  'validate.encryptionPassphrasePlainInYaml':
+    'The disk encryption passphrase is written in plain text into the autoinstall YAML. Handle the USB stick accordingly.',
+  'validate.encryptionRequiresLvm':
+    'Disk encryption only works with the LVM layout; it is ignored for {mode}.',
+  'validate.diskMatchEmpty': 'A disk match kind was chosen but left empty, so no disk will match.',
+  'validate.diskMatchAny':
+    'The install target is set to "any disk". On a machine with several disks there is no way to tell which one will be erased. Match by serial number or path.',
+  'validate.diskMatchSizeBased':
+    'On machines with several disks, matching by serial number or path is safer.',
+  'validate.archiveFormatUnsupported':
+    'Deployment "{name}" uses an unsupported archive format "{format}".',
+  'validate.fileOwnerNotCreated':
+    'File "{name}" is owned by "{owner}", which this config does not create. Unless it already exists, the install fails at the very end.',
+  'validate.deploymentOwnerNotCreated':
+    'Deployment "{name}" is owned by "{owner}", which this config does not create. Unless it already exists, the install fails at the very end.',
+  'validate.resetPartitionUnsupported':
+    'Ubuntu {series} has no reset partition; the setting is ignored.',
+  'validate.aptSourceNameInvalid':
+    'Repository name "{name}" is invalid; use letters, digits, dots, underscores and hyphens.',
+  'validate.aptSourceNameDuplicated':
+    'Repository name "{name}" is duplicated; the later entry silently replaces the earlier one.',
+  'validate.aptFallbackUnsupported':
+    'Ubuntu {series} does not support the apt mirror fallback setting; it is ignored.',
+  'validate.cudaToolkitNameInvalid':
+    'The CUDA toolkit name "{toolkit}" is not a valid apt package name.',
+  'validate.fileOwnerInvalid':
+    'File "{name}" has an invalid owner "{owner}"; use a user name or user:group.',
+  'validate.deploymentOwnerFieldInvalid': 'Deployment "{name}" has an invalid {field} "{value}".',
+  'validate.interfaceNameEmpty': 'The interface name is empty; netplan needs it as the key.',
+  'validate.interfaceNameInvalid':
+    'The interface name "{name}" is invalid; use letters, digits and . _ - starting with a letter.',
+  'validate.macAddressInvalid': 'Enter the MAC address as "aa:bb:cc:dd:ee:ff".',
+  'validate.aptMirrorUriEmpty':
+    'Enter the mirror URL; leaving it empty silently falls back to the default mirror.',
+  'validate.overlayOverridesDangerousKeys':
+    'The overlay YAML overrides {keys}, so the disk and user settings from the UI no longer apply.',
+  'validate.packagesWithoutGateway':
+    'Extra packages or snaps are configured but there is no gateway, so the internet is unreachable.',
+  'validate.ubuntuProTokenInvalid':
+    'The Ubuntu Pro token is malformed (starts with C, 24-30 characters).',
+  'validate.sourceKeyUnsupported':
+    'Ubuntu {series} autoinstall has no source key; the minimal selection will be ignored.',
+  'validate.kernelCrashDumpsUnsupported':
+    'kernel-crash-dumps is not supported on Ubuntu {series} and will be ignored.',
+  'validate.fileTargetPathNotAbsolute': 'File #{n} needs an absolute target path.',
+  'validate.fileModeInvalid': 'File #{n} permission must be octal such as 0644.',
+  'validate.fileNameInvalid': 'File #{n} has an invalid file name.',
+  'validate.sudoNopasswdWarning':
+    'Passwordless sudo is enabled. Anyone who takes that account gets root immediately.',
+  'validate.additionalUserNameEmpty': 'Additional user #{n} has no username.',
+  'validate.additionalUserNameInvalid': 'Additional user "{username}" has an invalid username.',
+  'validate.additionalUserNameReserved': '"{username}" is reserved by the system.',
+  'validate.additionalUserNameDuplicated': 'Username "{username}" is duplicated.',
+  'validate.additionalUserPasswordPlainText': 'The password for "{username}" is plain text.',
+  'validate.additionalUserNoLogin':
+    '"{username}" has neither a password nor an SSH key and cannot log in (the account will be locked).',
+  'validate.additionalUserSshKeyMalformed': 'SSH key #{n} for "{username}" is malformed.',
+  'validate.additionalUserSudoNopasswd': '"{username}" can use sudo without a password.',
+  'validate.deploymentTargetPathNotAbsolute': 'Deployment #{n} needs an absolute target path.',
+  'validate.deploymentNameInvalid': 'Deployment #{n} has an invalid file name.',
+  'validate.deploymentModeInvalid': 'Deployment #{n} permission must be octal such as 0644.',
+  'validate.deploymentUrlInvalid': 'Deployment #{n} has an invalid URL.',
+  'validate.deploymentSha256Missing':
+    'Deployment #{n} downloads from a URL without a SHA-256 checksum, so tampering cannot be detected.',
+  'validate.deploymentSha256Invalid': 'Deployment #{n} SHA-256 must be 64 hex characters.',
+  'validate.deploymentSourceFileMissing': 'Deployment #{n} has no source file selected.',
+  'validate.serviceNameInvalid':
+    'Service #{n} has an invalid name (letters, digits and . _ - @ only; do not append .service).',
+  'validate.serviceNameDuplicated': 'Service name "{name}" is duplicated.',
+  'validate.serviceExecStartEmpty': 'Service "{name}" has no ExecStart command.',
+  'validate.serviceExecStartNotAbsolute':
+    'ExecStart for "{name}" should be an absolute path; systemd does not resolve PATH.',
+  'validate.serviceUserNotCreated':
+    'Service "{name}" runs as "{user}", which this config does not create.',
+  'validate.serviceGroupNotCreated':
+    'Service "{name}" uses the group "{group}", which this config does not create. Fine if it already exists.',
+  'validate.serviceEnvironmentInvalid': 'Environment entries for "{name}" must be KEY=VALUE.',
+  'validate.cudaRepoMissingForSeries':
+    'NVIDIA does not publish a CUDA repository for Ubuntu {series}. Use an LTS release (22.04 / 24.04 / 26.04).',
+  'validate.gpuNothingSelected':
+    'GPU setup is enabled but neither a driver nor a toolkit is selected.',
+  'validate.containerToolkitWithoutDocker':
+    'The container toolkit is enabled but Docker is not installed. Enable Docker under "After install".',
+  'validate.cudaDownloadsOnFirstBoot':
+    'CUDA downloads several GB from the internet on first boot, then reboots automatically.',
+  'validate.interactiveAllUnverified':
+    'The ["*"] form is unverified on Ubuntu {series}, so it is omitted. Set individual items to "type it in the installer" instead.',
+  'validate.rsyslogNotImplemented':
+    'The rsyslog reporter is documented as not yet implemented in subiquity, so progress may never arrive.',
+  'validate.interactiveSectionsUnsupported':
+    'Ubuntu {series} has no interactive-sections, so a missing value falls back to the default instead of prompting.',
+  'validate.hostsWithoutKernelArgs':
+    '{n} host(s) are configured, but every value is fixed, so no boot menu is built and the list is not used.',
+  'validate.kernelArgsWithoutHosts':
+    'Values are passed as kernel arguments but no hosts are registered, so you will have to type them in GRUB with the e key.',
+  'validate.hostLabelInvalid':
+    'Host #{n} has an invalid label (no " $ or newlines; 40 characters max).',
+  'validate.hostLabelDuplicated': 'Host label "{label}" is duplicated.',
+  'validate.hostHostnameInvalid': 'Host "{label}" needs a hostname of letters, digits and hyphens.',
+  'validate.hostGatewayInvalid': 'Host "{label}" needs a gateway like "192.168.1.1".',
+  'validate.hostNameserverInvalid':
+    'Host "{label}" has a nameserver "{ns}" that is not an IP address.',
+  'validate.hostDiskNotSerial':
+    'Host "{label}" needs a disk serial number; a path like "/dev/sda" will not match.',
+  'validate.hostFieldEmpty': 'Host "{label}" has no {field}.',
+  'validate.hostFieldInvalidChars':
+    'Host "{label}" has invalid characters in {field} (only letters, digits and . _ : / , - are allowed).',
+  'validate.hostIpv4Invalid': 'Host "{label}" needs an address like "192.168.1.10/24".',
+  'validate.grubMenuHostSelection':
+    'Pick a host from the GRUB menu at boot to apply its values. For a host not listed, press e and edit the arguments.',
+  'validate.diskKernelArgWithRawStorage':
+    'Passing the disk as a kernel argument cannot be combined with a raw curtin config.',
+  'validate.networkKernelArgWithRawNetplan':
+    'Passing the IP as a kernel argument cannot be combined with raw netplan YAML.',
+  'validate.networkKernelArgNeedsStatic':
+    'When the IP is chosen from the boot menu, set the network to a static address as well; it is used when no argument is passed.',
+  'validate.defaultGatewayMissingForKernelArg':
+    'No gateway is set, so a machine booted without arguments cannot reach outside. Fine on a closed network.',
+  'validate.defaultNameserversMissingForKernelArg':
+    'No nameservers are set, so a machine booted without arguments cannot resolve names. Fine on a closed network.',
+  'validate.diskKernelArgNeedsSerialMatch':
+    'When the disk is chosen from the boot menu, also match by serial number so there is a default for boots without an argument.',
+  'validate.interactiveAllOverridesKernelArgs':
+    'Because every screen is shown, kernel-argument values only appear as defaults.',
+  'validate.kernelFlavorEmpty': 'Enter a kernel flavor.',
+  'validate.kernelPackageEmpty': 'Enter a kernel package name.',
+  'validate.oemConflictsWithKernel':
+    'OEM meta-packages can pull in their own kernel and conflict with an explicit kernel choice.',
+  'validate.aptSourceEmpty': 'APT source #{n} is empty.',
+  'validate.aptSourceFormatInvalid':
+    'APT source #{n} must be "ppa:user/name" or a "deb https://..." line.',
+  'validate.aptSourceKeyMissing': 'APT source #{n} has no GPG key, so apt may refuse it.',
+  'validate.preserveSourcesListIgnoresMirror':
+    'The mirror will not be applied because sources.list is preserved.',
+  'validate.swapSizeInvalid': 'Swap size must be written like 4G.',
+  'validate.resetPartitionSizeInvalid': 'Reset partition size must be written like 12G.',
+  'validate.identityGroupsUnsupported':
+    'identity.groups was added in Ubuntu 26.04 and is ignored on {series}.',
+  'validate.groupOverrideWithoutSudo':
+    'The group override does not include sudo, so the admin user will lose sudo access.',
+  'validate.activeDirectoryUnsupported':
+    'active-directory is not available on Ubuntu {series} and will be ignored.',
+  'validate.adDomainNameEmpty': 'Enter a domain name.',
+  'validate.adAdminNameEmpty': 'Enter the administrator account used to join the domain.',
+  'validate.adPasswordPrompt':
+    'The AD password cannot be put in the config; the installer asks for it, so the install is not fully unattended.',
+  'validate.webhookUrlInvalid': 'The webhook URL is invalid.',
+  'validate.rsyslogDestinationEmpty': 'Enter an rsyslog destination, e.g. @192.168.0.1.',
+  'validate.reportingIgnoredWhenInteractive':
+    'When any section is interactive, the installer ignores the reporting configuration.',
+  'validate.kernelArgsSpecialChars':
+    'Kernel arguments cannot contain characters that are special in grub.cfg (" # $ \' { } \\ < > `).',
+  'validate.kernelArgsCommandChars':
+    'Kernel arguments cannot contain ; & | because they break the GRUB config line.',
+  'validate.interactiveSectionsPause':
+    'Interactive sections are configured, so the install will pause for input.',
+
+  'validate.grubMenuTooLarge':
+    'The boot menu does not fit in one sector (2048 bytes); it is {bytes} bytes too large. Remove hosts or shorten the menu names.',
+
+  // --- navigation (sidebar groups and the one-line summaries) ---
+  'nav.groupRequired': 'Must configure',
+  'nav.groupRequiredHint': 'The installer always asks for these.',
+  'nav.groupOptional': 'Change if needed',
+  'nav.groupOptionalHint': 'The defaults work as they are.',
+  'nav.groupExtra': 'Added by this tool',
+  'nav.groupExtraHint': 'Not part of the installer. Nothing happens by default.',
+  'nav.groupFinish': 'Finish',
+  'nav.groupFinishHint': 'Review the settings and write the USB.',
+
+  'nav.changedCount': '{n} changed',
+  'nav.summaryDefault': 'Defaults ({detail})',
+  'nav.summaryUnknown': 'Unreadable setting ({value})',
+  'nav.summaryJoin2': '{a} / {b}',
+  'nav.summaryJoin3': '{a} / {b} / {c}',
+  'nav.summaryJoin4': '{a} / {b} / {c} / {d}',
+  'nav.summaryMore': 'And {n} more',
+  'nav.summaryOther': 'Other {n}',
+
+  'nav.summaryNetworkInstallerDefault': 'DHCP (automatic)',
+  'nav.summaryNetworkDhcp': 'DHCP (chosen NIC)',
+  'nav.summaryNetworkStatic': 'Static IP {address}',
+  'nav.summaryNetworkRaw': 'Raw netplan',
+
+  'nav.summaryStorageRaw': 'Raw curtin config',
+  'nav.summaryDiskLargest': 'Largest disk',
+  'nav.summaryDiskSmallest': 'Smallest disk',
+  'nav.summaryDiskSsd': 'Prefer SSD',
+  'nav.summaryDiskAny': 'Any disk',
+  'nav.summaryDiskPath': 'Path {path}',
+  'nav.summaryDiskSerial': 'Serial {serial}',
+  'nav.summaryDiskModel': 'Model {model}',
+  'nav.summaryLayoutLvm': 'LVM',
+  'nav.summaryLayoutDirect': 'Direct',
+  'nav.summaryLayoutZfs': 'ZFS',
+  'nav.summaryEncryptionOn': 'Encrypted',
+  'nav.summaryEncryptionOff': 'Not encrypted',
+  'nav.summaryWholeDisk': 'Use the whole disk',
+  'nav.summarySwapCustom': 'Custom swap',
+  'nav.summaryPartitionTable': 'Partition table {table}',
+  'nav.summaryResetPartition': 'Reset partition',
+
+  // Counts read "Packages 1" rather than "1 packages": the dictionary has no
+  // plural machinery, and "1 snaps" is exactly the kind of wrong-looking detail
+  // that makes the English build feel like an afterthought.
+  'nav.summarySoftwareNone': 'No extras',
+  'nav.summaryPackages': 'Packages {n}',
+  'nav.summarySnaps': 'Snaps {n}',
+  'nav.summarySourceMinimal': 'Minimal install',
+  'nav.summaryUpdatesAll': 'All updates',
+  'nav.summaryDrivers': 'Third-party drivers',
+  'nav.summaryGpuOn': 'GPU enabled',
+  'nav.summaryKernelCustom': 'Custom kernel',
+  'nav.summaryUbuntuPro': 'Ubuntu Pro',
+  'nav.summaryMirrorCustom': 'Custom mirror',
+  'nav.summaryAptSources': 'Extra repositories {n}',
+
+  'nav.summaryPostInstallNone': 'Nothing extra',
+  'nav.summaryPresets': 'Presets {n}',
+  'nav.summaryFiles': 'Files {n}',
+  'nav.summaryUsers': 'Extra users {n}',
+  'nav.summaryDeployments': 'Deployments {n}',
+  'nav.summaryServices': 'Services {n}',
+  'nav.summaryCommands': 'Commands {n}',
+  'nav.summaryFullUpgrade': 'Full upgrade',
+  'nav.summaryDebconf': 'debconf selections',
+  'nav.summaryActiveDirectory': 'Join Active Directory',
+  'nav.summaryRefreshInstaller': 'Installer updated',
+  'nav.summaryInteractiveAll': 'Every screen waits for input',
+  'nav.summaryRawOverlay': 'Overridden with YAML',
+  'nav.summaryExtraKernelArgs': 'Extra kernel arguments',
+  'nav.summaryReporting': 'Custom progress reporting',
+  'nav.summaryNoLogCollect': 'No failure logs',
+
+  'nav.summaryRuntimeFixed': 'All values fixed',
+  'nav.summaryRuntimeKernelArg': '{field} from the boot menu',
+  'nav.summaryRuntimeInteractive': '{field} typed in the installer',
+  'nav.summaryRuntimeFieldHostname': 'Hostname',
+  'nav.summaryRuntimeFieldNetwork': 'Network',
+  'nav.summaryRuntimeFieldDisk': 'Disk',
+  'nav.summaryRuntimeHosts': 'Hosts {n}',
+
+  'nav.readyTitle': 'This is enough',
+  'nav.readyBody':
+    'If the rest can stay at its defaults, you can go straight to the review. You can always come back and change the network or the disk later.',
+  'nav.readyButton': 'Go to review',
 
   // --- errors ---
   'error.isoTooBig': 'The USB drive is too small',

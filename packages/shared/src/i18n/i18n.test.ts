@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { dirname, join, relative, sep } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import * as shared from '../index.js'
 import {
   createTranslator,
@@ -247,8 +250,15 @@ describe('入れ子の差し込み', () => {
 })
 
 // ---------------------------------------------------------------------------
-// 想定外の文字体系（ハングル・キリル・タイ文字…）の混入
+// 選択肢のラベルと、想定外の文字体系（ハングル・キリル・タイ文字…）の混入
 // ---------------------------------------------------------------------------
+//
+// 選択肢（`presets.ts` / `provisioning.ts` / `advanced.ts` の配列）は以前
+// `labelJa` / `labelEn` を直接持っていた。表示は両言語とも正しかったが、
+// **i18n の機構が 2 つある**ので、辞書だけを直しても選択肢は古いまま残る。
+// いまは辞書のキー（`MsgKey`）を持ち、renderer が `t(c.label)` で引く。
+// この節はその契約を機械に見張らせる（キーが実在すること・訳文が正しい文字体系であること）。
+// 「ソースに `*Ja` / `*En` の対が残っていないこと」は最後の節が別に見ている。
 //
 // 実際に `KEYBOARDS` の日本語ラベルが「韓国語 (104키)」になっていた。
 // `키` は韓国語の「キー」で、日本語のラベルとしては誤り（正しくは `104キー`）。
@@ -278,27 +288,32 @@ function unexpectedChar(text: string, unexpected: RegExp): string | null {
   return `${hit[0]} (U+${cp.toString(16).toUpperCase().padStart(4, '0')})`
 }
 
-interface LabelPair {
-  /** どこにあったか（`KEYBOARDS[7].labelJa` の形）。 */
+interface LabelRef {
+  /** どこにあったか（`KEYBOARDS[7].label` の形）。 */
   readonly where: string
-  readonly ja: string
-  /** 相方。文字列でなければ `undefined`（対になっていない）。 */
-  readonly en: string | undefined
+  /** そこに書かれていた辞書のキー。 */
+  readonly key: string
 }
 
+/** 選択肢の表示名を運ぶプロパティ名。ここに足すと検査対象が広がる。 */
+const LABEL_PROPS = ['label', 'title', 'description'] as const
+
 /**
- * `@autoinstall/shared` が公開する値を歩いて、`*Ja` / `*En` の対を全部集める。
+ * `@autoinstall/shared` が公開する値を歩いて、選択肢の表示名（辞書のキー）を全部集める。
  *
- * ファイル名を並べないのは、**新しく足した対を検査から漏らさない**ため。
+ * ファイル名も配列名も並べないのは、**新しく足した選択肢を検査から漏らさない**ため。
  * `presets.ts` だけを見る検査にすると、`provisioning.ts` / `advanced.ts` に
- * 同じ形が増えたときに黙って素通りする（落とし穴 73）。
+ * 選択肢が増えたときに黙って素通りする（落とし穴 73）。
+ * 選択肢を 1 つ足せば、その `label` は自動的にここへ入る。
  *
  * ここで拾えないのは「実行時に組み立てる」もの
- * （`validate.ts` の `messageJa` / `ipc.ts` の `messageJa`）。それらは
+ * （`validate.ts` と `ipc.ts` が積む `ValidationIssue.text`）。それらは
  * 静的な値として存在しないので、この検査の範囲外。
+ * 見ているのは `packages/shared/src/autoinstall/validate-i18n.test.ts`
+ * （実際に `validateProfile` を呼んで指摘を集め、キーの実在と差し込みを見る）。
  */
-function collectLabelPairs(): LabelPair[] {
-  const found: LabelPair[] = []
+function collectChoiceLabels(): LabelRef[] {
+  const found: LabelRef[] = []
   const seen = new WeakSet<object>()
   const visit = (value: unknown, path: string, depth: number): void => {
     if (depth > 8 || typeof value !== 'object' || value === null) return
@@ -310,14 +325,8 @@ function collectLabelPairs(): LabelPair[] {
     }
     const record = value as Record<string, unknown>
     for (const [key, v] of Object.entries(record)) {
-      const base = /^(.+)Ja$/.exec(key)?.[1]
-      if (base !== undefined && typeof v === 'string') {
-        const counterpart = record[`${base}En`]
-        found.push({
-          where: `${path}.${key}`,
-          ja: v,
-          en: typeof counterpart === 'string' ? counterpart : undefined,
-        })
+      if ((LABEL_PROPS as readonly string[]).includes(key) && typeof v === 'string') {
+        found.push({ where: `${path}.${key}`, key: v })
       }
       visit(v, `${path}.${key}`, depth + 1)
     }
@@ -326,42 +335,64 @@ function collectLabelPairs(): LabelPair[] {
   return found
 }
 
-describe('想定外の文字体系', () => {
-  const pairs = collectLabelPairs()
+describe('選択肢のラベル', () => {
+  const labels = collectChoiceLabels()
 
-  it('*Ja / *En の対を実際に集められている（0 件だと何も検証しないので確認する）', () => {
-    // 走査が空振りしたまま緑になるのを防ぐ。件数は presets(63) + provisioning(12) +
-    // advanced(7) の実測。増える分には構わないので下限だけを見る。
-    expect(pairs.length).toBeGreaterThan(60)
-    const where = pairs.map((p) => p.where)
-    expect(where).toContain('KEYBOARDS[7].labelJa')
-    expect(where).toContain('POST_INSTALL_PRESETS[0].titleJa')
-    expect(where).toContain('POST_INSTALL_PRESETS[0].descriptionJa')
-    expect(where).toContain('SHELL_CHOICES[0].labelJa')
-    expect(where).toContain('KERNEL_FLAVORS[0].labelJa')
+  it('ラベルを実際に集められている（0 件だと何も検証しないので確認する）', () => {
+    // 走査が空振りしたまま緑になるのを防ぐ。件数は presets(9+9+10+6+10+18) +
+    // provisioning(3+9) + advanced(4+3) の実測。増える分には構わないので下限だけを見る。
+    expect(labels.length).toBeGreaterThan(60)
+    const where = labels.map((p) => p.where)
+    expect(where).toContain('KEYBOARDS[7].label')
+    expect(where).toContain('POST_INSTALL_PRESETS[0].title')
+    expect(where).toContain('POST_INSTALL_PRESETS[0].description')
+    expect(where).toContain('SHELL_CHOICES[0].label')
+    expect(where).toContain('KERNEL_FLAVORS[0].label')
+    expect(where).toContain('CUDA_TOOLKIT_CHOICES[0].label')
+    expect(where).toContain('APT_FALLBACK_CHOICES[0].label')
+    expect(where).toContain('LOCALE_CHOICES[0].label')
+    expect(where).toContain('TIMEZONES[0].label')
+    expect(where).toContain('APT_MIRROR_PRESETS[0].label')
+    expect(where).toContain('COMMON_PACKAGES[0].label')
   })
 
-  it('*Ja には必ず文字列の *En が対になっている', () => {
-    expect(pairs.filter((p) => p.en === undefined).map((p) => p.where)).toEqual([])
+  it('すべてのラベルが両方の辞書に実在する（実在しないと画面にキー名が出る）', () => {
+    // `createTranslator` は未知のキーをそのまま返すので、綴りを間違えた選択肢は
+    // 画面に `basics.keyboardKr140` のような英数字を出す。型（MsgKey）でも
+    // 弾けるが、`as MsgKey` で抜けられるし、辞書からキーを消した側は気づけない。
+    const missing = labels
+      .filter((l) => ja[l.key as MsgKey] === undefined || en[l.key as MsgKey] === undefined)
+      .map((l) => `${l.where}: "${l.key}"`)
+    expect(missing, 'ja.ts / en.ts に無いキーを選択肢が指しています').toEqual([])
   })
 
-  it('日本語のラベルに想定外の文字体系が混ざっていない', () => {
-    const bad = pairs
-      .map((p) => ({ where: p.where, text: p.ja, hit: unexpectedChar(p.ja, UNEXPECTED_IN_JA) }))
-      .filter((b) => b.hit !== null)
-      .map((b) => `${b.where}: ${b.hit} in ${b.text}`)
-    expect(bad, 'ハングル・キリル・タイ文字などが日本語のラベルに混ざっています').toEqual([])
-  })
-
-  it('英語のラベルに想定外の文字体系が混ざっていない', () => {
-    const bad = pairs
-      .filter((p) => p.en !== undefined)
-      .map((p) => ({ where: p.where, text: p.en!, hit: unexpectedChar(p.en!, UNEXPECTED_IN_EN) }))
-      .filter((b) => b.hit !== null)
-      .map((b) => `${b.where.replace(/Ja$/, 'En')}: ${b.hit} in ${b.text}`)
+  it('ラベルを英語に訳すと日本語が残らない', () => {
+    const bad = labels
+      .map((l) => ({ where: l.where, text: formatLocalized('en', localized(l.key as MsgKey)) }))
+      .filter((b) => /[ぁ-んァ-ヶ一-龠]/.test(b.text) || b.text === '')
+      .map((b) => `${b.where}: ${b.text}`)
     expect(bad).toEqual([])
   })
 
+  it('ラベルに想定外の文字体系が混ざっていない', () => {
+    // 訳文そのものの検査は下の「ja / en の辞書」が全キーに対して行うが、
+    // 選択肢のラベルは製品名・規格名（`104キー` / `C.UTF-8`）を含むので、
+    // ここでも実際に引いた文字列で確かめる。
+    const bad: string[] = []
+    for (const l of labels) {
+      const jaText = ja[l.key as MsgKey]
+      const enText = en[l.key as MsgKey]
+      if (jaText === undefined || enText === undefined) continue
+      const jaHit = unexpectedChar(jaText, UNEXPECTED_IN_JA)
+      if (jaHit !== null) bad.push(`${l.where} (ja): ${jaHit} in ${jaText}`)
+      const enHit = unexpectedChar(enText, UNEXPECTED_IN_EN)
+      if (enHit !== null) bad.push(`${l.where} (en): ${enHit} in ${enText}`)
+    }
+    expect(bad, 'ハングル・キリル・タイ文字などがラベルに混ざっています').toEqual([])
+  })
+})
+
+describe('想定外の文字体系', () => {
   it('ja の辞書に想定外の文字体系が混ざっていない', () => {
     const bad = Object.entries(ja)
       .map(([k, v]) => ({ k, v, hit: unexpectedChar(v, UNEXPECTED_IN_JA) }))
@@ -391,5 +422,244 @@ describe('想定外の文字体系', () => {
     // en 側はかなも漢字も落とす
     expect(unexpectedChar('Korean (104\u30AD\u30FC)', UNEXPECTED_IN_EN)).toBe('\u30AD (U+30AD)')
     expect(unexpectedChar('Korean (104-key)', UNEXPECTED_IN_EN)).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// ソースに `*Ja` / `*En` の対が残っていないこと
+// ---------------------------------------------------------------------------
+//
+// 訳文の持ち方は 1 つでなければならない。**辞書（`ja.ts` / `en.ts`）のキー**か、
+// それを運ぶ `LocalizedText` か、そのどちらかだけ。オブジェクトが `labelJa` と
+// `labelEn` を並べて持つ形は、表示そのものは正しくなるが i18n の機構が 2 つになる。
+// そうなると「`ja.ts` に文言を足したのに画面が変わらない」「辞書のキー検査
+// （`localized-guard.test.ts`）がその文言を見ていない」が起きる。実際に
+// `presets.ts` / `provisioning.ts` / `advanced.ts` の 75 か所がその状態だった。
+//
+// **この検査がどこまで見ているか（正直な範囲）**
+//
+//   走査するのは `packages/shared/src` / `packages/media/src` / `apps/desktop/src` と
+//   `scripts`（`*.test.ts` / `*.test.tsx` を除く。`.mts` も読む）。
+//   `scripts/` を足したのは、`ValidationIssue` から `messageJa` が消えたあとも
+//   4 本が読み続け、検証が落ちたときの理由が `undefined` になっていたから。
+//   `scripts/dev/` は `.gitignore` された使い捨ての置き場なので見ない
+//   （手元にあるかどうかで結果が変わる検査にしない）。
+//   コメントは落とすので、この節や `presets.ts` の「以前は `labelJa` だった」という
+//   説明文は引っかからない。
+//
+//   見ているのは「識別子として `Ja` / `En` で終わる名前」だけで、字句解析はしていない。
+//   したがって:
+//     - 文字列リテラルの中の同じ綴りも拾う（＝**誤検出**しうる。現在のソースには無い）。
+//     - `ja` / `en` という**小文字**のプロパティ名（`{ja: '…', en: '…'}`）は拾わない。
+//       これは別の形の同じ間違いだが、`Locale` の値そのものが `'ja' | 'en'` なので
+//       名前だけでは区別できない（＝**取りこぼし**）。
+//     - 正規表現リテラル内の素の `//` を行コメントと誤読する（取りこぼし）。
+
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../../..')
+const SCAN_DIRS = ['packages/shared/src', 'packages/media/src', 'apps/desktop/src', 'scripts']
+/** 走査しないディレクトリ（リポジトリルートからの相対、`/` 区切り）。 */
+const SCAN_SKIP_DIRS = new Set(['scripts/dev'])
+
+interface AllowedName {
+  /** リポジトリルートからの相対パス（`/` 区切り）。 */
+  readonly file: string
+  /** 許可する識別子そのもの。ファイル単位ではなく**この名前だけ**を許す。 */
+  readonly name: string
+  readonly reason: string
+}
+
+/**
+ * 意図的な例外。1 件ずつ理由を書く。
+ *
+ * **いまは空**。選択肢の `labelJa` / `titleJa` / `descriptionJa` と
+ * `seed-builder.ts` の `whatJa` は辞書のキーに、`ValidationIssue` の
+ * `messageJa` / `messageEn` は `LocalizedText` に移し終えている。
+ * 例外を足すときは「なぜ辞書に置けないのか」を書くこと。下の it が
+ * 「直したのに例外だけ残っている」状態を落とす。
+ */
+const NAME_ALLOWLIST: readonly AllowedName[] = []
+
+/**
+ * コメントを空白に潰す（行数は保つ）。`localized-guard.test.ts` と同じ近似で、
+ * 行をまたげるのはブロックコメントとテンプレートリテラルだけ。
+ */
+function stripSourceComments(source: string): string {
+  let out = ''
+  let inBlock = false
+  let quote: "'" | '"' | '`' | null = null
+  for (const raw of source.split('\n')) {
+    let kept = ''
+    for (let i = 0; i < raw.length; i++) {
+      const c = raw[i]!
+      const next = raw[i + 1]
+      if (inBlock) {
+        if (c === '*' && next === '/') {
+          inBlock = false
+          kept += '  '
+          i++
+          continue
+        }
+        kept += ' '
+        continue
+      }
+      if (quote !== null) {
+        kept += c
+        if (c === '\\') {
+          kept += next ?? ''
+          i++
+          continue
+        }
+        if (c === quote) quote = null
+        continue
+      }
+      if (c === '/' && next === '*') {
+        inBlock = true
+        kept += '  '
+        i++
+        continue
+      }
+      if (c === '/' && next === '/' && raw[i - 1] !== '\\') {
+        kept += ' '.repeat(raw.length - i)
+        break
+      }
+      if (c === "'" || c === '"' || c === '`') {
+        quote = c
+        kept += c
+        continue
+      }
+      kept += c
+    }
+    if (quote === "'" || quote === '"') quote = null
+    out += `${kept}\n`
+  }
+  return out
+}
+
+/** `Ja` / `En` で終わる識別子を抜き出す。`/g` を持つので抽出専用（落とし穴 63）。 */
+const JA_EN_NAME = /\b[A-Za-z_$][A-Za-z0-9_$]*?(?:Ja|En)\b/g
+
+interface NameHit {
+  readonly file: string
+  readonly line: number
+  readonly name: string
+  readonly source: string
+}
+
+function listScanned(): { file: string; code: string }[] {
+  const out: { file: string; code: string }[] = []
+  const walk = (dir: string): void => {
+    for (const name of readdirSync(dir)) {
+      const full = join(dir, name)
+      const rel = relative(REPO_ROOT, full).split(sep).join('/')
+      if (statSync(full).isDirectory()) {
+        if (!SCAN_SKIP_DIRS.has(rel)) walk(full)
+        continue
+      }
+      // `scripts/` は `.mts` なので拡張子を広げる。広げないと scripts を
+      // SCAN_DIRS に足しても 1 件も読まない「何も検証しない検査」になる。
+      if (!/\.(ts|tsx|mts)$/.test(name)) continue
+      if (name.endsWith('.test.ts') || name.endsWith('.test.tsx')) continue
+      out.push({
+        file: rel,
+        code: stripSourceComments(readFileSync(full, 'utf8')),
+      })
+    }
+  }
+  for (const d of SCAN_DIRS) walk(join(REPO_ROOT, d))
+  return out.sort((a, b) => a.file.localeCompare(b.file))
+}
+
+function findJaEnNames(files: readonly { file: string; code: string }[]): NameHit[] {
+  const hits: NameHit[] = []
+  for (const { file, code } of files) {
+    code.split('\n').forEach((line, i) => {
+      for (const m of line.matchAll(JA_EN_NAME)) {
+        hits.push({ file, line: i + 1, name: m[0], source: line.trim() })
+      }
+    })
+  }
+  return hits
+}
+
+describe('i18n の機構が 2 つに戻っていない', () => {
+  const files = listScanned()
+  const hits = findJaEnNames(files)
+
+  it('走査対象を実際に読めている（空だと何も検証しないので確認する）', () => {
+    const names = files.map((f) => f.file)
+    expect(names.length).toBeGreaterThan(30)
+    expect(names).toContain('packages/shared/src/autoinstall/presets.ts')
+    expect(names).toContain('packages/shared/src/autoinstall/provisioning.ts')
+    expect(names).toContain('packages/shared/src/autoinstall/advanced.ts')
+    expect(names).toContain('packages/shared/src/autoinstall/validate.ts')
+    expect(names).toContain('apps/desktop/src/main/seed-builder.ts')
+    expect(names).toContain('apps/desktop/src/renderer/src/lib/i18n.ts')
+    // `scripts/` を実際に読めていること。ここが空だと、`.mts` を拾えていないのに
+    // 「scripts も見ている」と言うだけの検査になる。
+    expect(names).toContain('scripts/smoke-media.mts')
+    expect(names).toContain('scripts/e2e-matrix.mts')
+    expect(names).toContain('scripts/e2e-write-usb.mts')
+    expect(names).toContain('scripts/e2e-worker-usb.mts')
+    expect(names.filter((n) => n.startsWith('scripts/dev/'))).toEqual([])
+    expect(names.filter((n) => n.includes('.test.'))).toEqual([])
+    // コメント除去が働いていること。**実在する文面**で確かめる
+    // （このリポジトリに無い語で書くと、除去が壊れていても通る空の検査になる）。
+    const presets = files.find((f) => f.file === 'packages/shared/src/autoinstall/presets.ts')!
+    expect(presets.code).toContain('export interface KeyboardChoice extends Choice')
+    // `// **表示名は辞書のキーで持つ。** …`（行コメント）
+    expect(presets.code, '行コメントが残っている').not.toContain('表示名は辞書のキーで持つ')
+    // `/** 画面に出す名前。… */`（ブロックコメント）
+    expect(presets.code, 'ブロックコメントが残っている').not.toContain('画面に出す名前')
+  })
+
+  it('`*Ja` / `*En` で終わる識別子が残っていない（例外は NAME_ALLOWLIST に理由つきで）', () => {
+    const remaining = hits.filter(
+      (h) => !NAME_ALLOWLIST.some((a) => a.file === h.file && a.name === h.name),
+    )
+    const report = remaining
+      .map((h) => `  ${h.file}:${h.line}\n    ${h.name}\n    ${h.source}`)
+      .join('\n')
+    expect(
+      remaining.map((h) => `${h.file}:${h.line} ${h.name}`),
+      remaining.length === 0
+        ? ''
+        : `訳文を「ja / en の両方を持つオブジェクト」で運んでいる箇所が ${remaining.length} 件あります。\n` +
+            'ja.ts / en.ts にキーを足し、そのキー (MsgKey) か LocalizedText で運んでください。\n' +
+            '意図的な例外なら i18n.test.ts の NAME_ALLOWLIST に理由つきで足してください。\n' +
+            report,
+    ).toEqual([])
+  })
+
+  it('NAME_ALLOWLIST に死んだ例外が残っていない', () => {
+    const unused = NAME_ALLOWLIST.filter(
+      (a) => !hits.some((h) => h.file === a.file && h.name === a.name),
+    )
+    expect(
+      unused.map((a) => `${a.file}: ${a.name}`),
+      '直したのに例外だけ残ると、次に増えた対をそのまま通してしまいます',
+    ).toEqual([])
+  })
+
+  it('検査そのものが効く（対を書いたら落ちることを確かめる）', () => {
+    // この it が無いと、正規表現やコメント除去を書き間違えて「何も検出しない検査」に
+    // なっても全部緑のままになる（落とし穴 57）。
+    const sample = [
+      "const A = [{ value: 'x', labelJa: 'a', labelEn: 'b' }]",
+      '// labelJa と書いたコメントは拾わない',
+      '/** titleJa もブロックコメントなら拾わない */',
+      "const B = { label: 'basics.localeC' }",
+      // 末尾が小文字の `en` / `ja` のふつうの語を誤検出しない
+      'const open = hidden ? 1 : 2',
+    ].join('\n')
+    const found = findJaEnNames([{ file: 'sample.ts', code: stripSourceComments(sample) }])
+    expect(found.map((h) => h.name)).toEqual(['labelJa', 'labelEn'])
+    // 直したあとの形は 1 件も拾わない
+    const fixed = findJaEnNames([
+      {
+        file: 'sample.ts',
+        code: stripSourceComments("const A = [{ value: 'x', label: 'basics.localeC' }]"),
+      },
+    ])
+    expect(fixed).toEqual([])
   })
 })

@@ -11,6 +11,7 @@ import {
   type IsoFileInfo,
   type Locale,
   type LocalizedText,
+  type MsgKey,
   type ProfileSummary,
   type WriteStatus,
 } from '@autoinstall/shared'
@@ -43,18 +44,73 @@ export type StepId =
   | 'review'
   | 'write'
 
-export const STEP_ORDER: readonly StepId[] = [
-  'iso',
-  'basics',
-  'user',
-  'network',
-  'storage',
-  'runtime',
-  'software',
-  'postinstall',
-  'review',
-  'write',
+/** サイドバーの見出し。`Record<StepId, MsgKey>` なのでステップを足すと型で気づく。 */
+export const STEP_LABELS: Record<StepId, MsgKey> = {
+  iso: 'step.iso',
+  basics: 'step.basics',
+  user: 'step.user',
+  network: 'step.network',
+  storage: 'step.storage',
+  runtime: 'step.runtime',
+  software: 'step.software',
+  postinstall: 'step.postinstall',
+  review: 'step.review',
+  write: 'step.write',
+}
+
+/**
+ * サイドバーのグループ。
+ *
+ * 基準は「subiquity か Ubuntu Desktop / Windows の GUI インストーラを一度でも
+ * 通したことがある人」。その人が**知っている概念だけで最後まで行ける道**を
+ * 上のグループに置き、それを超えるものを下へ送る。
+ *
+ * - `required` … インストーラが必ず聞く。飛ばせない
+ * - `optional` … インストーラも聞くが、既定のまま通せる
+ * - `extra`    … インストーラには無い。既定は何もしない
+ * - `finish`   … 確認と書き込み
+ */
+export interface StepGroup {
+  readonly id: 'required' | 'optional' | 'extra' | 'finish'
+  readonly title: MsgKey
+  readonly hint: MsgKey
+  readonly steps: readonly StepId[]
+}
+
+export const STEP_GROUPS: readonly StepGroup[] = [
+  {
+    id: 'required',
+    title: 'nav.groupRequired',
+    hint: 'nav.groupRequiredHint',
+    steps: ['iso', 'basics', 'user'],
+  },
+  {
+    id: 'optional',
+    title: 'nav.groupOptional',
+    hint: 'nav.groupOptionalHint',
+    steps: ['network', 'storage', 'software'],
+  },
+  {
+    id: 'extra',
+    title: 'nav.groupExtra',
+    hint: 'nav.groupExtraHint',
+    // `runtime`（起動メニューで値を差し替える）はこのアプリで最も上級の概念なので、
+    // `software` / `postinstall` より後ろに置く。以前は 6 番目にあった。
+    steps: ['postinstall', 'runtime'],
+  },
+  {
+    id: 'finish',
+    title: 'nav.groupFinish',
+    hint: 'nav.groupFinishHint',
+    steps: ['review', 'write'],
+  },
 ]
+
+/**
+ * ステップの順序。**グループから導く**（2 つ並べると必ず食い違う）。
+ * 番号は全体の通し番号のままにする（グループごとに 1 から振り直さない）。
+ */
+export const STEP_ORDER: readonly StepId[] = STEP_GROUPS.flatMap((g) => [...g.steps])
 
 interface AppState {
   ready: boolean
@@ -87,6 +143,24 @@ interface AppState {
    * **訳す前**のまま持つ（描画するときに `useTl` で訳す）。
    */
   profileNotes: LocalizedText[]
+  /**
+   * **プロファイルが丸ごと差し替わった回数**。
+   *
+   * 画面の中には「開いた時点の設定」から初期値を決めるものがある
+   * （`Disclosure` の開閉が代表。既定から変わっていれば開いて出す）。
+   * これは state なので、`profile` を差し替えても勝手には作り直されない。
+   * ステップを移動すれば `App` の `key` で作り直されるが、
+   * **同じステップに居たままプロファイルを開く**と作り直されず、
+   * 別のプロファイルの設定が折りたたみの中に隠れる。
+   *
+   * だから差し替えの回数を数えて `key` に混ぜる。増やすのは
+   * **プロファイルを丸ごと入れ替える 3 か所だけ**
+   * （`openProfile` / `loadProfileFromDisk` / `newProfile`）。
+   * `updateProfile` や `saveCurrentProfile` で増やしてはいけない。
+   * 増やすと 1 文字打つたびに画面が作り直され、入力途中の下書き
+   * （`useListDraft`）が消える。
+   */
+  profileGeneration: number
 
   init(): Promise<void>
   setStep(step: StepId): void
@@ -150,6 +224,7 @@ export const useStore = create<AppState>((set, get) => ({
   currentProfileId: null,
   dirty: false,
   profileNotes: [],
+  profileGeneration: 0,
 
   async init() {
     const settings = await window.autoinstall.getSettings()
@@ -373,6 +448,7 @@ export const useStore = create<AppState>((set, get) => ({
       profileNotes: loaded.notes,
       passwordDraft: '',
       passwordConfirmDraft: '',
+      profileGeneration: get().profileGeneration + 1,
     })
     void get().regenerate()
   },
@@ -407,6 +483,7 @@ export const useStore = create<AppState>((set, get) => ({
       profileNotes: loaded.notes,
       passwordDraft: '',
       passwordConfirmDraft: '',
+      profileGeneration: get().profileGeneration + 1,
     })
     void get().regenerate()
   },
@@ -434,6 +511,7 @@ export const useStore = create<AppState>((set, get) => ({
       profileNotes: [],
       passwordDraft: '',
       passwordConfirmDraft: '',
+      profileGeneration: get().profileGeneration + 1,
     })
     void get().regenerate()
   },
