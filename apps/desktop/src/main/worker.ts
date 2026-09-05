@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { connectReporter, runWorkerJob, type WorkerJob } from '@autoinstall/media'
+import { displayTextOf } from './worker-message.js'
 
 // 昇格プロセスのエントリポイント。
 // `ELECTRON_RUN_AS_NODE=1 <electron> out/main/worker.js <job.json>` として起動される。
@@ -8,6 +9,8 @@ import { connectReporter, runWorkerJob, type WorkerJob } from '@autoinstall/medi
 async function main(): Promise<void> {
   const jobPath = process.argv[2]
   if (!jobPath) {
+    // 開発者向け診断。supervisor は spawnDirect / spawnElevated のどちらでも必ず
+    // ジョブファイルを渡すので、手でワーカーを叩いたときにしか到達しない。
     process.stderr.write('ジョブファイルが指定されていません。\n')
     process.exit(2)
   }
@@ -22,9 +25,11 @@ async function main(): Promise<void> {
     reporter.send({
       type: 'error',
       jobId: job.jobId,
-      message: e.message,
+      // 訳した総括文 + 生の詳細。開発者向けの日本語 message は stack の 1 行目に残る
+      // （stack が無い実装でも消えないよう message へフォールバックする）。
+      message: displayTextOf(e),
       name: e.name,
-      detail: e.stack ?? null,
+      detail: e.stack ?? e.message,
     })
     reporter.close()
     // 親が exit コードで区別できるようにする

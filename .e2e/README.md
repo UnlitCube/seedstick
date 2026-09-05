@@ -52,6 +52,22 @@ MBR / GPT / ISO9660 / grub.cfg / CIDATA の中身まで検証する。
 進捗を 127.0.0.1 の TCP に NDJSON で受け取る。書き込み結果の検証に加えて、
 hello / progress / done の疎通とワーカー側のデバイス再検証まで確かめる。
 
+### ログの先頭を必ず見る
+
+どちらのスクリプトも、実行開始時に次の 2 行を出す（`scripts/lib/git-revision.mts`）。
+`run-elevated.ps1` のログでは 1〜2 行目になる。
+
+```
+実行  : scripts/e2e-worker-usb.mts  2026-09-05T07:06:27.431Z
+HEAD  : 5ab2e7819e13c400310d9f79384e1982b3930c9d (uncommitted changes: 3 files)
+```
+
+**どのコードに対する結果なのかはここで確かめる。** 作業ツリーが汚れていれば
+`(uncommitted changes: N files)` と付くので、その SHA を見に行っても
+同じものは再現しない。git が使えない環境では `unknown` と出して続行する。
+この情報を出すのはスクリプト側の 1 か所だけで、`run-elevated.ps1` は
+ログへ流すだけ（二重に出さない）。
+
 デバイスは省略すると「選択できる USB の先頭」を自動で選ぶ。
 明示するなら 2 つ目の引数に `\\.\PhysicalDrive1` のように渡す
 （バックスラッシュは 2 個ずつ必要）。

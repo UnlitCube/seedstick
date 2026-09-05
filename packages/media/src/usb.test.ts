@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import { createHash } from 'node:crypto'
+import { LOCALES, formatLocalized, ja, en, placeholdersOf, type LocalizedText } from '@autoinstall/shared'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { MemoryBlockDevice, SparseFixtureDevice, SECTOR_SIZE } from './blockdev/index.js'
@@ -15,6 +16,7 @@ import {
   type WriteResult,
 } from './writer/execute.js'
 import { readFatImage } from './fat/read.js'
+import { DeviceWriteStalledError } from './blockdev/raw.js'
 
 // 実 ISO のフィクスチャに対して「検査 → 計画 → 書き込み → 読み戻し」を丸ごと通す統合テスト。
 // これが通れば、実機に書く前にレイアウトと改変ロジックの正しさが担保される。
@@ -349,9 +351,16 @@ describe('レイアウトの安全性', () => {
     const err = await expectPlanRejects('ubuntu-24.04.4-live-server-amd64', 3_400_000_000)
     expect(err).toBeInstanceOf(LayoutError)
     expect((err as LayoutError).reason).toBe('disk-too-small')
-    expect(err.message).toMatch(/容量が足りません/)
+    // 画面に出るのは訳される側 (text)。文面ではなくキーと差し込み値を確かめる
+    // （日本語の文面を正として固定すると、英語 UI が壊れても気づけない：落とし穴 56）。
+    const text = (err as LayoutError).text
+    expect(text.key).toBe('layout.diskTooSmall')
     // 必要な容量が具体的に示される（ユーザーがどの USB を用意すべきか分かる）
-    expect(err.message).toMatch(/少なくとも [\d.]+ GB 必要/)
+    expect(text.params?.required).toMatch(/^[\d.]+ GB$/)
+    expect(text.params?.deviceSize).toMatch(/^[\d.]+ GB$/)
+    expect(formatLocalized('en', text)).toMatch(/needs at least [\d.]+ GB/)
+    // 開発者向けの message は日本語のまま残す（ログとバグ報告の突き合わせに使う）
+    expect(err.message).toMatch(/容量が足りません/)
   })
 
   it('途中で切れた ISO を拒否する（重なった GPT を作らない）', async () => {
@@ -380,6 +389,12 @@ describe('レイアウトの安全性', () => {
     // 読み戻し検証は「書いたものが読める」ので成功し、起動しない USB が出来上がる。
     expect(err).toBeInstanceOf(LayoutError)
     expect((err as LayoutError).reason).toBe('iso-truncated')
+    const text = (err as LayoutError).text
+    expect(text.key).toBe('layout.isoTruncated')
+    expect(text.params?.partition).toBe('ISO9660')
+    expect(text.params?.fileSize).toBe('0.10 GB')
+    // 英語 UI でも「どこまで続いているはずか」が読める
+    expect(formatLocalized('en', text)).toMatch(/truncated.*ISO9660.*only 0\.10 GB/s)
     expect((err as LayoutError).message).toMatch(/途中で切れています/)
   })
 
@@ -395,10 +410,11 @@ describe('レイアウトの安全性', () => {
   it('最初の書き込みで MBR を消し、パーティションテーブルは最後に書く', async () => {
     const { plan } = await makePlan('ubuntu-24.04.4-live-server-amd64')
     expect(plan.ops[0]).toMatchObject({ kind: 'zero', diskOffset: 0, length: SECTOR_SIZE })
-    expect(plan.finalOps.map((o) => o.label)).toEqual([
-      'GPT パーティションエントリ',
-      'GPT ヘッダ',
-      'protective MBR (GRUB ブートコード込み)',
+    // ラベルは訳される前のキーで確かめる（日本語の文面を固定しない：落とし穴 56）
+    expect(plan.finalOps.map((o) => o.label.key)).toEqual([
+      'writeOp.gptEntries',
+      'writeOp.gptHeader',
+      'writeOp.protectiveMbr',
     ])
     expect(plan.finalOps.at(-1)!.diskOffset).toBe(0)
   })
@@ -407,8 +423,8 @@ describe('レイアウトの安全性', () => {
     const { plan } = await makePlan('ubuntu-24.04.4-live-server-amd64')
     for (const op of [...plan.ops, ...plan.finalOps]) {
       const len = op.kind === 'bytes' ? op.data.length : op.length
-      expect(op.diskOffset % SECTOR_SIZE, `${op.label} のオフセット`).toBe(0)
-      expect(len % SECTOR_SIZE, `${op.label} の長さ`).toBe(0)
+      expect(op.diskOffset % SECTOR_SIZE, `${op.label.key} のオフセット`).toBe(0)
+      expect(len % SECTOR_SIZE, `${op.label.key} の長さ`).toBe(0)
     }
   })
 
@@ -419,7 +435,7 @@ describe('レイアウトの安全性', () => {
       .map((o) => ({
         s: o.diskOffset,
         e: o.diskOffset + (o.kind === 'bytes' ? o.data.length : o.length),
-        l: o.label,
+        l: o.label.key,
       }))
       .sort((a, b) => a.s - b.s)
     for (let i = 1; i < ranges.length; i++) {
@@ -447,6 +463,9 @@ describe('レイアウトの安全性', () => {
         signal: controller.signal,
       }),
     ).rejects.toThrow(WriteCancelledError)
+
+    // 経路が変わっても「USB は壊れている・作り直しが必要」が消えないように文言も持っている
+    expect(new WriteCancelledError().text.key).toBe('write.cancelledBody')
 
     expect((await usb.read(0, SECTOR_SIZE)).every((b) => b === 0)).toBe(true)
     expect(await readGpt(usb)).toBeNull()
@@ -588,5 +607,113 @@ describe('OS がマウントして書き込んでくる環境', () => {
     // 巨大なオブジェクトを expect に渡すと vitest が OOM するので自前で判定する
     expect(error).toBeInstanceOf(VerificationError)
     expect((error as VerificationError).diskOffset).toBe(cidataOffset)
+    // 画面に出るのは text。訳される側にオフセットが乗っていることまで見る
+    const text = (error as VerificationError).text
+    expect(text.key).toBe('write.verifyMismatch')
+    expect(text.params?.offset).toBe(cidataOffset)
+    expect(formatLocalized('en', text)).toContain(`offset ${cidataOffset}`)
+    // 開発者向けの message は日本語のまま。LocalizedText を素で埋めていないこと
+    expect((error as VerificationError).message).not.toContain('[object Object]')
+    expect((error as VerificationError).message).toContain('writeOp.cidata')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 画面に出る文言（LocalizedText）
+// ---------------------------------------------------------------------------
+
+/** その LocalizedText が両言語で「読める文」になることを確かめる。 */
+function expectRenders(text: LocalizedText, where: string): void {
+  // 辞書に無いキーは createTranslator がキー名をそのまま返すので、それを検出する
+  expect(ja[text.key], `${where}: ja に ${text.key} が無い`).toBeTypeOf('string')
+  expect(en[text.key], `${where}: en に ${text.key} が無い`).toBeTypeOf('string')
+  for (const locale of LOCALES) {
+    const rendered = formatLocalized(locale, text)
+    expect(rendered, `${where} (${locale})`).not.toBe(text.key)
+    // 差し込み忘れは `{name}` が残る（interpolate は空文字に落とさない）
+    expect(
+      placeholdersOf(rendered),
+      `${where} (${locale}): 差し込みが埋まっていない`,
+    ).toEqual([])
+  }
+  // 英語に日本語が残っていないこと（ここが日本語だと英語 UI で意味が通らない）
+  expect(formatLocalized('en', text), `${where}: en に日本語`).not.toMatch(
+    /[぀-ヿ一-鿿]/,
+  )
+}
+
+describe('書き込み経路の文言が両言語で出せる', () => {
+  it('すべての WriteOp のラベルが ja / en の両方で読める', async () => {
+    const { plan } = await makePlan(CASES[0]!)
+    const ops = [...plan.ops, ...plan.finalOps]
+    expect(ops.length).toBeGreaterThan(0)
+    for (const op of ops) expectRenders(op.label, `WriteOp ${op.kind}`)
+  })
+
+  it('進捗ラベルは JSON を往復しても同じもの（IPC と NDJSON を通る）', async () => {
+    const { iso, plan, patchPlan } = await makePlan(CASES[0]!)
+    const usb = new MemoryBlockDevice(USB_SIZE)
+    const labels: LocalizedText[] = []
+    const phases = new Set<string>()
+    await executeWritePlan({
+      plan,
+      isoDevice: iso,
+      targetDevice: usb,
+      patches: patchPlan.patches,
+      verify: true,
+      onProgress: (pr) => {
+        phases.add(pr.phase)
+        if (!labels.some((l) => l.key === pr.label.key)) labels.push(pr.label)
+      },
+    })
+    // 進捗・検証・完了の 3 系統のラベルが出ている
+    expect(phases.has('writing')).toBe(true)
+    expect(labels.map((l) => l.key)).toContain('writeOp.verifying')
+    expect(labels.map((l) => l.key)).toContain('write.done')
+    for (const label of labels) {
+      // 関数・Symbol・undefined を持たないこと。持つと NDJSON で別物になる
+      const roundTripped = JSON.parse(JSON.stringify(label)) as LocalizedText
+      expect(roundTripped).toEqual(label)
+      expect(formatLocalized('ja', roundTripped)).toBe(formatLocalized('ja', label))
+      expectRenders(label, `進捗 ${label.key}`)
+    }
+  }, 300_000)
+
+  it('レイアウトの失敗はすべて両言語で読める文言を持つ', async () => {
+    // 24.04.4 は 3.405 GB。CIDATA を足すと 3.4 GB には入らない
+    const tooSmall = await expectPlanRejects('ubuntu-24.04.4-live-server-amd64', 3_400_000_000)
+    expectRenders((tooSmall as LayoutError).text, 'disk-too-small')
+
+    // GPT / protective MBR が無い ISO は「対応していない形式」として弾かれる
+    const blank = new MemoryBlockDevice(64 * 1024 * 1024)
+    const err = await planUsbLayout({
+      isoDevice: blank,
+      diskSizeBytes: USB_SIZE,
+      patches: [],
+      seedFiles: SEED_FILES,
+      random: fixedRandom(),
+      timestamp: TS,
+    }).then(
+      () => null,
+      (e: unknown) => e,
+    )
+    expect(err).toBeInstanceOf(LayoutError)
+    expect((err as LayoutError).reason).toBe('not-protective-mbr')
+    expect((err as LayoutError).text.key).toBe('layout.notProtectiveMbr')
+    expectRenders((err as LayoutError).text, 'not-protective-mbr')
+  })
+
+  it('USB が抜けて書き込みが止まったときの文言が両言語で読める', () => {
+    // 実運用で最も起きやすい失敗。`RawBlockDevice` はアプリ本体で USB を書く唯一の
+    // 実装（落とし穴 32）なので、ここが日本語のままだと英語 UI で意味不明になる。
+    const stalled = new DeviceWriteStalledError(1024)
+    expect(stalled.name).toBe('DeviceWriteStalledError')
+    // 「抜けたかもしれない・挿し直して作り直す」と伝える文言であること。
+    // 単に「両言語で読める」だけだと、別のキーに差し替わっても気づけない。
+    expect(stalled.text.key).toBe('write.deviceStalled')
+    expectRenders(stalled.text, 'device-write-stalled')
+    // 開発者向けの message にはオフセットが残る（訳文には載せない）
+    expect(stalled.message).toContain('offset=1024')
+    expect(stalled.text.params).toBeUndefined()
   })
 })

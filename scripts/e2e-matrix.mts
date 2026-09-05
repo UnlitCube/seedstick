@@ -43,6 +43,7 @@ import {
   KERNEL_ARG,
   buildAutoinstallObject,
   buildGrubPlan,
+  formatLocalized,
   createDefaultProfile,
   generateUserData,
   generateMetaData,
@@ -765,13 +766,21 @@ async function main(): Promise<void> {
   const system = devices.filter((d) => d.isSystem)
   check('システムディスクが 1 台以上見つかる', system.length > 0)
   for (const d of system) {
-    check(`システムディスク ${d.id} は選べない`, !d.selectable, d.blockedReason ?? '')
+    check(
+      `システムディスク ${d.id} は選べない`,
+      !d.selectable,
+      d.blockedReason ? formatLocalized('ja', d.blockedReason) : '',
+    )
   }
   const usb = devices.filter((d) => d.bus === 'usb' && !d.isSystem)
   check('USB デバイスが見つかる', usb.length > 0)
   for (const d of usb) {
     console.log(`  ${d.id} ${d.description} ${(d.sizeBytes / 1e9).toFixed(1)} GB selectable=${d.selectable}`)
-    check(`USB ${d.id} が書き込み候補になる`, d.selectable, d.blockedReason ?? '')
+    check(
+      `USB ${d.id} が書き込み候補になる`,
+      d.selectable,
+      d.blockedReason ? formatLocalized('ja', d.blockedReason) : '',
+    )
   }
 
   // --- 1. ISO の受理・拒否（実 ISO） ---

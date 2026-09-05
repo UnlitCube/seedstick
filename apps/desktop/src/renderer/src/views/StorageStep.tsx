@@ -13,8 +13,8 @@ import { Badge, Button, Callout, Card, Field, RadioGroup, Select, Switch, TextAr
 
 type Mode = StorageConfig['mode']
 
-const RAW_TEMPLATE = `# curtin の storage config をそのまま書きます (UEFI + LVM の例)
-config:
+// 先頭のコメント行だけは訳す（テキストエリアに出るので利用者の目に触れる）。
+const RAW_TEMPLATE_BODY = `config:
   - {type: disk, id: disk0, ptable: gpt, match: {size: largest}, wipe: superblock-recursive, grub_device: false, preserve: false}
   - {type: partition, id: p-esp, device: disk0, size: 1G, flag: boot, grub_device: true, preserve: false}
   - {type: format, id: f-esp, volume: p-esp, fstype: fat32, preserve: false}
@@ -41,7 +41,7 @@ export function StorageStep(): React.JSX.Element {
   const changeMode = (mode: Mode): void => {
     if (mode === storage.mode) return
     if (mode === 'raw') {
-      setStorage({ mode: 'raw', yaml: RAW_TEMPLATE })
+      setStorage({ mode: 'raw', yaml: `# ${t('storage.rawTemplateComment')}\n${RAW_TEMPLATE_BODY}` })
       return
     }
     // 構造化モード同士の切り替えは既存の設定を保つ
@@ -72,8 +72,7 @@ export function StorageStep(): React.JSX.Element {
   return (
     <div className="space-y-5">
       <Callout tone="danger" title={t('storage.warning')}>
-        インストール先として選ばれたディスクは、既存のパーティションごと完全に消去されます。
-        本番機で使う前に、必ず仮想マシンで一度試してください。
+        {t('storage.warningBody')}
       </Callout>
 
       <Card title={t('storage.title')}>
@@ -85,24 +84,23 @@ export function StorageStep(): React.JSX.Element {
               value: 'lvm',
               label: t('storage.layoutLvm'),
               badge: <Badge tone="success">{t('common.recommended')}</Badge>,
-              description:
-                'あとから容量を増やしたりスナップショットを取ったりできます。Ubuntu の既定もこれです。',
+              description: t('storage.layoutLvmHint'),
             },
             {
               value: 'direct',
               label: t('storage.layoutDirect'),
-              description: 'パーティションを直接切ります。構成が単純で分かりやすくなります。',
+              description: t('storage.layoutDirectHint'),
             },
             {
               value: 'zfs',
               label: t('storage.layoutZfs'),
-              description: 'ZFS ルートを使います。スナップショットやデータ整合性チェックが強力です。',
+              description: t('storage.layoutZfsHint'),
             },
             {
               value: 'raw',
               label: t('storage.layoutRaw'),
               badge: <Badge>{t('common.advanced')}</Badge>,
-              description: 'RAID や複雑なパーティション構成を自分で書く場合に選びます。',
+              description: t('storage.layoutRawHint'),
             },
           ]}
         />
@@ -114,7 +112,7 @@ export function StorageStep(): React.JSX.Element {
             <DiskMatchPicker value={storage.match} onChange={(match) => setStorage({ ...storage, match })} />
           </Card>
 
-          <Card title="詳細">
+          <Card title={t('storage.detailsTitle')}>
             <div className="space-y-3">
               {storage.mode === 'lvm' && (
                 <Switch
@@ -210,7 +208,7 @@ export function StorageStep(): React.JSX.Element {
                     setStorage({ ...storage, encryptionPassphrase: on ? 'change-me-please' : '' })
                   }
                   label={t('storage.encrypt')}
-                  description="盗難時にデータを守れますが、起動のたびにパスフレーズの入力が必要になります。"
+                  description={t('storage.encryptHint')}
                 />
               )}
             </div>
@@ -251,7 +249,7 @@ export function StorageStep(): React.JSX.Element {
                     }
                     options={[
                       { value: 'default', label: t('storage.ptableDefault') },
-                      { value: 'gpt', label: 'GPT（明示）' },
+                      { value: 'gpt', label: t('storage.ptableGpt') },
                       { value: 'msdos', label: t('storage.ptableMsdos') },
                     ]}
                   />
@@ -264,8 +262,8 @@ export function StorageStep(): React.JSX.Element {
 
       {storage.mode === 'raw' && (
         <Card
-          title="curtin の storage config"
-          description="autoinstall の storage キーにそのまま入ります。誤るとインストールが途中で失敗します。"
+          title={t('storage.rawTitle')}
+          description={t('storage.rawHint')}
         >
           <TextArea
             rows={18}
@@ -320,7 +318,7 @@ function DiskMatchPicker({
         ]}
       />
       {value.kind === 'path' && (
-        <Field label="デバイスのパス" hint="例: /dev/nvme0n1、/dev/sda。ワイルドカード (*) が使えます。">
+        <Field label={t('storage.pathLabel')} hint={t('storage.pathHint')}>
           {(id) => (
             <TextInput
               id={id}
@@ -334,8 +332,8 @@ function DiskMatchPicker({
       )}
       {value.kind === 'serial' && (
         <Field
-          label="シリアル番号"
-          hint="例: CT500MX* のようにワイルドカードが使えます。複数ディスク機で最も確実な指定方法です。"
+          label={t('storage.serialLabel')}
+          hint={t('storage.serialHint')}
         >
           {(id) => (
             <TextInput
@@ -349,7 +347,7 @@ function DiskMatchPicker({
         </Field>
       )}
       {value.kind === 'model' && (
-        <Field label="モデル名" hint="例: Samsung SSD*。ワイルドカードが使えます。">
+        <Field label={t('storage.modelLabel')} hint={t('storage.modelHint')}>
           {(id) => (
             <TextInput
               id={id}
@@ -362,9 +360,7 @@ function DiskMatchPicker({
         </Field>
       )}
       {(value.kind === 'largest' || value.kind === 'smallest' || value.kind === 'ssd') && (
-        <Callout tone="info">
-          インストール USB 自身がこの条件で選ばれることはありません（インストーラが除外します）。
-        </Callout>
+        <Callout tone="info">{t('storage.usbExcluded')}</Callout>
       )}
     </div>
   )

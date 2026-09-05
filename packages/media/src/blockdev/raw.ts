@@ -1,4 +1,5 @@
 import { open, type FileHandle } from 'node:fs/promises'
+import { localized, type LocalizedText } from '@autoinstall/shared'
 import { SECTOR_SIZE, type BlockDevice } from './index.js'
 
 // 物理デバイス (\\.\PhysicalDriveN, /dev/rdiskN, /dev/sdX) への読み書き。
@@ -6,6 +7,24 @@ import { SECTOR_SIZE, type BlockDevice } from './index.js'
 // Windows の落とし穴: `\\.\PhysicalDriveN` はセクタ境界・セクタ長でしか読み書きできない。
 // 揃っていないと EINVAL になり、しかもエラーメッセージから原因が分からない。
 // そのため読み書きの前後で必ずセクタ境界に丸め、必要なら read-modify-write する。
+
+/**
+ * デバイスへの書き込みが 1 バイトも進まなくなった。
+ *
+ * `RawBlockDevice` はアプリ本体で USB を書く唯一の実装（落とし穴 32）なので、
+ * ここで投げた例外は昇格ワーカー → NDJSON → `WriteStatus.message` と辿って
+ * **そのまま画面に出る**。実運用で最も起きやすい失敗（書き込み中に USB を抜いた）
+ * なので、利用者向けの文言を `text` で運ぶ。
+ * `message` の方はオフセット付きの開発者向け診断で、日本語のまま残す。
+ */
+export class DeviceWriteStalledError extends Error {
+  readonly text: LocalizedText = localized('write.deviceStalled')
+
+  constructor(readonly offset: number) {
+    super(`デバイスへの書き込みが進みませんでした (offset=${offset})。USB メモリが抜かれた可能性があります。`)
+    this.name = 'DeviceWriteStalledError'
+  }
+}
 
 export interface RawDeviceOptions {
   /** デバイスの論理セクタサイズ。既定 512。4Kn デバイスでは 4096。 */
@@ -96,11 +115,7 @@ export class RawBlockDevice implements BlockDevice {
         data.length - written,
         offset + written,
       )
-      if (bytesWritten === 0) {
-        throw new Error(
-          `デバイスへの書き込みが進みませんでした (offset=${offset + written})。USB メモリが抜かれた可能性があります。`,
-        )
-      }
+      if (bytesWritten === 0) throw new DeviceWriteStalledError(offset + written)
       written += bytesWritten
     }
   }

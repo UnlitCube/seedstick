@@ -12,13 +12,13 @@ import {
 // 安全判定の純粋な部分は @autoinstall/shared 側にある。
 import { needsExtraCaution, type DeviceInfo } from '@autoinstall/shared'
 import { useStore } from '../store.js'
-import { useT } from '../lib/i18n.js'
+import { useT, useTl, useTx } from '../lib/i18n.js'
 import { formatBytes, formatEta, formatSpeed } from '../lib/format.js'
 import { Badge, Button, Callout, Card, Modal, ProgressBar, Switch, TextInput } from '../components/ui.js'
 
 export function WriteStep(): React.JSX.Element {
   const t = useT()
-  const locale = useStore((s) => s.locale)
+  const tl = useTl()
   const { devices, devicesBusy, selectedDeviceId, writeStatus, iso, config, settings } = useStore()
   const refreshDevices = useStore((s) => s.refreshDevices)
   const selectDevice = useStore((s) => s.selectDevice)
@@ -46,19 +46,21 @@ export function WriteStep(): React.JSX.Element {
   return (
     <div className="space-y-5">
       {iso === null && (
-        <Callout tone="warning" title="ISO が選ばれていません">
-          最初のステップに戻って ISO ファイルを選んでください。
+        <Callout tone="warning" title={t('write.isoMissing')}>
+          {t('write.isoMissingBody')}
         </Callout>
       )}
       {config?.ok === false && (
-        <Callout tone="danger" title="設定にエラーがあります">
-          「確認」のステップでエラーを修正してから書き込んでください。
+        <Callout tone="danger" title={t('write.configInvalid')}>
+          {t('write.configInvalidBody')}
         </Callout>
       )}
 
       <Card
         title={t('write.selectDevice')}
-        description={iso ? `この ISO には ${formatBytes(iso.minimumDeviceBytes)} 以上の USB メモリが必要です。` : undefined}
+        description={
+          iso ? t('write.minimumSize', { size: formatBytes(iso.minimumDeviceBytes) }) : undefined
+        }
       >
         <div className="mb-3 flex items-center justify-between">
           <p className="text-xs text-slate-500 dark:text-slate-400">{t('write.systemDiskHidden')}</p>
@@ -98,7 +100,7 @@ export function WriteStep(): React.JSX.Element {
         {blocked.length > 0 && (
           <details className="mt-4">
             <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400">
-              書き込めないデバイス ({blocked.length} 台) を表示
+              {t('write.showBlocked', { n: blocked.length })}
             </summary>
             <ul className="mt-2 space-y-1.5">
               {blocked.map((d) => (
@@ -110,7 +112,7 @@ export function WriteStep(): React.JSX.Element {
                   <span className="min-w-0 flex-1 truncate text-slate-600 dark:text-slate-400">
                     {d.description} · {formatBytes(d.sizeBytes)}
                   </span>
-                  <Badge tone="danger">{d.blockedReason}</Badge>
+                  <BlockedBadge reason={tl(d.blockedReason)} />
                 </li>
               ))}
             </ul>
@@ -120,27 +122,29 @@ export function WriteStep(): React.JSX.Element {
 
       {tooSmall && selected !== null && iso !== null && (
         <Callout tone="danger" title={t('error.isoTooBig')}>
-          このデバイスは {formatBytes(selected.sizeBytes)} ですが、{formatBytes(iso.minimumDeviceBytes)}{' '}
-          以上が必要です。
+          {t('write.tooSmallBody', {
+            size: formatBytes(selected.sizeBytes),
+            required: formatBytes(iso.minimumDeviceBytes),
+          })}
         </Callout>
       )}
 
       {settings && (
-        <Card title="書き込みオプション">
+        <Card title={t('write.optionsTitle')}>
           <div className="space-y-2">
             <Switch
               checked={settings.verifyAfterWrite}
               disabled={busy}
               onChange={(v) => void saveSettings((s) => ({ ...s, verifyAfterWrite: v }))}
               label={t('write.verifyOption')}
-              description="書き込んだ内容を読み戻してハッシュを照合します。安価な USB メモリの不良を検出できます。"
+              description={t('write.verifyOptionHint')}
             />
             <Switch
               checked={settings.auditRecord}
               disabled={busy}
               onChange={(v) => void saveSettings((s) => ({ ...s, auditRecord: v }))}
               label={t('write.auditRecord')}
-              description="作成日時・ISO 名・設定のハッシュを autoinstall-usb.json として残します。パスワードは含みません。"
+              description={t('write.auditRecordHint')}
             />
           </div>
         </Card>
@@ -150,7 +154,7 @@ export function WriteStep(): React.JSX.Element {
 
       {writeStatus.state === 'error' && (
         <Callout tone="danger" title={t('write.failed')}>
-          <p>{writeStatus.message}</p>
+          <p>{tl(writeStatus.message) || t('error.unknown')}</p>
           {writeStatus.detail !== null && (
             <pre className="mt-2 max-h-40 overflow-auto rounded bg-slate-900/10 p-2 text-[11px] dark:bg-slate-950/40">
               {writeStatus.detail}
@@ -219,7 +223,7 @@ export function WriteStep(): React.JSX.Element {
             )}
             {selected && selected.mountpoints.length > 0 && (
               <p className="mt-1 text-xs">
-                現在マウントされています: {selected.mountpoints.join(', ')}
+                {t('write.currentlyMounted', { mountpoints: selected.mountpoints.join(', ') })}
               </p>
             )}
           </Callout>
@@ -235,15 +239,23 @@ export function WriteStep(): React.JSX.Element {
               onChange={(e) => setConfirmText(e.target.value)}
             />
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            {locale === 'ja'
-              ? '書き込み中に USB メモリを抜かないでください。'
-              : 'Do not remove the USB drive while writing.'}
-          </p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">{t('write.doNotRemove')}</p>
         </div>
       </Modal>
     </div>
   )
+}
+
+/**
+ * 選べない理由のバッジ。
+ *
+ * 理由は `LocalizedText` で運ばれてくるので、訳せない形（古いワーカー由来の
+ * 未知のキー等）だと空文字になる。空のバッジは「赤い四角が付いているのに
+ * 何も書いていない」だけで、読み手には何の情報にもならないので出さない。
+ */
+function BlockedBadge({ reason }: { reason: string }): React.JSX.Element | null {
+  if (reason.length === 0) return null
+  return <Badge tone="danger">{reason}</Badge>
 }
 
 function DeviceRow({
@@ -259,6 +271,7 @@ function DeviceRow({
   tooSmall: boolean
   onSelect: () => void
 }): React.JSX.Element {
+  const t = useT()
   return (
     <li>
       <label
@@ -290,9 +303,9 @@ function DeviceRow({
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {tooSmall && <Badge tone="danger">容量不足</Badge>}
+          {tooSmall && <Badge tone="danger">{t('write.badgeTooSmall')}</Badge>}
           {!tooSmall && needsExtraCaution(device) && (
-            <Badge tone="warning">要確認</Badge>
+            <Badge tone="warning">{t('write.badgeCaution')}</Badge>
           )}
           <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
             {formatBytes(device.sizeBytes)}
@@ -305,6 +318,7 @@ function DeviceRow({
 
 function WriteProgress(): React.JSX.Element {
   const t = useT()
+  const tl = useTl()
   const locale = useStore((s) => s.locale)
   const status = useStore((s) => s.writeStatus)
 
@@ -313,10 +327,10 @@ function WriteProgress(): React.JSX.Element {
       <Card>
         <div className="flex items-center gap-3">
           <Loader2 className="size-5 animate-spin text-sky-600" aria-hidden />
-          <p className="text-sm text-slate-700 dark:text-slate-300">{status.message}</p>
+          <p className="text-sm text-slate-700 dark:text-slate-300">{tl(status.message)}</p>
         </div>
         <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-          {t('write.elevationNeeded')} — 権限の確認ダイアログが出たら許可してください。
+          {t('write.elevationNeeded')} — {t('write.elevationAllow')}
         </p>
       </Card>
     )
@@ -355,7 +369,7 @@ function WriteProgress(): React.JSX.Element {
             {t('write.remaining')}: {formatEta(status.etaSeconds, locale)}
           </span>
         </div>
-        <p className="truncate text-xs text-slate-500 dark:text-slate-400">{status.label}</p>
+        <p className="truncate text-xs text-slate-500 dark:text-slate-400">{tl(status.label)}</p>
       </div>
     </Card>
   )
@@ -363,6 +377,7 @@ function WriteProgress(): React.JSX.Element {
 
 function DoneView(): React.JSX.Element {
   const t = useT()
+  const tx = useTx()
   const status = useStore((s) => s.writeStatus)
   const profile = useStore((s) => s.profile)
   const config = useStore((s) => s.config)
@@ -378,12 +393,16 @@ function DoneView(): React.JSX.Element {
           <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{t('write.done')}</h2>
           <p className="max-w-md text-sm text-slate-600 dark:text-slate-400">{t('write.doneBody')}</p>
           <div className="mt-2 flex flex-wrap justify-center gap-2 text-xs">
-            <Badge tone="success">{formatBytes(status.bytesWritten)} 書き込み</Badge>
-            <Badge>{Math.floor(seconds / 60)} 分 {seconds % 60} 秒</Badge>
+            <Badge tone="success">
+              {t('write.badgeWritten', { size: formatBytes(status.bytesWritten) })}
+            </Badge>
+            <Badge>
+              {t('write.badgeElapsed', { minutes: Math.floor(seconds / 60), seconds: seconds % 60 })}
+            </Badge>
             {status.verified ? (
-              <Badge tone="success">読み戻し確認 OK</Badge>
+              <Badge tone="success">{t('write.badgeVerified')}</Badge>
             ) : (
-              <Badge tone="warning">読み戻し確認なし</Badge>
+              <Badge tone="warning">{t('write.badgeNotVerified')}</Badge>
             )}
           </div>
           {/*
@@ -391,43 +410,50 @@ function DoneView(): React.JSX.Element {
             完了画面から戻れないと「アプリを再起動しないと 2 本目が作れない」ことになる。
           */}
           <Button variant="secondary" onClick={resetWrite}>
-            もう一本作る
+            {t('write.another')}
           </Button>
         </div>
       </Card>
 
-      <Card title="次にすること">
+      <Card title={t('write.nextTitle')}>
         <ol className="space-y-3 text-sm text-slate-700 dark:text-slate-300">
-          <Step n={1}>USB メモリを安全に取り外し、インストールしたいサーバーに挿します。</Step>
-          <Step n={2}>
-            サーバーの電源を入れ、起動デバイスとして USB を選びます（多くの機種で F12 / F11 / Esc）。
-          </Step>
+          <Step n={1}>{t('write.next1')}</Step>
+          <Step n={2}>{t('write.next2')}</Step>
           <Step n={3}>
-            GRUB のメニューで <strong>Try or Install Ubuntu Server [Autoinstall]</strong> を選びます
-            （30 秒で自動的に始まります）。
+            {tx('write.next3', {
+              entry: <strong>Try or Install Ubuntu Server [Autoinstall]</strong>,
+            })}
           </Step>
           <Step n={4}>
-            {config?.unattended === true
-              ? 'あとは何も操作せずに待つだけです。完了すると自動的に'
-              : '一部の項目で入力を求められます。完了すると'}
-            {profile.behavior.shutdown === 'reboot' ? '再起動します。' : '電源が切れます。'}
+            {config?.unattended === true ? t('write.next4Unattended') : t('write.next4Interactive')}{' '}
+            {profile.behavior.shutdown === 'reboot'
+              ? t('write.next4Reboot')
+              : t('write.next4Shutdown')}
           </Step>
           <Step n={5}>
-            再起動後、<code className="font-mono">{profile.user.username}</code> でログインできます。
+            {tx('write.next5Login', {
+              user: <code className="font-mono">{profile.user.username}</code>,
+            })}
             {profile.ssh.installServer && (
               <>
-                {' '}SSH は <code className="font-mono">ssh {profile.user.username}@{profile.basics.hostname}</code>{' '}
-                です。
+                {' '}
+                {tx('write.next5Ssh', {
+                  command: (
+                    <code className="font-mono">{`ssh ${profile.user.username}@${profile.basics.hostname}`}</code>
+                  ),
+                })}
               </>
             )}
           </Step>
         </ol>
         <div className="mt-4">
-          <Callout tone="info" title="うまくいかないときは">
-            インストール先の <code className="font-mono">/var/log/installer/</code> にログが残ります。
-            実際に適用された設定は{' '}
-            <code className="font-mono">/var/log/installer/autoinstall-user-data</code>{' '}
-            で確認できます（root のみ読めます）。
+          <Callout tone="info" title={t('write.troubleTitle')}>
+            {tx('write.troubleLogs', {
+              path: <code className="font-mono">/var/log/installer/</code>,
+            })}{' '}
+            {tx('write.troubleApplied', {
+              path: <code className="font-mono">/var/log/installer/autoinstall-user-data</code>,
+            })}
           </Callout>
         </div>
       </Card>

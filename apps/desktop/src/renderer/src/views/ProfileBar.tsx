@@ -115,9 +115,7 @@ function ProfileLibraryModal({
    * dirty を追跡して画面にも出しているのに、profile を差し替える経路が
    * どれもそれを見ていなかった（作りかけの設定が黙って消える）。
    */
-  const confirmDiscard = (): boolean =>
-    !dirty ||
-    window.confirm('保存していない変更があります。破棄して続けますか？')
+  const confirmDiscard = (): boolean => !dirty || window.confirm(t('profile.discardConfirm'))
   const removeProfile = useStore((s) => s.removeProfile)
   const duplicateProfile = useStore((s) => s.duplicateProfile)
   const refreshProfiles = useStore((s) => s.refreshProfiles)
@@ -219,17 +217,17 @@ function ProfileLibraryModal({
                     <div className="mt-1.5 flex flex-wrap gap-1">
                       {p.highlights.additionalUsers > 0 && (
                         <Badge>
-                          {t('profile.badgeUsers')} {p.highlights.additionalUsers}
+                          {t('profile.badgeUsersCount', { n: p.highlights.additionalUsers })}
                         </Badge>
                       )}
                       {p.highlights.deployments > 0 && (
                         <Badge>
-                          {t('profile.badgeDeployments')} {p.highlights.deployments}
+                          {t('profile.badgeDeploymentsCount', { n: p.highlights.deployments })}
                         </Badge>
                       )}
                       {p.highlights.services > 0 && (
                         <Badge>
-                          {t('profile.badgeServices')} {p.highlights.services}
+                          {t('profile.badgeServicesCount', { n: p.highlights.services })}
                         </Badge>
                       )}
                       {p.highlights.gpu && <Badge tone="info">GPU / CUDA</Badge>}
@@ -247,11 +245,13 @@ function ProfileLibraryModal({
                     <Button
                       variant="ghost"
                       title={t('profile.duplicate')}
-                      onClick={() => void duplicateProfile(p.id, `${p.name} のコピー`)}
+                      onClick={() =>
+                        void duplicateProfile(p.id, t('profile.copyName', { name: p.name }))
+                      }
                     >
                       <Copy className="size-4" aria-hidden />
                     </Button>
-                    <Button variant="ghost" title={t('common.cancel')} onClick={() => setConfirmDelete(p)}>
+                    <Button variant="ghost" title={t('profile.delete')} onClick={() => setConfirmDelete(p)}>
                       <Trash2 className="size-4" aria-hidden />
                     </Button>
                   </div>

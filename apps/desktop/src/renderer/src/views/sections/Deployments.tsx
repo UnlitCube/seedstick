@@ -7,7 +7,7 @@ import {
   type DeploymentSource,
 } from '@autoinstall/shared'
 import { useStore } from '../../store.js'
-import { useT } from '../../lib/i18n.js'
+import { useT, useTx } from '../../lib/i18n.js'
 import { formatBytes } from '../../lib/format.js'
 import {
   Badge,
@@ -95,16 +95,18 @@ export function DeploymentsSection(): React.JSX.Element {
                     ) : (
                       <Package className="size-4 shrink-0 text-slate-500" aria-hidden />
                     )}
-                    <span className="font-mono">{d.name || '(名前なし)'}</span>
+                    <span className="font-mono">{d.name || t('deploy.unnamed')}</span>
                     <span className="text-slate-400">→</span>
                     <span className="font-mono">{d.targetPath}</span>
                   </p>
                   <p className="truncate text-xs text-slate-500 dark:text-slate-400">
                     {d.source.kind === 'url'
-                      ? `初回起動時に ${d.source.url} から取得`
+                      ? t('deploy.summaryUrl', { url: d.source.url })
                       : d.source.kind === 'inline'
-                        ? `直接入力 · ${formatBytes(new Blob([d.source.content]).size)}`
-                        : `USB 同梱 · ${formatBytes(d.source.sizeBytes)}`}
+                        ? t('deploy.summaryInline', {
+                            size: formatBytes(new Blob([d.source.content]).size),
+                          })
+                        : t('deploy.summaryHostFile', { size: formatBytes(d.source.sizeBytes) })}
                     {d.kind === 'archive' && ` · ${d.archiveFormat}`}
                     {d.owner !== 'root' && ` · ${d.owner}:${d.group}`}
                   </p>
@@ -116,9 +118,9 @@ export function DeploymentsSection(): React.JSX.Element {
                 </div>
                 <div className="flex shrink-0 gap-1">
                   <Button variant="ghost" onClick={() => setEditing({ index: i, item: d })}>
-                    編集
+                    {t('common.edit')}
                   </Button>
-                  <Button variant="ghost" onClick={() => remove(i)} aria-label="削除">
+                  <Button variant="ghost" onClick={() => remove(i)} aria-label={t('common.delete')}>
                     <Trash2 className="size-4" aria-hidden />
                   </Button>
                 </div>
@@ -164,6 +166,7 @@ function DeploymentEditor({
   onSave: () => void
 }): React.JSX.Element {
   const t = useT()
+  const tx = useTx()
   const [checking, setChecking] = useState(false)
 
   // 既存のペイロードを開き直したとき、元ファイルがまだあるか確かめる
@@ -344,7 +347,7 @@ function DeploymentEditor({
         )}
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="USB 上のファイル名" required>
+          <Field label={t('deploy.fileNameOnUsb')} required>
             {(id) => (
               <TextInput
                 id={id}
@@ -442,14 +445,12 @@ function DeploymentEditor({
 
         {item.source.kind === 'host-file' && item.source.sizeBytes > 512 * 1024 * 1024 && (
           <Callout tone="warning">
-            {formatBytes(item.source.sizeBytes)} を USB に同梱します。書き込み時間が延び、USB の容量も
-            必要になります。大きなファイルは「初回起動時に URL から取得」の方が向いています。
+            {t('deploy.bundleSizeWarning', { size: formatBytes(item.source.sizeBytes) })}
           </Callout>
         )}
         {item.source.kind === 'url' && (
           <Callout tone="info">
-            初回起動時にダウンロードします。インターネットに接続できる環境が必要です。
-            <Badge tone="info">curl</Badge> が自動で追加されます。
+            {tx('deploy.urlDownloadNote', { curl: <Badge tone="info">curl</Badge> })}
           </Callout>
         )}
       </div>

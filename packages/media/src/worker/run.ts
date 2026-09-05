@@ -1,10 +1,11 @@
 import { connect, type Socket } from 'node:net'
+import { formatLocalized, localized, type LocalizedText } from '@autoinstall/shared'
 import { FileBlockDevice } from '../blockdev/index.js'
 import { RawBlockDevice } from '../blockdev/raw.js'
 import { buildIsoPatches, inspectIso } from '../isopatch/index.js'
 import { planUsbLayout } from '../layout/plan.js'
 import { executeWritePlan } from '../writer/execute.js'
-import { getPlatformOps, type PlatformOps } from '../platform/index.js'
+import { formatSize, getPlatformOps, type PlatformOps } from '../platform/index.js'
 import { encodeMessage, decodeMessages, type ControlMessage, type WorkerJob, type WorkerMessage } from './protocol.js'
 
 // 昇格プロセス側の本体。ジョブ JSON を受け取り、USB に書いて、進捗を TCP で親に返す。
@@ -82,44 +83,88 @@ export function connectReporter(port: number, token: string): Promise<WorkerRepo
  * 破壊に化けるので、書く直前にもう一度確かめる。
  */
 export class DeviceRejectedError extends Error {
-  constructor(message: string) {
+  /**
+   * 画面に出す総括。`message` は**開発者向け**で日本語のまま残す
+   * （生のバイト数など、訳しても意味の無い値を含む。ログと `WriteStatus.detail` に出る）。
+   */
+  readonly text: LocalizedText
+
+  constructor(message: string, text: LocalizedText) {
     super(message)
     this.name = 'DeviceRejectedError'
+    this.text = text
   }
 }
 
-async function assertDeviceIsWritable(platform: PlatformOps, job: WorkerJob): Promise<void> {
+export async function assertDeviceIsWritable(platform: PlatformOps, job: WorkerJob): Promise<void> {
   const devices = await platform.listDevices()
   const found = devices.find((d) => d.id === job.devicePath)
   if (!found) {
     throw new DeviceRejectedError(
       `書き込み先 ${job.devicePath} が見つかりません。取り外されたか、書き込み対象として認められないデバイスです。`,
+      localized('device.rejectedNotFound', { path: job.devicePath }),
     )
   }
   if (!found.selectable) {
-    throw new DeviceRejectedError(
-      `${job.devicePath} には書き込めません: ${found.blockedReason ?? '対象外のデバイスです'}`,
-    )
+    // **理由まで訳して伝える。** ここは「差し替えられたジョブを止めた」ことを
+    // 利用者に説明する最後の場所で、なぜ止めたのかが分からないと次の操作を選べない。
+    // 理由（`blockedReason`）は列挙側が作った別の訳文なので、入れ子のまま渡す
+    // （`MsgParams` が `LocalizedText` を許すのはこのため）。
+    // 理由が取れないときだけ、理由を含まないキーに落とす。
+    const text =
+      found.blockedReason === null
+        ? localized('device.rejectedNotWritableUnknown', { path: job.devicePath })
+        : localized('device.rejectedNotWritable', {
+            path: job.devicePath,
+            reason: found.blockedReason,
+          })
+    // message は開発者向けなので日本語のままでよい（ログと WriteStatus.detail に出る）。
+    const reason = found.blockedReason ? formatLocalized('ja', found.blockedReason) : '対象外のデバイスです'
+    throw new DeviceRejectedError(`${job.devicePath} には書き込めません: ${reason}`, text)
   }
   // サイズが食い違うと GPT のバックアップを書く位置がずれる。
   // 差し替えの兆候でもあるので厳密に一致を求める。
   if (found.sizeBytes !== job.deviceSizeBytes) {
     throw new DeviceRejectedError(
       `${job.devicePath} の容量が指示書と違います（指示 ${job.deviceSizeBytes} / 実際 ${found.sizeBytes}）。`,
+      // 読める単位だけだと、数 KB の食い違いが「32.0 GB / 32.0 GB」と同じに見えて
+      // 「なぜ止まったのか分からない」画面になる。生のバイト数も併記する。
+      localized('device.rejectedSizeMismatch', {
+        path: job.devicePath,
+        expected: `${formatSize(job.deviceSizeBytes)} (${job.deviceSizeBytes} B)`,
+        actual: `${formatSize(found.sizeBytes)} (${found.sizeBytes} B)`,
+      }),
     )
   }
   // デバイスノードは抜き差しで再利用される。容量が同じ別のディスクを
   // 誤って消さないよう、シリアルまで一致を求める。
   // 列挙でシリアルが取れない環境（一部の USB ブリッジ）では説明文で代用する。
   if (job.deviceSerial !== null && found.serial !== job.deviceSerial) {
+    const expectedSerial = job.deviceSerial
     throw new DeviceRejectedError(
       `${job.devicePath} は選んだデバイスと違います（シリアル 指示 ${job.deviceSerial} / 実際 ${found.serial ?? '不明'}）。` +
         '取り外して挿し直したか、別のデバイスに入れ替わっています。もう一度選び直してください。',
+      // 「実際のシリアルが読めない」は単語 1 個の差し込みでは訳せないので別のキーにする
+      found.serial === null
+        ? localized('device.rejectedSerialMissing', {
+            path: job.devicePath,
+            expected: expectedSerial,
+          })
+        : localized('device.rejectedSerialMismatch', {
+            path: job.devicePath,
+            expected: expectedSerial,
+            actual: found.serial,
+          }),
     )
   }
   if (job.deviceSerial === null && found.description !== job.deviceDescription) {
     throw new DeviceRejectedError(
       `${job.devicePath} は選んだデバイスと違います（指示 "${job.deviceDescription}" / 実際 "${found.description}"）。`,
+      localized('device.rejectedDescriptionMismatch', {
+        path: job.devicePath,
+        expected: job.deviceDescription,
+        actual: found.description,
+      }),
     )
   }
 }
@@ -141,7 +186,7 @@ export async function runWorkerJob(job: WorkerJob, reporter: WorkerReporter): Pr
       type: 'log',
       jobId: job.jobId,
       level: 'info',
-      message: `ISO を認識しました: ${inspection.volumeId}`,
+      text: localized('write.isoRecognized', { volumeId: inspection.volumeId }),
     })
 
     // patches は親側で作ったものをそのまま使う（親が画面に見せた内容と 1 バイトも違わないことを保証する）
@@ -167,7 +212,7 @@ export async function runWorkerJob(job: WorkerJob, reporter: WorkerReporter): Pr
       type: 'log',
       jobId: job.jobId,
       level: 'info',
-      message: 'デバイスのマウントを解除しています',
+      text: localized('write.unmounting'),
     })
     await platform.prepareForWrite(job.devicePath)
 

@@ -3,6 +3,14 @@ import { createDefaultProfile } from './defaults.js'
 import { migrateProfile } from './migrate.js'
 import { buildAutoinstallObject } from './generate.js'
 import { validateProfile } from './validate.js'
+import {
+  en,
+  formatLocalized,
+  isLocalizedText,
+  ja,
+  LOCALES,
+  type LocalizedText,
+} from '../i18n/index.js'
 
 // 保存 → 読み込みで値が失われないことを確かめる。
 //
@@ -304,8 +312,33 @@ describe('ネストしたユニオン（match / target）が保存 → 読み込
 
     // 黙って戻さない（落とし穴 50）
     expect(r.notes.length).toBeGreaterThanOrEqual(4)
-    for (const key of ['apt.fallback', 'behavior.shutdown', 'software.updates', 'storage.partitionTable']) {
-      expect(r.notes.some((n) => n.includes(key)), key).toBe(true)
+    for (const field of [
+      'migrate.field.aptFallback',
+      'migrate.field.behaviorShutdown',
+      'migrate.field.softwareUpdates',
+      'migrate.field.storagePartitionTable',
+    ]) {
+      expect(
+        r.notes.some(
+          (n) =>
+            n.key === 'migrate.enumReset' &&
+            (n.params?.['field'] as LocalizedText | undefined)?.key === field,
+        ),
+        field,
+      ).toBe(true)
+    }
+    // **どちらの言語でも、どの項目が戻ったのかが読める。**
+    // 項目名を訳文の連結で組み立てると、ここが片方の言語で崩れる。
+    for (const locale of LOCALES) {
+      const text = r.notes.map((n) => formatLocalized(locale, n)).join(' / ')
+      for (const path of [
+        'apt.fallback',
+        'behavior.shutdown',
+        'software.updates',
+        'storage.partitionTable',
+      ]) {
+        expect(text, `${locale}: ${path}`).toContain(path)
+      }
     }
 
     // 生成物にも漏れない
@@ -463,5 +496,127 @@ describe('壊れた JSON を読んでも「使える形」を返す', () => {
     const ids = migrateProfile(saved).profile.postInstall.services.map((s) => s.id)
     expect(new Set(ids).size).toBe(2)
     expect(ids.every(Boolean)).toBe(true)
+  })
+})
+
+// 読み込みの notes は「英語の画面に日本語が出る」経路そのもの。
+//
+// ここに出るのは落とし穴 49 / 50 のための安全通知（「ディスクの構成方法を
+// 認識できず既定に戻した」＝別のディスクを消しかねない、と伝える最後の手段）で、
+// 日本語の素の string で積んでいた間、英語の利用者にはまったく届いていなかった。
+describe('読み込みの notes は訳す前のまま運ぶ', () => {
+  /** 出しうる通知をひととおり起こす。新しい通知を足したらここにも足す。 */
+  function everyNote(): LocalizedText[] {
+    const notes: LocalizedText[] = []
+    notes.push(...migrateProfile('nonsense').notes)
+    notes.push(...migrateProfile({ profileVersion: 2, series: '24.04' }).notes)
+    notes.push(...migrateProfile({ profileVersion: 3, series: '24.04' }).notes)
+    notes.push(...migrateProfile({ profileVersion: 99, series: '24.04' }).notes)
+    notes.push(
+      ...migrateProfile({
+        profileVersion: 1,
+        series: '18.04',
+        apt: { fallback: 'bogus-fallback' },
+        behavior: { shutdown: 'bogus-shutdown' },
+        software: { updates: 'bogus-updates', snaps: [null] },
+        storage: { mode: 'bogus-mode', match: { kind: 'serial', serial: 'S1' } },
+        postInstall: {
+          files: [null],
+          additionalUsers: [42],
+          deployments: ['nope'],
+          services: [null],
+        },
+      }).notes,
+    )
+    notes.push(
+      ...migrateProfile({
+        profileVersion: 4,
+        series: '24.04',
+        storage: { mode: 'lvm', partitionTable: 'bogus-table' },
+      }).notes,
+    )
+    return notes
+  }
+
+  /** 入れ子の差し込み値も含めて、使われているキーをすべて集める。 */
+  function keysOf(notes: readonly LocalizedText[]): string[] {
+    const out: string[] = []
+    const walk = (n: LocalizedText): void => {
+      out.push(n.key)
+      for (const v of Object.values(n.params ?? {})) if (isLocalizedText(v)) walk(v)
+    }
+    for (const n of notes) walk(n)
+    return [...new Set(out)]
+  }
+
+  it('notes は LocalizedText（訳した文字列ではない）', () => {
+    const notes = everyNote()
+    expect(notes.length).toBeGreaterThan(10)
+    for (const n of notes) {
+      // deep: 差し込み値まで見る（IPC を通るので純粋なデータでなければならない）
+      expect(isLocalizedText(n, true), JSON.stringify(n)).toBe(true)
+      expect(typeof n).not.toBe('string')
+    }
+  })
+
+  it('notes のキーは ja と en の両方に実在する（キー名が画面に出ない）', () => {
+    // 辞書に無いキーは createTranslator がキー名をそのまま返すので、
+    // 画面に `migrate.fromV2` と出る。型では捕まらない（MsgKey は文字列の合併なので
+    // 片方の辞書だけ足しても satisfies は通る…ことは無いが、綴り違いは通る）。
+    for (const key of keysOf(everyNote())) {
+      expect(Object.prototype.hasOwnProperty.call(ja, key), `ja に ${key} が無い`).toBe(true)
+      expect(Object.prototype.hasOwnProperty.call(en, key), `en に ${key} が無い`).toBe(true)
+    }
+  })
+
+  it('英語に訳すと日本語が残らない', () => {
+    // **ひな型（差し込み前）で見る。** 差し込み値は利用者のデータなので、
+    // 手で編集された JSON なら日本語が入りうる。訳文そのものを見ないと、
+    // 「値のせいで落ちるテスト」か「訳し忘れ」かが区別できない。
+    const JAPANESE = /[ぁ-んァ-ヶ一-龠]/
+    for (const key of keysOf(everyNote())) {
+      const template = (en as Record<string, string>)[key]!
+      expect(JAPANESE.test(template), `en.${key} に日本語が残っている: ${template}`).toBe(false)
+    }
+  })
+
+  it('落とし穴 49 の「ディスク指定が既定に戻った」通知が両方の言語で出る', () => {
+    // `{kind:'serial'}` が黙って `{kind:'largest'}` に落ちると、複数ディスク機で
+    // 意図と違うディスクを消す（このツールで最も破壊的な失敗）。
+    // 通知が片方の言語にしか出ないなら、その言語の利用者には防ぎようがない。
+    const r = migrateProfile({
+      profileVersion: 4,
+      series: '24.04',
+      storage: { mode: 'bogus-mode', match: { kind: 'serial', serial: 'ABC-123' } },
+    })
+    const note = r.notes.find((n) => n.key === 'migrate.storageModeReset')
+    expect(note, JSON.stringify(r.notes)).toBeDefined()
+    // 指定は残っている（読めた部分は既定に戻さない）
+    expect(r.profile.storage.mode !== 'raw' && r.profile.storage.match).toEqual({
+      kind: 'serial',
+      serial: 'ABC-123',
+    })
+    for (const locale of LOCALES) {
+      const text = formatLocalized(locale, note!)
+      expect(text.length, locale).toBeGreaterThan(0)
+      // キー名がそのまま出ていない・差し込み忘れが無い
+      expect(text, locale).not.toBe(note!.key)
+      expect(text, locale).toContain('bogus-mode')
+      expect(text, locale).not.toContain('{mode}')
+    }
+    // 英語の通知に日本語が混ざらない（差し込み値は ASCII だけを渡している）
+    expect(/[ぁ-んァ-ヶ一-龠]/.test(formatLocalized('en', note!))).toBe(false)
+  })
+
+  it('同じ通知は 1 度だけ、違う項目の通知は潰さない', () => {
+    // 中身で比べないと、項目の違う `migrate.enumReset` が 1 件に潰れる。
+    const r = migrateProfile({
+      profileVersion: 4,
+      series: '24.04',
+      apt: { fallback: 'bogus-a' },
+      behavior: { shutdown: 'bogus-b' },
+    })
+    const resets = r.notes.filter((n) => n.key === 'migrate.enumReset')
+    expect(resets.length).toBe(2)
   })
 })

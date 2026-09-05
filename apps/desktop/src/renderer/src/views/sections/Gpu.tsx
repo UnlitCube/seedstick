@@ -7,12 +7,13 @@ import {
   type CudaDriverChoice,
 } from '@autoinstall/shared'
 import { useStore } from '../../store.js'
-import { useT } from '../../lib/i18n.js'
+import { useT, useTx } from '../../lib/i18n.js'
 import { Badge, Callout, Card, Field, RadioGroup, Select, Switch } from '../../components/ui.js'
 
 /** NVIDIA ドライバ / CUDA の設定。 */
 export function GpuSection(): React.JSX.Element {
   const t = useT()
+  const tx = useTx()
   const locale = useStore((s) => s.locale)
   const series = useStore((s) => s.profile.series)
   const gpu = useStore((s) => s.profile.software.gpu)
@@ -50,15 +51,15 @@ export function GpuSection(): React.JSX.Element {
         disabled={!repoAvailable && !gpu.enabled}
         description={
           repoAvailable
-            ? `NVIDIA の ${CUDA_REPO_DISTRO[series]} リポジトリを使います。`
-            : `${t('gpu.unsupported')}（Ubuntu ${series}）`
+            ? t('gpu.repoInUse', { repo: CUDA_REPO_DISTRO[series] ?? '' })
+            : t('gpu.unsupportedSeries', { series })
         }
       />
 
       {!archSupported && (
         <div className="mt-3">
           <Callout tone="warning" title={t('gpu.unsupported')}>
-            この ISO は {isoArch} 版です。CUDA の導入は amd64 (x86_64) の ISO でのみ行えます。
+            {t('gpu.archUnsupportedBody', { arch: isoArch ?? '' })}
           </Callout>
         </div>
       )}
@@ -66,8 +67,7 @@ export function GpuSection(): React.JSX.Element {
       {archSupported && CUDA_REPO_DISTRO[series] === null && (
         <div className="mt-3">
           <Callout tone="warning" title={t('gpu.unsupported')}>
-            NVIDIA は Ubuntu {series} 向けの CUDA リポジトリを公開していません。
-            LTS 版（22.04 / 24.04 / 26.04）の ISO を使ってください。
+            {t('gpu.noRepoBody', { series })}
           </Callout>
         </div>
       )}
@@ -127,24 +127,22 @@ export function GpuSection(): React.JSX.Element {
           </div>
 
           {gpu.containerToolkit && !dockerEnabled && (
-            <Callout tone="warning">
-              コンテナから GPU を使う設定ですが、Docker がインストールされません。
-              「インストール後」の「よく使う設定」で Docker を有効にしてください。
-            </Callout>
+            <Callout tone="warning">{t('gpu.dockerMissing')}</Callout>
           )}
 
-          <Callout tone="info" title="インストールされるもの">
+          <Callout tone="info" title={t('gpu.willInstall')}>
             <ul className="mt-1 space-y-0.5">
               {packages.map((p) => (
                 <li key={p} className="font-mono text-xs">
                   {p}
                 </li>
               ))}
-              {packages.length === 0 && <li className="text-xs">（ドライバもツールキットも選ばれていません）</li>}
+              {packages.length === 0 && <li className="text-xs">{t('gpu.nothingSelected')}</li>}
             </ul>
             <p className="mt-2 text-xs">
-              初回起動時に <code className="font-mono">cuda-keyring</code> を導入してから apt で
-              インストールします。
+              {tx('gpu.installNote', {
+                keyring: <code className="font-mono">cuda-keyring</code>,
+              })}
               {gpu.driver !== 'none' && ` ${t('gpu.rebootNote')}`}
             </p>
             {cudaKeyringUrl(series) !== null && (
@@ -157,7 +155,7 @@ export function GpuSection(): React.JSX.Element {
                 className="mt-2 inline-flex items-center gap-1 text-xs text-sky-700 underline-offset-2 hover:underline dark:text-sky-400"
               >
                 <ExternalLink className="size-3" aria-hidden />
-                NVIDIA の公式手順
+                {t('gpu.officialGuide')}
               </button>
             )}
           </Callout>

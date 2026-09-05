@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { localized, type LocalizedText } from '@autoinstall/shared'
 import { SECTOR_SIZE, type BlockDevice } from '../blockdev/index.js'
 import { applyPatchesToChunk, type Patch } from '../isopatch/index.js'
 import type { UsbLayoutPlan, WriteOp } from '../layout/plan.js'
@@ -15,8 +16,11 @@ export interface WriteProgress {
   readonly phase: WritePhase
   readonly bytesDone: number
   readonly bytesTotal: number
-  /** 今どの手順を実行しているか（UI にそのまま出す） */
-  readonly label: string
+  /**
+   * 今どの手順を実行しているか（UI にそのまま出す）。
+   * ここは利用者の言語を知らない（昇格ワーカーは別プロセス）ので訳さずに運ぶ。
+   */
+  readonly label: LocalizedText
   /** 直近の実測速度 (bytes/sec)。まだ測れていなければ null。 */
   readonly bytesPerSecond: number | null
   /** 残り秒数の見積もり。測れていなければ null。 */
@@ -32,6 +36,13 @@ export interface WriteResult {
 }
 
 export class WriteCancelledError extends Error {
+  /**
+   * 画面には出ない（write-supervisor が state を 'cancelled' に落とし、
+   * renderer は `write.cancelled` / `write.cancelledBody` を描く）が、
+   * 経路が変わっても意味が落ちないように文言も持たせておく。
+   */
+  readonly text: LocalizedText = localized('write.cancelledBody')
+
   constructor() {
     super('書き込みがキャンセルされました。USB メモリの内容は壊れています。作り直してください。')
     this.name = 'WriteCancelledError'
@@ -40,8 +51,11 @@ export class WriteCancelledError extends Error {
 
 export class VerificationError extends Error {
   constructor(
+    /** 開発者向けの生の文言（どの手順のどこで食い違ったか）。日本語のまま残す。 */
     message: string,
     readonly diskOffset: number,
+    /** 画面に出す文言。訳すのは renderer。 */
+    readonly text: LocalizedText,
   ) {
     super(message)
     this.name = 'VerificationError'
@@ -66,7 +80,7 @@ interface RangeDigest {
   readonly diskOffset: number
   readonly length: number
   readonly sha256: string
-  readonly label: string
+  readonly label: LocalizedText
 }
 
 function opLength(op: WriteOp): number {
@@ -116,8 +130,11 @@ export function survivingRanges(
 function assertAligned(op: WriteOp): void {
   const len = opLength(op)
   if (op.diskOffset % SECTOR_SIZE !== 0 || len % SECTOR_SIZE !== 0) {
+    // 不変条件違反（＝こちらのバグ）なので訳さない。
+    // ただし `op.label` は LocalizedText なので、そのまま埋めると "[object Object]" になる。
+    // 手順を識別できればよいのでキーを出す。
     throw new Error(
-      `書き込みがセクタ境界に揃っていません: "${op.label}" offset=${op.diskOffset} length=${len}`,
+      `書き込みがセクタ境界に揃っていません: "${op.label.key}" offset=${op.diskOffset} length=${len}`,
     )
   }
 }
@@ -144,7 +161,7 @@ export async function executeWritePlan(options: ExecuteOptions): Promise<WriteRe
     if (options.signal?.aborted) throw new WriteCancelledError()
   }
 
-  const report = (phase: WritePhase, label: string, force = false): void => {
+  const report = (phase: WritePhase, label: LocalizedText, force = false): void => {
     if (!options.onProgress) return
     const t = now()
     if (!force && t - lastReport < 200) return
@@ -169,7 +186,7 @@ export async function executeWritePlan(options: ExecuteOptions): Promise<WriteRe
     diskOffset: number,
     length: number,
     produce: (offsetInOp: number, len: number) => Promise<Buffer>,
-    label: string,
+    label: LocalizedText,
     survives: readonly ByteRange[],
   ): Promise<void> => {
     // 生き残る範囲ごとにハッシュを取る（あとで読み戻して照合する）
@@ -246,7 +263,7 @@ export async function executeWritePlan(options: ExecuteOptions): Promise<WriteRe
 
   const verifyRanges = async (targets: readonly RangeDigest[]): Promise<void> => {
     if (!verify || targets.length === 0) return
-    report('verifying', '書き込んだ内容を読み戻して確認しています', true)
+    report('verifying', localized('writeOp.verifying'), true)
     for (const r of targets) {
       check()
       const h = createHash('sha256')
@@ -256,8 +273,11 @@ export async function executeWritePlan(options: ExecuteOptions): Promise<WriteRe
       }
       if (h.digest('hex') !== r.sha256) {
         throw new VerificationError(
-          `書き込み結果が一致しません: ${r.label} (オフセット ${r.diskOffset})。USB メモリが故障しているか、書き込み中に抜かれた可能性があります。`,
+          // 開発者向けの生の文言。`r.label` は LocalizedText なのでキーを出す
+          // （そのまま埋めると "[object Object]" になる）。
+          `書き込み結果が一致しません: ${r.label.key} (オフセット ${r.diskOffset})。USB メモリが故障しているか、書き込み中に抜かれた可能性があります。`,
           r.diskOffset,
+          localized('write.verifyMismatch', { offset: r.diskOffset }),
         )
       }
     }
@@ -265,7 +285,7 @@ export async function executeWritePlan(options: ExecuteOptions): Promise<WriteRe
 
   for (const [i, op] of plan.ops.entries()) await runOp(op, survivingFor(i))
 
-  report('flushing', 'デバイスへの書き込みを完了させています', true)
+  report('flushing', localized('writeOp.flushing'), true)
   await targetDevice.flush()
 
   // 本体の照合は**パーティションテーブルを書く前**に済ませる。
@@ -288,7 +308,7 @@ export async function executeWritePlan(options: ExecuteOptions): Promise<WriteRe
   await verifyRanges(ranges.slice(bodyRanges.length))
   const verified = verify
 
-  report('done', '完了', true)
+  report('done', localized('write.done'), true)
   return {
     digest: overall.digest('hex'),
     bytesWritten: done,

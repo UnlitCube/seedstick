@@ -1,3 +1,5 @@
+import { createTranslator, type Locale } from '@autoinstall/shared'
+
 /** バイト数を人が読める形にする。 */
 export function formatBytes(bytes: number): string {
   if (bytes >= 1e12) return `${(bytes / 1e12).toFixed(2)} TB`
@@ -14,15 +16,16 @@ export function formatSpeed(bytesPerSecond: number | null): string {
 }
 
 /** 残り秒数を「約 3 分 20 秒」の形にする。 */
-export function formatEta(seconds: number | null, locale: 'ja' | 'en'): string {
+export function formatEta(seconds: number | null, locale: Locale): string {
   if (seconds === null || !Number.isFinite(seconds)) return '—'
   const s = Math.max(0, Math.round(seconds))
   const m = Math.floor(s / 60)
   const rest = s % 60
-  if (locale === 'ja') {
-    return m > 0 ? `約 ${m} 分 ${rest} 秒` : `約 ${rest} 秒`
-  }
-  return m > 0 ? `about ${m}m ${rest}s` : `about ${rest}s`
+  // 単位の語順は言語で変わるので、数字だけを差し込んで訳文の側に単位を持たせる。
+  const t = createTranslator(locale)
+  return m > 0
+    ? t('format.etaMinutesSeconds', { minutes: m, seconds: rest })
+    : t('format.etaSeconds', { seconds: rest })
 }
 
 /** パスワードの強度をざっくり判定する（文字種と長さの組み合わせ）。 */

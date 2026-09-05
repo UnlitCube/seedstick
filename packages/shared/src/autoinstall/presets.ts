@@ -37,7 +37,7 @@ export const KEYBOARDS: readonly KeyboardChoice[] = [
   { value: 'de:', layout: 'de', variant: '', labelJa: 'ドイツ語', labelEn: 'German' },
   { value: 'fr:', layout: 'fr', variant: '', labelJa: 'フランス語', labelEn: 'French' },
   { value: 'es:', layout: 'es', variant: '', labelJa: 'スペイン語', labelEn: 'Spanish' },
-  { value: 'kr:kr104', layout: 'kr', variant: 'kr104', labelJa: '韓国語 (104키)', labelEn: 'Korean (104-key)' },
+  { value: 'kr:kr104', layout: 'kr', variant: 'kr104', labelJa: '韓国語 (104キー)', labelEn: 'Korean (104-key)' },
   { value: 'cn:', layout: 'cn', variant: '', labelJa: '中国語', labelEn: 'Chinese' },
 ]
 

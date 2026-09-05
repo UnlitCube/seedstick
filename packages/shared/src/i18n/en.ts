@@ -28,6 +28,11 @@ export const en = {
   'common.copied': 'Copied',
   'common.show': 'Show',
   'common.hide': 'Hide',
+  'common.edit': 'Edit',
+
+  // --- formatting ---
+  'format.etaMinutesSeconds': 'about {minutes}m {seconds}s',
+  'format.etaSeconds': 'about {seconds}s',
 
   // --- steps ---
   'step.iso': 'Choose ISO',
@@ -58,13 +63,56 @@ export const en = {
   'iso.checksumMismatch': 'Checksum mismatch. The download may be corrupted.',
   'iso.checksumOffline': 'Could not fetch the checksum (you may be offline)',
   'iso.unsupported': 'This ISO is not supported',
-  'iso.notServer': 'This does not look like an Ubuntu Server ISO. Use the live-server edition.',
-  'iso.unknownSeries': 'This version is not supported.',
+  'iso.notServer':
+    'This does not look like the Ubuntu Server live-server edition (volume name: {volumeId}). Desktop and other flavours are not supported.',
+  'iso.unknownSeries': 'This version is not supported ({version}).',
+  'iso.rejectNotAFile': 'This is not a file.',
+  'iso.rejectNotUbuntu': 'This does not look like an Ubuntu ISO (volume name: {volumeId}).',
+  'iso.rejectNotFound': 'The file was not found.',
+  'iso.rejectPermission': 'You do not have permission to read this file.',
+  // Why the ISO structure was rejected. One key per IsoValidationError reason, so the
+  // Callout body always says something the generic title does not.
+  'iso.rejectNotIso9660':
+    'This file could not be read as ISO9660. It may be truncated or corrupted, or it may not be an ISO image at all.',
+  'iso.rejectNoCasper':
+    'This ISO has no casper directory. It is probably not an Ubuntu live-server ISO.',
+  'iso.rejectNoGrubCfg':
+    'This ISO has no /boot/grub/grub.cfg, so the boot menu cannot be patched. The format is not supported.',
+  'iso.rejectNoKernelLine':
+    'No /casper kernel line was found in grub.cfg, so the autoinstall kernel argument cannot be added. The ISO is not structured the way this tool expects.',
+  'iso.rejectGrubTooLarge':
+    'The patched grub.cfg no longer fits in a single sector. Reduce the kernel arguments. The exact sizes are in the details below.',
   'iso.eol': 'This version has reached end of life',
   'iso.eolBody':
     'It no longer receives security updates. Do not use it for internet-facing servers; prefer an LTS release.',
   'iso.eolSoon': 'Support for this version ends soon',
   'iso.supportUntil': 'Supported until',
+  'iso.approxSize': 'about {size}',
+  'iso.build': 'Build',
+  'iso.checksumComputing': 'Computing the checksum… {done} / {total}',
+  'iso.checksumMismatchAdvice': 'Do not use this ISO. Download it again before you go any further.',
+  'iso.checksumRun': 'Verify',
+  'iso.checksumUnknownAdvice':
+    'Could not fetch the official list. Compare the hash above with SHA256SUMS on the Ubuntu site by hand.',
+  'iso.checksumVerifyHint':
+    'Compares the file with the official checksum to catch a corrupted download (this takes a few minutes)',
+  'iso.chooseAgain': 'Choose another',
+  'iso.codename': 'Codename',
+  'iso.eolBadge': 'End of life',
+  'iso.eolDetail': 'Standard support for Ubuntu {series} ({codename}) ended on {eol}.',
+  'iso.eolSoonDetail':
+    'Standard support for Ubuntu {series} ends on {eol} (about {months} months from now).',
+  'iso.grubExplain':
+    'Only {path} inside the ISO is rewritten, to add {arg} to the kernel command line. Without it the installer stops at "Continue with autoinstall? (yes|no)" and waits for an answer, so this change is required. The ISO file itself is never modified.',
+  'iso.grubHide': 'Hide the boot menu changes',
+  'iso.grubShow': 'See what is changed in the boot menu',
+  'iso.minimumDevice': 'Minimum USB size',
+  'iso.minimumDeviceValue': '{size} or larger',
+  'iso.noIsoDescription':
+    'This tool does not bundle the ISO. Download it from the official Ubuntu site.',
+  'iso.noIsoTitle': 'If you do not have an ISO yet',
+  'iso.supportedEditionsOnly':
+    'Only the {edition} edition of Ubuntu Server is supported. Desktop images, other flavors, and other distributions will not work.',
 
   // --- basics ---
   'basics.title': 'Language and keyboard',
@@ -73,6 +121,8 @@ export const en = {
   'basics.timezone': 'Time zone',
   'basics.hostname': 'Hostname',
   'basics.hostnameHint': 'The name that identifies this server on the network (e.g. web-01)',
+  'basics.hostnameInvalid':
+    'Use only letters, digits, and hyphens, and start and end with a letter or a digit',
 
   // --- user ---
   'user.title': 'Create the first user',
@@ -90,6 +140,16 @@ export const en = {
   'user.strengthStrong': 'Strong',
   'user.sudoNoPassword': 'Allow sudo without a password',
   'user.generate': 'Generate a random password',
+  'user.groupsModeAppend': 'Add to the defaults',
+  'user.groupsModeDefault': "Leave the installer's defaults (sudo, adm, and so on)",
+  'user.groupsModeOverride': 'Use only the groups listed here',
+  'user.groupsOverrideWarning':
+    'Leaving sudo out of the list removes administrator rights, so nothing can be changed after the installation.',
+  'user.identityGroupsHint':
+    'List the extra groups to join, such as docker or libvirt, separated by spaces.',
+  'user.sudoNoPasswordHint':
+    'Convenient for automation, but anyone who takes over this login has root immediately.',
+  'user.usernameInvalid': 'Contains characters that cannot be used',
 
   // --- SSH ---
   'ssh.title': 'SSH settings',
@@ -100,6 +160,13 @@ export const en = {
   'ssh.authorizedKeysHint': 'One per line, in the form ssh-ed25519 AAAA...',
   'ssh.keyInvalid': 'This public key is malformed',
   'ssh.importFile': 'Import from file',
+  'ssh.allowPasswordHint':
+    'With this off, only a public key can log in. Register a key before you turn it off.',
+  'ssh.keyCount': 'Keys: {n}',
+  'ssh.keysInvalid': 'Some keys are not in a valid format',
+  'ssh.lockedOutBody':
+    'Password login over SSH is disabled but no public key is registered. Add a public key, or allow password login.',
+  'ssh.lockedOutTitle': 'You will not be able to log in',
 
   // --- network ---
   'network.title': 'Network settings',
@@ -120,6 +187,27 @@ export const en = {
   'network.searchDomains': 'Search domains',
   'network.optional': 'Do not wait for this interface at boot if it is unplugged',
   'network.optionalHint': 'Avoids a two-minute boot delay when the cable is not connected',
+  'network.installerDefaultBody':
+    'The installer tries DHCPv4 on every wired NIC matching {ethGlob} and {enGlob}, and automatically disables the ones that get no address. This is more reliable than writing the configuration by hand.',
+  'network.interfaceName': 'Network card name',
+  'network.interfaceNameHint': 'e.g. enp0s3, eno1, ens18. You need to know the name beforehand.',
+  'network.macAddress': 'MAC address',
+  'network.macAddressHint':
+    'e.g. 52:54:00:12:34:56. It still matches after the machine is swapped out.',
+  'network.modeDhcpHint': 'Choose this when only a specific network card should use DHCP.',
+  'network.modeRawHint':
+    'Choose this to write a complex setup yourself, such as a bond, a VLAN, or several NICs.',
+  'network.modeStaticHint': 'Choose this when a server needs a fixed IP address.',
+  'network.nameserversHint': 'Separate several servers with commas',
+  'network.netplanReference': 'netplan reference',
+  'network.rawDescription':
+    'This goes straight into the autoinstall network key, in netplan v2 format.',
+  'network.rawExample': 'e.g. a bond, a VLAN, or static settings for several NICs.{link}',
+  'network.rawTitle': 'Write the netplan config directly',
+  'network.searchDomainsHint': 'An internal domain, for example (optional)',
+  'network.staticCloudInitNote':
+    'On a physical server with a static IP, we recommend also turning on "Stop cloud-init from managing the network" in the After install settings. It keeps the configuration from being written back on every reboot.',
+  'network.staticTitle': 'Static IP settings',
 
   // --- storage ---
   'storage.title': 'Disk layout',
@@ -148,6 +236,32 @@ export const en = {
   'storage.partitionTable': 'Partition table',
   'storage.ptableDefault': 'Automatic (GPT)',
   'storage.ptableMsdos': 'MBR (for older BIOS machines)',
+  'storage.detailsTitle': 'Details',
+  'storage.encryptHint':
+    'Protects the data if the machine is stolen, but the passphrase has to be typed at every boot.',
+  'storage.layoutDirectHint':
+    'Partitions are laid out directly on the disk, which keeps the result simple and easy to follow.',
+  'storage.layoutLvmHint':
+    'You can grow the volumes or take snapshots later. This is also the Ubuntu default.',
+  'storage.layoutRawHint': 'Choose this to write RAID or a complex partition layout yourself.',
+  'storage.layoutZfsHint':
+    'Uses a ZFS root, with far stronger snapshots and data integrity checking.',
+  'storage.modelHint': 'For example Samsung SSD*. Wildcards are allowed.',
+  'storage.modelLabel': 'Model name',
+  'storage.pathHint': 'For example /dev/nvme0n1 or /dev/sda. Wildcards (*) are allowed.',
+  'storage.pathLabel': 'Device path',
+  'storage.ptableGpt': 'GPT (explicit)',
+  'storage.rawHint':
+    'This goes into the autoinstall storage key exactly as written. A mistake here makes the installation fail partway through.',
+  'storage.rawTemplateComment': 'Write the curtin storage config directly (UEFI + LVM example)',
+  'storage.rawTitle': 'curtin storage config',
+  'storage.serialHint':
+    'Wildcards are allowed, as in CT500MX*. On a machine with several disks this is the most reliable way to name the one you mean.',
+  'storage.serialLabel': 'Serial number',
+  'storage.usbExcluded':
+    'The installation USB itself is never matched by these rules (the installer excludes it).',
+  'storage.warningBody':
+    'The disk chosen for the installation is erased completely, existing partitions and all. Try the USB once in a virtual machine before you use it on a production machine.',
 
   // --- software ---
   'software.title': 'Software to install',
@@ -169,6 +283,31 @@ export const en = {
   'software.aptMirrorCountry': 'Pick the nearest country mirror automatically',
   'software.aptMirrorCustom': 'Specify a URL',
   'software.aptProxy': 'APT proxy',
+  'software.aptDebLineKeyNote':
+    'When you write a deb line yourself, you have to supply its signing key (add `signed-by=` to the line, or write the key into {sources} in the raw YAML on the advanced tab).',
+  'software.aptMirrorCountryHint':
+    'The installer picks the nearest mirror for the country it connects from, which makes downloads faster.',
+  'software.aptMirrorCustomHint': 'Point at your own mirror, such as one inside your network.',
+  'software.aptMirrorDefaultHint': 'Uses archive.ubuntu.com.',
+  'software.aptMirrorUrl': 'Mirror URL',
+  'software.aptProxyHint': 'For fetching packages through a proxy on your network (optional)',
+  'software.crashDumpsDefault': 'Let the installer decide',
+  'software.crashDumpsOff': 'Disable',
+  'software.crashDumpsOn': 'Enable',
+  'software.customPackagesHint': 'Write package names that apt can install, separated by spaces',
+  'software.driversHint':
+    'Detects and installs third-party drivers, such as NVIDIA, automatically.',
+  'software.snapsLabel': 'Snap names, one per line (write `name channel` to pick a channel)',
+  'software.sourceFullHint':
+    'The usual server install. The tools you normally reach for are already there.',
+  'software.sourceMinimalHint':
+    'Keeps the package set as small as possible. Good when the role is fixed, such as a container host.',
+  'software.ubuntuProKeyNote':
+    'On Ubuntu {series} this is written out as the {advantage} key ({pro} exists from 24.04 onward).',
+  'software.ubuntuProTokenHint':
+    'Starts with C and is 24 to 30 characters long. Setting it turns on services such as ESM (optional).',
+  'software.ubuntuProTokenLabel': 'Token',
+  'software.updatesDriversTitle': 'Updates and drivers',
 
   // --- after install ---
   'postinstall.title': 'What to do after installing',
@@ -184,6 +323,40 @@ export const en = {
   'postinstall.fileMode': 'Permissions',
   'postinstall.fileOwner': 'Owner',
   'postinstall.fileContent': 'Content',
+  'postinstall.adKeyMissing':
+    'The autoinstall schema for Ubuntu {series} has no {key} key, so this is left out of the output.',
+  'postinstall.edit': 'Edit',
+  'postinstall.editFile': 'Edit file',
+  'postinstall.extraKernelArgs': 'Extra kernel arguments',
+  'postinstall.extraKernelArgsHint':
+    'Appended to the kernel line in GRUB. You do not need to add autoinstall; it is put there for you. The characters ; & | are not allowed.',
+  'postinstall.fileChars': '{n} characters',
+  'postinstall.fileModeHint': 'e.g. 0644',
+  'postinstall.fileNameHint': 'Name on the USB stick',
+  'postinstall.fileOwnerHint': 'e.g. root',
+  'postinstall.fileTargetHint': 'Absolute path on the installed system',
+  'postinstall.filesEmpty': 'No files yet.',
+  'postinstall.filesHint':
+    'Write small config files directly here. For large files and archives, use Deployments instead.',
+  'postinstall.firstBootDesc':
+    'cloud-init runs these on the first boot after installation. They start once the network is up, so they suit anything that needs to reach the outside.',
+  'postinstall.fullUpgradeExplain':
+    'While "Updates during install" on the Software step applies security updates only, this runs {command} once the installation has finished, bringing every package up to date. The kernel may be replaced as well.',
+  'postinstall.installerEnv': 'the installer environment',
+  'postinstall.lateCommandsDesc':
+    'These run when the installation has finished, just before the reboot. One command per line.',
+  'postinstall.lateCommandsWhere': 'Mind where these run',
+  'postinstall.lateCommandsWhereBody':
+    'Commands run in {installerEnv}, with the new system mounted at {target}. To run something inside the new system, put {inTarget} in front of it.',
+  'postinstall.needsNetwork': 'Needs internet',
+  'postinstall.presetsHint': 'Tick the ones you want and the matching settings are added for you.',
+  'postinstall.rawYaml': 'Override with raw YAML',
+  'postinstall.rawYamlHint':
+    'What you write here is merged into the generated autoinstall (matching keys are overwritten, arrays are replaced).',
+  'postinstall.refreshChannelHint': 'Leave this empty to use the default subiquity channel.',
+  'postinstall.reportingIgnored':
+    'subiquity ignores reporting as soon as any section is interactive.',
+  'postinstall.systemUpdate': 'System updates',
 
   // --- review ---
   'review.title': 'Review your settings',
@@ -201,6 +374,46 @@ export const en = {
   'review.importProfile': 'Load a profile',
   'review.unattended': 'Written as configured, the install runs start to finish with no input',
   'review.interactive': 'Some sections will be asked interactively during install',
+  'review.aptUpgradeOff': 'No',
+  'review.aptUpgradeOn': 'Yes',
+  'review.deploymentCount': '{n} items',
+  'review.deploymentCountWithSize': '{n} items ({size})',
+  'review.diskRaw': 'Custom (curtin)',
+  'review.exportDescription': 'You can export the settings on their own, without writing a USB.',
+  'review.exportFolder': 'Export everything to a folder',
+  'review.exportNote':
+    'The profile JSON holds only the password hash, never the plain text. Use it when you build the same machine again and again.',
+  'review.fixErrorsFirst': 'Fix the errors listed below before you continue.',
+  'review.gpuNoDriver': 'No driver',
+  'review.hintAutoinstall':
+    'The same settings without the cloud-config wrapper. A copy is included on the USB so you can read it back later.',
+  'review.hintGrub':
+    'The /boot/grub/grub.cfg inside the ISO is rewritten to this. Without autoinstall the installer stops at a confirmation prompt.',
+  'review.hintUserData':
+    'This is what gets written to the USB configuration partition (CIDATA) as user-data. The leading #cloud-config line is the marker cloud-init requires.',
+  'review.isoNotSelected': 'Not selected',
+  'review.networkAuto': 'Automatic (DHCP)',
+  'review.networkDhcp': 'DHCP (explicit)',
+  'review.networkRaw': 'Custom YAML',
+  'review.networkStatic': 'Static {address}',
+  'review.none': 'None',
+  'review.partlyInteractive': 'Some prompts',
+  'review.runtimeAllFixed': 'None (all fixed)',
+  'review.runtimeInteractive': 'manual entry',
+  'review.runtimeKernelArg': 'boot menu',
+  'review.runtimeMenuCount': '{n} menu entries',
+  'review.shutdownPowerOff': 'Power off',
+  'review.shutdownReboot': 'Reboot',
+  'review.sshDisabled': 'Disabled',
+  'review.sshEnabled': 'Enabled ({keys} keys / password {password})',
+  'review.sshPasswordAllowed': 'allowed',
+  'review.sshPasswordDenied': 'denied',
+  'review.summary': 'Summary',
+  'review.summaryAdditionalUsers': 'Additional users',
+  'review.summaryLocaleKeyboard': 'Locale / keyboard',
+  'review.summaryPostAction': 'After the install',
+  'review.summaryServices': 'Services',
+  'review.summaryUnattended': 'Fully unattended',
 
   // --- write ---
   'write.title': 'Write to a USB drive',
@@ -231,6 +444,174 @@ export const en = {
   'write.speed': 'Speed',
   'write.verifyOption': 'Verify after writing (roughly doubles the time)',
   'write.auditRecord': 'Leave a build record on the USB drive',
+  'write.another': 'Make another one',
+  'write.auditRecordHint':
+    'Records the creation time, the ISO name, and a hash of the settings in autoinstall-usb.json. Passwords are never included.',
+  'write.badgeCaution': 'Check first',
+  'write.badgeElapsed': '{minutes} min {seconds} s',
+  'write.badgeNotVerified': 'Not verified',
+  'write.badgeTooSmall': 'Too small',
+  'write.badgeVerified': 'Read-back verified',
+  'write.badgeWritten': '{size} written',
+  'write.configInvalid': 'The settings contain errors',
+  'write.configInvalidBody': 'Fix the errors on the Review step before writing.',
+  'write.currentlyMounted': 'Currently mounted at: {mountpoints}',
+  'write.doNotRemove': 'Do not remove the USB drive while writing.',
+  'write.elevationAllow': 'Approve the permission dialog when it appears.',
+  'write.isoMissing': 'No ISO selected',
+  'write.isoMissingBody': 'Go back to the first step and choose an ISO file.',
+  'write.minimumSize': 'This ISO needs a USB drive of {size} or larger.',
+  'write.next1': 'Safely eject the USB drive and plug it into the server you want to install.',
+  'write.next2':
+    'Power on the server and pick the USB drive as the boot device (F12, F11, or Esc on most machines).',
+  'write.next3': 'In the GRUB menu, choose {entry} (it starts on its own after 30 seconds).',
+  'write.next4Interactive': 'You will be asked to fill in a few items.',
+  'write.next4Reboot': 'It reboots automatically once the installation finishes.',
+  'write.next4Shutdown': 'It powers off automatically once the installation finishes.',
+  'write.next4Unattended': 'From here on there is nothing to do but wait.',
+  'write.next5Login': 'After the reboot you can log in as {user}.',
+  'write.next5Ssh': 'For SSH, use {command}.',
+  'write.nextTitle': 'What to do next',
+  'write.optionsTitle': 'Write options',
+  'write.showBlocked': 'Show devices that cannot be written to ({n})',
+  'write.tooSmallBody': 'This device holds {size}, but {required} or more is required.',
+  'write.troubleApplied':
+    'The settings that were actually applied can be checked in {path} (readable by root only).',
+  'write.troubleLogs': 'Logs are kept in {path} on the installed system.',
+  'write.troubleTitle': 'If something goes wrong',
+  'write.verifyOptionHint':
+    'Reads the written data back and compares hashes, which catches defects in cheap USB drives.',
+
+  // Progress and failures for the write itself (carried from main / media as LocalizedText)
+  'write.deviceGone': 'The device is gone. Re-insert it and reload the list.',
+  'write.deviceNotWritable': 'This device cannot be written to. Reload the device list.',
+  'write.deviceStalled':
+    'Writing to the USB drive stopped making progress. It may have been removed. Reinsert it and create the drive again.',
+  'write.errorAlreadyRunning': 'A write is already in progress.',
+  'write.errorCancelFailed':
+    'The writing process running with administrator rights could not be stopped. The USB drive may still be being written to. Do not remove it. Either end that process in Task Manager or wait for it to finish.',
+  'write.errorElevationDeclined':
+    'Administrator rights were not granted. Writing to a USB drive requires administrator rights. Press "Start writing" again and choose Yes in the permission dialog.',
+  'write.errorSpawnFailed': 'Could not start the writing process.',
+  'write.errorWorkerExited': 'The writing process exited unexpectedly (exit code {code}).',
+  'write.errorWorkerExitedNoOutput':
+    'The writing process exited unexpectedly (exit code {code}). The request for administrator rights may have been cancelled. Please try again.',
+  'write.isoNotSelected': 'This ISO has not been selected. Please choose it again.',
+  'write.isoPrepareFailed': 'Could not prepare the ISO. The ISO file may be damaged.',
+  'write.isoRecognized': 'ISO recognized: {volumeId}',
+  'write.payloadMissing': 'Deployment files not found: {files}',
+  'write.payloadNotSelected':
+    'The deployment file "{name}" has not been selected. Please choose it again.',
+  'write.quitAbort': 'Abort and quit',
+  'write.quitContinue': 'Keep writing',
+  'write.quitDetail':
+    'If you quit now you will be left with a half-written USB drive that will not boot.\nEven if you choose "Abort and quit", the USB drive still has to be created again.',
+  'write.quitMessage': 'The write to the USB drive has not finished.',
+  'write.quitTitle': 'Writing in progress',
+  'write.statusCheckingPrivileges': 'Checking permissions',
+  'write.statusPreparing': 'Preparing to write',
+  'write.statusStarted': 'Writing has started',
+  'write.statusWaitingElevation': 'Waiting for administrator approval',
+  'write.unmounting': 'Unmounting the device',
+  'write.verifyMismatch':
+    'The data read back does not match what was written (offset {offset}). The USB drive may be faulty, or it may have been removed during the write. Create the drive again, preferably with a different USB stick.',
+
+  // --- devices (enumeration, and the worker re-checking them) ---
+  'device.blockedSystemDisk': 'This is the system disk your OS runs from',
+  'device.blockedReadOnly': 'This device is write-protected',
+  'device.blockedUnknownSize': 'The capacity could not be read',
+  'device.blockedVirtual': 'Virtual disks are not supported as a target',
+  'device.blockedNotRemovable': 'This device could not be identified as removable',
+  'device.blockedTooSmall': 'Capacity is too small ({min} or more is required)',
+  'device.blockedTooLarge':
+    'Devices larger than {max} are excluded, to prevent picking an external drive by mistake',
+  'device.rejectedNotFound':
+    'The target {path} was not found. It was removed, or it is not a device this tool is allowed to write to.',
+  'device.rejectedNotWritable': '{path} cannot be written to: {reason}',
+  'device.rejectedNotWritableUnknown': '{path} cannot be written to (it is not an eligible device).',
+  'device.rejectedSizeMismatch':
+    'The capacity of {path} does not match the job (expected {expected}, found {actual}). Please select the device again.',
+  'device.rejectedSerialMismatch':
+    '{path} is not the device you selected (serial: expected {expected}, found {actual}). It was re-inserted or swapped for another device. Please select it again.',
+  'device.rejectedSerialMissing':
+    '{path} is not the device you selected (serial: expected {expected}, none readable). It was re-inserted or swapped for another device. Please select it again.',
+  'device.rejectedDescriptionMismatch':
+    '{path} is not the device you selected (expected "{expected}", found "{actual}"). Please select it again.',
+
+  // --- USB layout planning (fails before anything is written) ---
+  'layout.notProtectiveMbr':
+    'This ISO has no protective MBR. It may not be an Ubuntu live-server ISO.',
+  'layout.noGpt': 'This ISO has no GPT. The format is not supported.',
+  'layout.isoTruncated':
+    'This ISO file is truncated. Partition "{partition}" runs to {needed}, but the file is only {fileSize}. Check that the download completed and that its SHA256 matches the official one.',
+  'layout.diskTooSmall':
+    'This USB drive is too small. Writing the ISO ({isoSize}) plus the config partition ({cidataSize}) needs at least {required}, but this device is {deviceSize}.',
+  'layout.cidataTooSmall': 'The config partition must be at least 1 MiB.',
+
+  // --- write steps (the label under the progress bar) ---
+  'writeOp.clearTable': 'Invalidating the partition table',
+  'writeOp.isoBody': 'ISO image body',
+  'writeOp.clearStaleGpt': 'Erasing the stale backup GPT at the end of the ISO',
+  'writeOp.clearGap': 'Erasing the gap up to the alignment boundary',
+  'writeOp.cidata': 'Config partition (CIDATA)',
+  'writeOp.backupGptEntries': 'Backup GPT entries',
+  'writeOp.backupGptHeader': 'Backup GPT header',
+  'writeOp.gptEntries': 'GPT partition entries',
+  'writeOp.gptHeader': 'GPT header',
+  'writeOp.protectiveMbr': 'Protective MBR (including GRUB boot code)',
+  'writeOp.verifying': 'Reading the written data back to check it',
+  'writeOp.flushing': 'Flushing pending writes to the device',
+
+  // --- building the config partition (CIDATA) ---
+  'seed.reservedNameFile':
+    'The extra file name "{name}" is reserved on the configuration partition. Use a different name.',
+  'seed.reservedNameDeployment':
+    'The deployment name "{name}" is reserved on the configuration partition. Use a different name.',
+  'seed.duplicateNameFile':
+    'The extra file name "{name}" is duplicated. The configuration partition cannot hold two files with the same name.',
+  'seed.duplicateNameDeployment':
+    'The deployment name "{name}" is duplicated. The configuration partition cannot hold two files with the same name.',
+  'seed.payloadTooLarge':
+    '{name} is {size}, which does not fit on the USB configuration partition (limit {limit}). Switch to downloading it from a URL instead.',
+
+  // --- when YAML generation stops ---
+  'generate.overlaySyntax': 'Overlay YAML syntax error: {detail}',
+  'generate.overlayNotMapping': 'The overlay YAML must be a mapping.',
+  'generate.failed': 'Could not generate the YAML. Review the configuration.',
+
+  // --- native OS dialogs (they never reach the renderer, so main translates them) ---
+  'dialog.chooseIso': 'Choose an Ubuntu Server ISO file',
+  'dialog.filterIso': 'ISO image',
+  'dialog.saveProfile': 'Export the profile to a file',
+  'dialog.openProfile': 'Open a profile from a file',
+  'dialog.importProfile': 'Import a profile',
+  'dialog.filterProfile': 'Profile',
+  'dialog.exportBundleDir': 'Choose a folder for the generated configuration',
+  'dialog.pickPayload': 'Choose a file to deploy onto the installed system',
+  'dialog.filterArchive': 'Archive',
+  'dialog.readTextFile': 'Choose a file',
+  'dialog.filterPublicKey': 'Public key',
+  'dialog.filterText': 'Text',
+  'dialog.filterAllFiles': 'All files',
+
+  // --- generated artefacts (a file, not a screen) ---
+  'bundle.readme': `Ubuntu Server unattended install configuration
+
+How to use these files (if you build the USB drive with another tool):
+1. Write the Ubuntu live-server ISO to a USB drive with Rufus / balenaEtcher (DD mode).
+2. Format a second USB drive as FAT32 and set its volume label to CIDATA.
+3. Copy user-data and meta-data onto it.
+4. Insert both drives and boot the server.
+5. In the GRUB menu press e, add autoinstall at the end of the linux line (before ---), then press Ctrl+X to boot.
+   Note: without this the installer stops at "Continue with autoinstall? (yes|no)".
+
+If you build the USB drive with this tool, steps 2 to 5 are all done for you.
+
+Caution: files configured under app deployment are not exported here.
+         late-commands mounts the CIDATA partition and reads them from there.
+
+Generated by: {tool}
+Date: {date}`,
 
   // --- profiles ---
   'profile.library': 'Profiles',
@@ -257,6 +638,11 @@ export const en = {
   'profile.badgeServices': 'services',
   'profile.badgeStaticIp': 'static IP',
   'profile.migrated': 'Profile loaded',
+  'profile.badgeDeploymentsCount': 'Deployments: {n}',
+  'profile.badgeServicesCount': 'Services: {n}',
+  'profile.badgeUsersCount': 'Extra users: {n}',
+  'profile.copyName': 'Copy of {name}',
+  'profile.discardConfirm': 'You have unsaved changes. Discard them and continue?',
 
   // --- additional users ---
   'users.title': 'Additional users',
@@ -279,6 +665,13 @@ export const en = {
   'users.systemAccount': 'Make it a system account',
   'users.systemAccountHint': 'UID below 1000 and hidden from login lists. For service accounts.',
   'users.sshKeys': 'SSH public keys',
+  'users.badgeNoLogin': 'Cannot log in',
+  'users.clearPassword': 'Clear',
+  'users.nopasswdWarning':
+    'This user can become root without entering a password. For an account that only runs a service, choose "None" instead.',
+  'users.passwordAlreadySet':
+    'A password is already set. Fill this in only if you want to change it.',
+  'users.sshKeyCount': '{n} SSH keys',
 
   // --- deployments ---
   'deploy.title': 'Deploy apps and files',
@@ -309,6 +702,15 @@ export const en = {
   'deploy.postCommandHint': 'Runs in the destination directory, e.g. npm ci --omit=dev',
   'deploy.content': 'Content',
   'deploy.sizeWarning': 'Total size shipped on the USB drive',
+  'deploy.bundleSizeWarning':
+    '{size} will be shipped on the USB drive. That makes writing take longer and takes up room on the drive. For large files, "Download from a URL on first boot" is usually the better choice.',
+  'deploy.fileNameOnUsb': 'File name on the USB drive',
+  'deploy.summaryHostFile': 'Shipped on the USB drive · {size}',
+  'deploy.summaryInline': 'Inline content · {size}',
+  'deploy.summaryUrl': 'Downloaded from {url} on first boot',
+  'deploy.unnamed': '(unnamed)',
+  'deploy.urlDownloadNote':
+    'The file is downloaded on first boot, so the machine needs an internet connection. {curl} is added automatically.',
 
   // --- services ---
   'service.title': 'Register systemd services',
@@ -338,6 +740,15 @@ export const en = {
   'service.wantedBy': 'Enable for (WantedBy)',
   'service.enabled': 'Enable autostart at install time',
   'service.preview': 'Unit file content',
+  'service.badgeEnabled': 'Auto-start',
+  'service.badgeManual': 'Manual',
+  'service.nameInvalid': 'Contains characters that cannot be used',
+  'service.noCommand': '(no command set)',
+  'service.typeForking': 'forking (the program daemonizes itself)',
+  'service.typeOneshot': 'oneshot (runs once and exits)',
+  'service.typeSimple': 'simple (stays running)',
+  'service.unnamed': '(unnamed)',
+  'service.userRootDefault': 'root (default)',
 
   // --- GPU / CUDA ---
   'gpu.title': 'NVIDIA GPU / CUDA',
@@ -357,6 +768,19 @@ export const en = {
   'gpu.containerToolkitHint': 'Installs nvidia-container-toolkit and registers it with Docker.',
   'gpu.rebootNote': 'If a driver is installed, the machine reboots automatically once setup finishes.',
   'gpu.unsupported': 'No CUDA repository exists for this version',
+  'gpu.archUnsupportedBody':
+    'This ISO is the {arch} build. CUDA can only be installed from an amd64 (x86_64) ISO.',
+  'gpu.dockerMissing':
+    'You asked to use the GPU from containers, but Docker will not be installed. Turn Docker on under "Common options" on the "After install" step.',
+  'gpu.installNote':
+    'On first boot {keyring} is installed first, then the packages are pulled in with apt.',
+  'gpu.noRepoBody':
+    'NVIDIA does not publish a CUDA repository for Ubuntu {series}. Use an LTS ISO (22.04 / 24.04 / 26.04) instead.',
+  'gpu.nothingSelected': '(neither a driver nor a toolkit is selected)',
+  'gpu.officialGuide': "NVIDIA's official instructions",
+  'gpu.repoInUse': "Uses NVIDIA's {repo} repository.",
+  'gpu.unsupportedSeries': 'No CUDA repository exists for Ubuntu {series}',
+  'gpu.willInstall': 'What gets installed',
 
   // --- misc ---
   'postinstall.aptFullUpgrade': 'Upgrade every package (apt full-upgrade)',
@@ -408,6 +832,12 @@ export const en = {
     'Boot menu entries pass kernel arguments such as ai.hostname=. Just before the install starts, only the matching parts of autoinstall.yaml are rewritten. If no argument is present the profile value is used, so nothing stalls.',
   'runtime.previewTitle': 'Boot menu preview',
   'runtime.needIso': 'Select an ISO to preview the real boot menu.',
+  'runtime.grubFreeBytes': '{bytes} bytes',
+  'runtime.prereqDisk':
+    'To pick the disk from the boot menu, the Disk step has to be set to select the disk by serial number.',
+  'runtime.prereqNetwork':
+    'To pick the network from the boot menu, the Network step has to be set to a static IP address (it is "{mode}" right now).',
+  'runtime.prereqTitle': 'This setup needs a bit more',
 
   // --- Advanced (official options normally kept out of the way) ---
   'adv.kernelTitle': 'Kernel',
@@ -471,6 +901,49 @@ export const en = {
     'Values are pre-filled but every screen must be stepped through by hand. Useful for dry runs.',
   'adv.identityGroups': 'Add the admin user to extra groups',
   'adv.identityGroupsUnsupported': 'Not available on this release (26.04 and later)',
+
+  // --- error boundary ---
+  'boundary.body':
+    'Rendering failed because the settings are not in the shape this screen expects. This can happen when you open a profile that was edited by hand or saved by a different version of this tool.',
+  'boundary.reload': 'Reload the app',
+  'boundary.retry': 'Try this screen again',
+  'boundary.title': 'This screen could not be displayed',
+
+  // --- store ---
+  'store.seriesAligned':
+    'This profile was saved for Ubuntu {savedSeries}, so it has been switched to match the selected ISO ({isoSeries}). Which settings are available differs between releases, so check the result on the confirmation screen.',
+  'store.writeStartFailed': 'Could not start writing.',
+
+  // --- Loading a saved profile (the safety notes behind pitfalls 49 / 50) ---
+  'migrate.notAProfile': 'The file did not contain a profile.',
+  'migrate.unsupportedSeries':
+    'The saved Ubuntu version ({series}) is not supported, so it was reset to the default.',
+  'migrate.enumReset':
+    'The value {value} for {field} was not recognized, so it was reset to the default {fallback}.',
+  'migrate.itemsDropped':
+    'Skipped {count} entry/entries under {category} because they were not in a valid format.',
+  'migrate.storageModeReset':
+    'The disk layout method ({mode}) was not recognized, so it was reset to the default. The disk selection itself has been kept. Check it before you write.',
+  'migrate.fromV1':
+    'Loaded a profile saved in an older format. Extra users, app deployments, services and GPU are not configured.',
+  'migrate.fromV2':
+    'Loaded a profile saved in an older format. Values decided at boot time are not configured.',
+  'migrate.fromV3':
+    'Loaded a profile saved in an older format. Kernel choice, extra repositories and log collection on failure are not configured.',
+  'migrate.fromNewer':
+    'This profile was saved by a newer version of the tool. Settings that could not be recognized were ignored.',
+  // Field and category names are interpolated into the sentences above, so that
+  // languages with a different word order still read correctly.
+  'migrate.field.softwareUpdates': 'the update scope (software.updates)',
+  'migrate.field.aptFallback':
+    'the action when the mirror is unavailable (apt.fallback)',
+  'migrate.field.behaviorShutdown': 'the action after installation (behavior.shutdown)',
+  'migrate.field.storagePartitionTable': 'the partition table (storage.partitionTable)',
+  'migrate.category.snap': 'snaps',
+  'migrate.category.file': 'extra files',
+  'migrate.category.user': 'extra users',
+  'migrate.category.service': 'services',
+  'migrate.category.deployment': 'app deployments',
 
   // --- errors ---
   'error.isoTooBig': 'The USB drive is too small',

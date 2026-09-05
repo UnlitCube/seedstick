@@ -35,6 +35,11 @@ $cliArgs = @('tsx', $script)
 if ($device) { $cliArgs += @('--device', $device) }
 $cliArgs += '--yes'
 Write-Output ("Running " + ($cliArgs -join ' ') + "  (log: $log)")
+# 「どのコードで走ったか」（HEAD と作業ツリーの汚れ）は **.mts スクリプト側が**
+# 実行開始時に出す（scripts/lib/git-revision.mts の printRevisionBanner）。
+# その出力は下の tee でそのままログへ入るので、**ここでは出さない。**
+# 両方で出すと同じ情報が 2 行並び、食い違ったときにどちらが本当か分からなくなる。
+# ログを消してから npx を起動するので、バナーがログの 1 行目になる。
 # Tee-Object has no -Encoding on PS 5.1 and defaults to UTF-16, which grep/tail cannot read.
 # Write each line as UTF-8 instead so the log stays greppable.
 & npx @cliArgs 2>&1 | ForEach-Object {

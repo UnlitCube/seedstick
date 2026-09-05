@@ -6,6 +6,7 @@ import {
   migrateProfile,
   summarizeProfile,
   type AutoinstallProfile,
+  type LocalizedText,
   type ProfileSummary,
 } from '@autoinstall/shared'
 
@@ -93,7 +94,9 @@ export async function saveProfile(
   return { id: targetId, updatedAt }
 }
 
-export async function loadProfile(id: string): Promise<{ profile: AutoinstallProfile; notes: string[] } | null> {
+export async function loadProfile(
+  id: string,
+): Promise<{ profile: AutoinstallProfile; notes: LocalizedText[] } | null> {
   try {
     const raw = JSON.parse(await readFile(profilePath(id), 'utf8')) as { profile?: unknown }
     const { profile, notes } = migrateProfile(raw.profile)

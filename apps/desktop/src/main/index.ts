@@ -1,7 +1,8 @@
 import { app, BrowserWindow, dialog, shell } from 'electron'
 import { join } from 'node:path'
-import { APP_ID } from '@autoinstall/shared'
+import { APP_ID, createTranslator } from '@autoinstall/shared'
 import { disposeIpc, isWriteInProgress, registerIpc, shutdownWrite } from './ipc.js'
+import { getSettings } from './settings.js'
 
 // アプリ本体。GUI は通常権限で動き、USB への書き込みだけを昇格した子プロセスに任せる
 // （write-supervisor.ts）。この分離があるので、アプリ全体を管理者で動かす必要がない。
@@ -12,20 +13,50 @@ import { disposeIpc, isWriteInProgress, registerIpc, shutdownWrite } from './ipc
  */
 let quitConfirmed = false
 
-/** 書き込み中に閉じようとしたときの確認。'continue' なら閉じない。 */
-function askWhileWriting(win: BrowserWindow | null): 'continue' | 'abort' {
-  const choice = dialog.showMessageBoxSync(win ?? undefined!, {
+/** 確認ダイアログを出している最中か。二重に出さないためのガード。 */
+let asking = false
+
+/**
+ * 書き込み中に閉じようとしたときの確認。'continue' なら閉じない。
+ *
+ * これは renderer を通らない **OS ネイティブのダイアログ**なので、`LocalizedText` では
+ * 届かない。ここだけは main が設定の言語で訳す。
+ * 設定はいつでも変えられるので、控えた値ではなく毎回 `getSettings()` から読む
+ * （控えると、English に切り替えたのにこのダイアログだけ日本語のまま出る）。
+ */
+export async function askWhileWriting(win: BrowserWindow | null): Promise<'continue' | 'abort'> {
+  const t = createTranslator((await getSettings()).locale)
+  const { response } = await dialog.showMessageBox(win ?? undefined!, {
     type: 'warning',
-    buttons: ['書き込みを続ける', '中止して終了する'],
+    buttons: [t('write.quitContinue'), t('write.quitAbort')],
     defaultId: 0,
     cancelId: 0,
-    title: '書き込み中です',
-    message: 'USB メモリへの書き込みが終わっていません。',
-    detail:
-      '今終了すると、書き込み途中の USB メモリが残ります（起動できません）。\n'
-      + '「中止して終了する」を選んだ場合も、USB メモリは作り直しが必要です。',
+    title: t('write.quitTitle'),
+    message: t('write.quitMessage'),
+    detail: t('write.quitDetail'),
   })
-  return choice === 0 ? 'continue' : 'abort'
+  return response === 0 ? 'continue' : 'abort'
+}
+
+/**
+ * 確認を出し、「中止して終了する」なら書き込みを止めてから終了する。
+ *
+ * 設定を読むために非同期になったので、呼ぶ側は**先に** `event.preventDefault()` を
+ * 済ませておくこと（同期の `showMessageBoxSync` から置き換えたときの唯一の違い）。
+ * 答えを待っている間に二度目の close / before-quit が来てもダイアログを重ねない。
+ */
+function confirmThenQuit(win: BrowserWindow | null): void {
+  if (asking) return
+  asking = true
+  void askWhileWriting(win)
+    .then((answer) => {
+      if (answer === 'continue') return
+      quitConfirmed = true
+      void shutdownWrite().finally(() => app.quit())
+    })
+    .finally(() => {
+      asking = false
+    })
 }
 
 function createWindow(): BrowserWindow {
@@ -57,9 +88,7 @@ function createWindow(): BrowserWindow {
   win.on('close', (event) => {
     if (quitConfirmed || !isWriteInProgress()) return
     event.preventDefault()
-    if (askWhileWriting(win) === 'continue') return
-    quitConfirmed = true
-    void shutdownWrite().finally(() => app.quit())
+    confirmThenQuit(win)
   })
 
   // 外部リンクは既定のブラウザで開く。アプリ内で開かせない。
@@ -116,9 +145,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('before-quit', (event) => {
     if (quitConfirmed || !isWriteInProgress()) return
     event.preventDefault()
-    if (askWhileWriting(BrowserWindow.getAllWindows()[0] ?? null) === 'continue') return
-    quitConfirmed = true
-    void shutdownWrite().finally(() => app.quit())
+    confirmThenQuit(BrowserWindow.getAllWindows()[0] ?? null)
   })
 
   app.on('will-quit', (event) => {

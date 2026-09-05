@@ -4,6 +4,12 @@
 // 昇格したプロセスの標準出力は親から確実には読めない（Windows の runas がその代表）ので、
 // ローカルの TCP ポートに NDJSON を流す方式にしている。
 // 127.0.0.1 に限定し、1 回限りのトークンで認証する。
+//
+// 画面に出す文言はここで訳さない。ワーカーは別プロセスで利用者の言語を知らないので、
+// `LocalizedText`（キー + 差し込み値）のまま運び、renderer が訳す。
+// `LocalizedText` は JSON 往復で同じものになる純粋なデータなので、この NDJSON に載せられる。
+
+import type { LocalizedText } from '@autoinstall/shared'
 
 export interface WorkerJob {
   /** ジョブ ID（ログの相関に使う） */
@@ -42,7 +48,8 @@ export type WorkerMessage =
       readonly phase: string
       readonly bytesDone: number
       readonly bytesTotal: number
-      readonly label: string
+      /** いま何を書いているか。訳さずに運ぶ（`WriteProgress.label` と同じもの）。 */
+      readonly label: LocalizedText
       readonly bytesPerSecond: number | null
       readonly etaSeconds: number | null
     }
@@ -57,11 +64,26 @@ export type WorkerMessage =
   | {
       readonly type: 'error'
       readonly jobId: string
-      readonly message: string
+      /**
+       * 画面に出す総括。訳さずに運ぶ（`WriteStatus.error.message` にそのまま入る）。
+       * 総括を持たない例外（素の `Error`）では送り手が汎用のキーに落とす。
+       */
+      readonly message: LocalizedText
       readonly name: string
+      /**
+       * 開発者向けの生の詳細（stack など。**日本語のまま**）。
+       * `@autoinstall/media` の例外は `Error.message` に生の値つきの日本語を残すので、
+       * stack の 1 行目としてここに入る。等幅で出す前提。
+       */
       readonly detail: string | null
     }
-  | { readonly type: 'log'; readonly jobId: string; readonly level: 'info' | 'warn'; readonly message: string }
+  | {
+      readonly type: 'log'
+      readonly jobId: string
+      readonly level: 'info' | 'warn'
+      /** 準備中の 1 行として画面に出る。訳さずに運ぶ。 */
+      readonly text: LocalizedText
+    }
 
 export type ControlMessage = { readonly type: 'cancel'; readonly jobId: string }
 

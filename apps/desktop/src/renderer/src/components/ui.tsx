@@ -1,6 +1,7 @@
 import { createPortal } from 'react-dom'
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { AlertTriangle, Check, ChevronDown, Info, X } from 'lucide-react'
+import { useT } from '../lib/i18n.js'
 
 // 画面共通の部品。
 // 大きな面には backdrop-blur を使わない（塗る面積に比例して GPU 負荷が上がり、
@@ -384,6 +385,8 @@ export function Modal({
   children: ReactNode
   footer?: ReactNode
 }): React.JSX.Element | null {
+  // フックは早期 return より前に呼ぶ（`!open` のときも呼び出し順を変えない）。
+  const t = useT()
   const ref = useRef<HTMLDivElement>(null)
   // onClose は呼び出し側でインラインの矢印関数なので、毎レンダリング別物になる。
   // 依存に入れると effect が毎回まわり直し、モーダル内の入力欄からダイアログへ
@@ -420,7 +423,7 @@ export function Modal({
           <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h2>
           <button
             onClick={onClose}
-            aria-label="閉じる"
+            aria-label={t('common.close')}
             className="rounded-lg p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700"
           >
             <X className="size-4" aria-hidden />

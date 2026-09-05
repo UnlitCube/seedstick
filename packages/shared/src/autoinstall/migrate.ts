@@ -7,6 +7,7 @@ import type {
   ReportingTarget,
 } from './advanced.js'
 import { UBUNTU_SERIES } from './model.js'
+import { localized, type LocalizedText, type MsgKey } from '../i18n/index.js'
 
 // 保存済みプロファイルの読み込み。
 // 古い形式や、手で編集されて壊れた JSON でもアプリが落ちないよう、
@@ -37,14 +38,21 @@ function oneOf<T extends string>(
   value: unknown,
   allowed: readonly T[],
   fallback: T,
-  label: string,
+  field: MsgKey,
 ): T {
   if (typeof value === 'string' && (allowed as readonly string[]).includes(value)) {
     return value as T
   }
   if (value !== undefined) {
+    // **項目名は訳文を連結せず、入れ子の LocalizedText で渡す。**
+    // 「〈項目名〉 の値 (…)」と組み立ててしまうと、語順の違う言語で成立しない
+    // （落とし穴 20 と同じ「文の断片を連結する」失敗）。
     noteDropped(
-      `${label} の値 (${String(value)}) を認識できなかったため既定 (${fallback}) に戻しました。`,
+      localized('migrate.enumReset', {
+        field: localized(field),
+        value: String(value),
+        fallback,
+      }),
     )
   }
   return fallback
@@ -117,12 +125,17 @@ function mergeSection<T extends Record<string, unknown>>(base: T, raw: unknown):
 function mergeList<T extends Record<string, unknown>>(
   template: T,
   raw: unknown,
-  label?: string,
+  category?: MsgKey,
 ): T[] {
   if (!Array.isArray(raw)) return []
   const kept = raw.filter(isObject)
-  if (label && kept.length !== raw.length) {
-    noteDropped(`${label}の ${raw.length - kept.length} 件は形式が正しくないため読み飛ばしました。`)
+  if (category && kept.length !== raw.length) {
+    noteDropped(
+      localized('migrate.itemsDropped', {
+        category: localized(category),
+        count: raw.length - kept.length,
+      }),
+    )
   }
   return kept.map((el) => mergeSection(template, el))
 }
@@ -133,11 +146,16 @@ function mergeList<T extends Record<string, unknown>>(
  * 要素ごとに「ひな型へ重ねた結果」と「元の要素」の両方が要るときに使う。
  * mergeList の戻り値を添字で元配列に引き当てると、落とされた要素の分だけずれる。
  */
-function rawList(raw: unknown, label?: string): Record<string, unknown>[] {
+function rawList(raw: unknown, category?: MsgKey): Record<string, unknown>[] {
   if (!Array.isArray(raw)) return []
   const kept = raw.filter(isObject)
-  if (label && kept.length !== raw.length) {
-    noteDropped(`${label}の ${raw.length - kept.length} 件は形式が正しくないため読み飛ばしました。`)
+  if (category && kept.length !== raw.length) {
+    noteDropped(
+      localized('migrate.itemsDropped', {
+        category: localized(category),
+        count: raw.length - kept.length,
+      }),
+    )
   }
   return kept
 }
@@ -153,11 +171,19 @@ function withIds<T extends { id: string }>(items: T[]): T[] {
  * 過去 3 巡の事故はどれも「黙って既定に戻す」ことが原因だった。
  * 値が消えたこと自体は防げなくても、消えたと伝われば利用者は気づける。
  * migrateProfile が 1 回の呼び出しごとに配列を差し替えて使う。
+ *
+ * **訳さずキーのまま積む。** ここは `@autoinstall/shared` で、利用者の言語を知らない
+ * （main から IPC で renderer へ渡る）。日本語の文字列を積むと、英語の画面の
+ * 「Profile loaded」の下に日本語の箇条書きが並ぶ。落とし穴 49 / 50 のための
+ * 安全通知（別のディスクを消しかねない、と伝えるための唯一の手段）が届かなくなる。
  */
-let dropNotes: string[] = []
+let dropNotes: LocalizedText[] = []
 
-function noteDropped(what: string): void {
-  if (!dropNotes.includes(what)) dropNotes.push(what)
+function noteDropped(what: LocalizedText): void {
+  // 同じ通知を 2 度出さない。オブジェクトなので中身で比べる
+  // （キーだけで比べると、項目の違う `migrate.enumReset` が 1 件に潰れる）。
+  const seen = JSON.stringify(what)
+  if (!dropNotes.some((n) => JSON.stringify(n) === seen)) dropNotes.push(what)
 }
 
 /** 配列要素のひな型。欠けたキーはここから埋める。 */
@@ -269,8 +295,14 @@ function readInterfaceSelector(raw: unknown, fallback: unknown): unknown {
 
 export interface MigrationResult {
   readonly profile: AutoinstallProfile
-  /** 読み込み時に落とした/補った項目の説明（UI で知らせる） */
-  readonly notes: readonly string[]
+  /**
+   * 読み込み時に落とした/補った項目の説明（UI で知らせる）。
+   *
+   * **訳さずキー + 差し込み値で運ぶ。** 訳すのは描画するときだけ
+   * （renderer の `useTl`）。ここで文字列にすると英語の画面に日本語が出るうえ、
+   * 表示中に言語を切り替えてもこの箇条書きだけ古い言語のまま残る。
+   */
+  readonly notes: readonly LocalizedText[]
 }
 
 /**
@@ -281,10 +313,10 @@ export interface MigrationResult {
  * - 型が合わないフィールドは既定値に戻す。
  */
 export function migrateProfile(raw: unknown): MigrationResult {
-  const notes: string[] = []
+  const notes: LocalizedText[] = []
   dropNotes = []
   if (!isObject(raw)) {
-    return { profile: createDefaultProfile(), notes: ['ファイルの中身がプロファイルではありませんでした。'] }
+    return { profile: createDefaultProfile(), notes: [localized('migrate.notAProfile')] }
   }
 
   const savedVersion = typeof raw['profileVersion'] === 'number' ? raw['profileVersion'] : 1
@@ -292,7 +324,7 @@ export function migrateProfile(raw: unknown): MigrationResult {
     ? (raw['series'] as UbuntuSeries)
     : undefined
   if (raw['series'] !== undefined && series === undefined) {
-    notes.push(`対応していない Ubuntu バージョン (${String(raw['series'])}) だったため既定に戻しました。`)
+    notes.push(localized('migrate.unsupportedSeries', { series: String(raw['series']) }))
   }
 
   const base = createDefaultProfile(series ?? '24.04')
@@ -328,7 +360,7 @@ export function migrateProfile(raw: unknown): MigrationResult {
         isObject(raw['software']) ? raw['software']['updates'] : undefined,
         ['security', 'all'] as const,
         base.software.updates,
-        '更新の範囲 (software.updates)',
+        'migrate.field.softwareUpdates',
       ),
       // snaps もレコードの配列。素通しにすると `[null]` が型だけ合った状態で通り、
       // SoftwareStep の描画と buildAutoinstallObject の両方が TypeError で落ちる
@@ -336,7 +368,7 @@ export function migrateProfile(raw: unknown): MigrationResult {
       snaps: mergeList(
         SNAP_TEMPLATE,
         isObject(raw['software']) ? raw['software']['snaps'] : undefined,
-        'Snap',
+        'migrate.category.snap',
       ) as AutoinstallProfile['software']['snaps'],
     },
     apt: {
@@ -345,7 +377,7 @@ export function migrateProfile(raw: unknown): MigrationResult {
         isObject(raw['apt']) ? raw['apt']['fallback'] : undefined,
         ['abort', 'continue-anyway', 'offline-install'] as const,
         base.apt.fallback,
-        'ミラーが使えないときの動作 (apt.fallback)',
+        'migrate.field.aptFallback',
       ),
       sources: withIds(
         mergeList(APT_SOURCE_TEMPLATE, isObject(raw['apt']) ? raw['apt']['sources'] : undefined),
@@ -377,7 +409,7 @@ export function migrateProfile(raw: unknown): MigrationResult {
         isObject(raw['behavior']) ? raw['behavior']['shutdown'] : undefined,
         ['reboot', 'poweroff'] as const,
         base.behavior.shutdown,
-        'インストール後の動作 (behavior.shutdown)',
+        'migrate.field.behaviorShutdown',
       ),
       reporting: readReporting(
         isObject(raw['behavior']) ? raw['behavior']['reporting'] : undefined,
@@ -388,20 +420,14 @@ export function migrateProfile(raw: unknown): MigrationResult {
   }
 
   if (savedVersion < 2) {
-    notes.push(
-      '古い形式のプロファイルを読み込みました。追加ユーザー・アプリ展開・サービス・GPU は未設定です。',
-    )
+    notes.push(localized('migrate.fromV1'))
   } else if (savedVersion < 3) {
-    notes.push('古い形式のプロファイルを読み込みました。「実行時に決める値」は未設定です。')
+    notes.push(localized('migrate.fromV2'))
   } else if (savedVersion < 4) {
-    notes.push(
-      '古い形式のプロファイルを読み込みました。カーネル選択・追加リポジトリ・失敗時のログ収集などは未設定です。',
-    )
+    notes.push(localized('migrate.fromV3'))
   }
   if (savedVersion > 4) {
-    notes.push(
-      '新しいバージョンのツールで保存されたプロファイルです。認識できない設定は無視しました。',
-    )
+    notes.push(localized('migrate.fromNewer'))
   }
 
   // v3 以前は `storage.disableSwap: boolean` だった。`swap` に読み替える。
@@ -472,9 +498,9 @@ function readPostInstall(
     lateCommands: strList(src['lateCommands']),
     firstBootCommands: strList(src['firstBootCommands']),
     errorCommands: strList(src['errorCommands']),
-    files: mergeList(FILE_TEMPLATE, src['files'], '追加ファイル') as AutoinstallProfile['postInstall']['files'],
+    files: mergeList(FILE_TEMPLATE, src['files'], 'migrate.category.file') as AutoinstallProfile['postInstall']['files'],
     additionalUsers: withIds(
-      mergeList(USER_TEMPLATE, src['additionalUsers'], '追加ユーザー'),
+      mergeList(USER_TEMPLATE, src['additionalUsers'], 'migrate.category.user'),
     ) as unknown as AutoinstallProfile['postInstall']['additionalUsers'],
     // source は判別可能ユニオンなので mergeSection ではなく型別に読む。
     // **添字で引き当ててはいけない。** mergeList は `filter(isObject)` で要素を落として
@@ -482,13 +508,13 @@ function readPostInstall(
     // 展開 B が展開 A の URL と SHA-256 を受け取っていた（実際に再現した）。
     // 元要素と source を同じオブジェクトから取る。
     deployments: withIds(
-      rawList(src['deployments'], 'アプリ展開').map((el) => ({
+      rawList(src['deployments'], 'migrate.category.deployment').map((el) => ({
         ...mergeSection(DEPLOYMENT_TEMPLATE, el),
         source: readDeploymentSource(el['source']),
       })),
     ) as unknown as AutoinstallProfile['postInstall']['deployments'],
     services: withIds(
-      mergeList(SERVICE_TEMPLATE, src['services'], 'サービス'),
+      mergeList(SERVICE_TEMPLATE, src['services'], 'migrate.category.service'),
     ) as unknown as AutoinstallProfile['postInstall']['services'],
   }
 }
@@ -509,10 +535,7 @@ function readStorage(
     // 意図と違うディスクを消す（このツールで最も破壊的な失敗・落とし穴 22）。
     // mode は既定に戻すが、指定されていた match は読めた形のまま残す。
     if (mode !== undefined) {
-      noteDropped(
-        `ディスクの構成方法 (${String(mode)}) を認識できなかったため既定に戻しました。` +
-          '対象ディスクの指定は残してあります。書き込む前に確認してください。',
-      )
+      noteDropped(localized('migrate.storageModeReset', { mode: String(mode) }))
     }
     if (base.mode === 'raw') return base
     return { ...base, match: readDiskMatch(raw['match'], base.match) as typeof base.match }
@@ -527,7 +550,7 @@ function readStorage(
       raw['partitionTable'],
       ['default', 'gpt', 'msdos'] as const,
       template.partitionTable,
-      'パーティションテーブル (storage.partitionTable)',
+      'migrate.field.storagePartitionTable',
     ),
     match: readDiskMatch(raw['match'], template.match) as Exclude<
       AutoinstallProfile['storage'],

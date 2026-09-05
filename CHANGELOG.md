@@ -63,6 +63,131 @@
 - 作成記録（`autoinstall-usb.json`）を USB に残すオプション
 - Ubuntu Server 22.04 / 24.04 / 25.10 / 26.04 に対応（バージョン差を吸収）
 
+### 🌐 English に切り替えても日本語が残らないようにした
+
+言語を English にしても、確認画面のサマリー・書き込みの進捗ラベル・エラー・
+プロファイル読み込み時の注意書きは日本語のままだった。原因は 2 つある。
+renderer に `t()` を通さない日本語リテラルが残っていたことと、
+**main と `@autoinstall/media` が文字列を作って返していた**ことで、
+後者は利用者の言語を知らない（昇格ワーカーに至っては別プロセスで設定を持たない）。
+
+やったこと:
+
+- renderer の日本語リテラルを `t()` / `useTx()` へ移した。
+  **辞書は 410 → 742 キー**（ja / en それぞれ。実測）。
+  `ja.ts` に足すと `en.ts` が `satisfies Record<MsgKey, string>` で強制される
+  仕組みは従来どおり
+- main / media が返す**画面に出る文言**を `LocalizedText`（キー + 差し込み値）
+  にした。訳すのは renderer が描画するときだけ（`useTl`）
+- **開発者向けの診断は日本語のまま残す。** `Error.message`・
+  `WriteStatus.detail`・`ValidationIssue.detail` がそれで、画面には
+  「訳した総括 + 生の詳細」の 2 本立てで出る。
+  総括に連結しない（English の画面に半分日本語の行が出るため）
+
+#### ⚠️ 互換性に関わる変更（型が変わったもの）
+
+保存済みプロファイルの JSON 形式は変わっていない。変わったのは
+**プロセス間で運ぶ値の型**なので、影響を受けるのはこのリポジトリのコードと、
+外から `@autoinstall/media` / `@autoinstall/shared` を使う場合だけ。
+
+| 場所 | 変更前 | 変更後 |
+|---|---|---|
+| `RemovableDevice.blockedReason` / `DeviceInfo.blockedReason` | `string \| null` | `LocalizedText \| null` |
+| `WriteOp.label` | `string` | `LocalizedText` |
+| `WriteStatus` の `preparing.message` / `writing.label` / `error.message` | `string` | `LocalizedText` |
+| `WorkerMessage` の `progress.label` / `error.message` | `string` | `LocalizedText` |
+| `WorkerMessage` の `log.message` | `message: string` | **`text: LocalizedText`**（キー名も変わった） |
+| `IsoOpenResult`（失敗側） | `detail: string`（総括） | `text: LocalizedText` を追加し、`detail: string \| null` は**生の詳細**に意味が変わった |
+| `MigrationResult.notes` / `loadProfile` / `loadNamedProfile` の `notes` | `string[]` | `LocalizedText[]` |
+| `startWrite()` の戻り値 | `{ started, message?: string }` | `{ started, message?: LocalizedText, detail?: string \| null }` |
+| `MsgParams` の値 | `string \| number` | `string \| number \| LocalizedText`（**入れ子を許した**） |
+| `createTranslator(locale)` の戻り値 | `(key) => string` | `(key, params?) => string` |
+| `LayoutError` | `(message, reason)` | `(message, reason, text: LocalizedText)` |
+| `ValidationIssue` | — | `detail?: string` を追加（訳さない生の診断。総括は `messageJa` / `messageEn` のまま） |
+| renderer の `AppState.isoError` | `string \| null` | `IsoRejection \| null`（`{ text, detail }`） |
+| renderer の `AppState.profileNotes` | `string[]` | `LocalizedText[]` |
+
+新しく export したもの:
+
+- `@autoinstall/shared`: `LocalizedText` / `MsgParams` / `MsgParamValue` /
+  `localized()` / `formatLocalized()` / `isLocalizedText(value, deep?)` /
+  `interpolate(template, params, locale?)` / `placeholdersOf()`、
+  `GenerateError`（`text` と `field` を持つ）、`parseOverlay()`（検証と生成で共有）、
+  `generateErrorIssue()`
+- `@autoinstall/media` のバレル: `assertDeviceIsWritable` と `DeviceRejectedError`
+  （`assertDeviceIsWritable` は**それまで非 export で、振る舞いテストが 1 件も
+  無かった**）
+- モジュール内の export（バレルには載せていない。テストからだけ使う）:
+  `platform/types.ts` の `MIN_DEVICE_BYTES` / `MAX_DEVICE_BYTES`
+  （境界値をテストが辞書と共有するため）、
+  `blockdev/raw.ts` の `DeviceWriteStalledError`
+  （`RawBlockDevice` の「1 バイトも進まない」= USB を抜かれた失敗。
+  それまで素の `Error` だったので画面に訳せる文言を出せなかった）
+- `apps/desktop/src/main/iso-service.ts`: `unsupportedIsoText()` / `invalidIsoText()`
+  （実 ISO を用意せずに拒否の 8 分岐を試せるようにするため）
+- renderer の `lib/i18n.ts`: `useTl()` / `useTx()` / `formatMaybeLocalized()` /
+  `MaybeLocalized`
+
+#### この作業で踏んだもの
+
+- **契約を広げたのに、受け取り側の検査が古いままだった。**
+  `MsgParams` に入れ子を許したあとも、ワーカー境界の判定の**写し**が
+  `params` を `string | number` に限っていたため、理由つきの拒否
+  （`device.rejectedNotWritable` に `device.blockedSystemDisk` を入れ子で持つ）が
+  境界で捨てられ、画面には「予期しないエラーが発生しました」だけが出ていた。
+  形の判定は `isLocalizedText()` **1 つだけ**に集約し、
+  プロセス境界を越える値は `deep` で中身まで見る
+- **文の断片を連結すると語順の違う言語で成立しない。**
+  `migrate` の「〈項目名〉 の値 (…) を認識できなかったため既定 (…) に戻しました」は
+  項目名を訳文に連結していた。項目名も `LocalizedText` として**入れ子で**渡す
+  （落とし穴 20 と同じ形の失敗）
+- **`interpolate` は値を渡し忘れたらプレースホルダを残す。**
+  空文字に落とすと「3.2 GB 以上必要です」が「 以上必要です」になり、
+  画面上は自然に見えてしまう。`{size}` が残っていれば渡し忘れだと分かる
+- **入れ子の深さに上限を置く**（`MAX_NEST_DEPTH = 4`）。
+  `LocalizedText` は IPC と NDJSON を通るので、深さは外から決まる
+- **`localized(key)` は `params` を渡さないときキーを生やさない。**
+  `{key, params: undefined}` は JSON を往復すると `{key}` になり、
+  `toEqual` で別物になる
+- **`isoError` の型を変えたら、本文が空の Callout が出る経路ができた。**
+  `detail` が「総括」から「生の詳細」に意味を変えたので、通常の拒否
+  （`detail: null`）ではタイトルだけになる。`{ text, detail }` の 2 本立てにした
+- **`WriteStatus` の `error` を `as WriteStatus` で押し込んでいた。**
+  `'cancelled'` は `message` も `detail` も持たない状態なので、
+  アサーションが食い違いを隠していた。型を直したら露出した
+- **昇格ワーカーは、アプリを更新しても古い実体が動き続けうる**
+  （インストーラが差し替えるのはファイルであって、走っているプロセスではない）。
+  renderer の受け取りは `LocalizedText | string` の両方を扱う
+  （`MaybeLocalized`）。文字列で来たら訳さずそのまま出す
+
+#### 入れた検査
+
+- `i18n.test.ts`: ja / en のキー一致、空の訳文、英語辞書への日本語混入、
+  **英語辞書への全角約物の混入**、差し込み名の集合の一致、
+  入れ子の展開・深さ打ち切り・壊れた入れ子で落ちないこと、
+  JSON を往復して同じものになること、`*Ja` / `*En` の対の文字体系
+- `packages/media/src/localized-guard.test.ts`: `classifyDevice` の拒否パターン・
+  `WriteOp` のラベル・`LayoutError` の理由・`DeviceRejectedError` の拒否パターンが
+  **辞書に実在するキー**を運ぶこと、逆に**辞書側に誰も参照しないキーが無い**こと。
+  さらに `packages/media/src` と `apps/desktop/src/main` の**ソースを走査**して、
+  `localized()` の第 1 引数が辞書のキーのリテラルであること、
+  `message:` / `label:` / `blockedReason:` に日本語リテラルが残っていないこと
+  （`detail:` は対象外＝規約どおり）。例外は許可リストに 1 件だけで、
+  **死んだ例外が残っていないことも検査する**
+- `apps/desktop/src/main/localized-guard.test.ts`: `SeedBuildError` と
+  ISO の拒否理由が辞書に実在するキーを運ぶこと（辞書の `seed.*` の取りこぼしも見る）
+- `worker-boundary.test.ts`: 入れ子の理由つき拒否がワーカー境界を越えても
+  「予期しないエラー」に落ちないこと、壊れた `text` / 深すぎる入れ子は通さないこと
+- `assertDeviceIsWritable`: **拒否 7 パターン**（列挙に無い / `selectable: false` /
+  理由が取れない / 容量違い / シリアル違い / シリアルが読めない /
+  シリアル無し環境で表示名違い）と**許可 2 パターン**
+- **抜き取りで変異検査を再確認した。** `isLocalizedTextDeepAt()` を
+  「入れ子を許さない」古い形に戻すと、`worker-boundary.test.ts` の
+  「入れ子の理由つき拒否が、境界で『予期しないエラー』に落ちない」が
+  期待どおり `{ key: 'error.unknown' }` で落ちる（実行して確認。すぐ戻した）。
+  他の検査も作成時に変異させて確かめてあるが、**この 1 件以外は
+  今回まとめて再実行していない**
+
 ### 🐛 修正
 
 #### インストーラ（root）で任意コマンドが動く経路を塞いだ
@@ -193,6 +318,13 @@
   4 リリースとも `additionalProperties: true` なので ajv は素通しする。
   スキーマが宣言しているキーと突き合わせる検査を足した
 - 上記の新しい検査は、いずれも**修正を変異させると落ちること**を確認済み
+- **実機ログにコミット SHA が入っていなかった。** ログを取ったあとにコードを
+  変えても乖離が見えない（実際、`e2e:usb` 19/19 と `e2e:usb-worker` 18/18 を
+  取ったあとに書き込み経路を変更している）。`e2e:usb` / `e2e:usb-worker` の
+  両方が、実行開始時に HEAD と作業ツリーの汚れをログの先頭へ出すようにした。
+  **汚れていれば `(uncommitted changes: N files)` と必ず付ける**（SHA だけ出して
+  汚れを隠すと、かえって嘘のログになる）。git が使えない環境では `unknown` と
+  出して続行する
 
 #### 手で編集した設定でも壊れない
 

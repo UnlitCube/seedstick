@@ -12,7 +12,7 @@ import {
   type WorkerJob,
   type WorkerMessage,
 } from '@autoinstall/media'
-import type { WriteStatus } from '@autoinstall/shared'
+import { localized, type LocalizedText, type WriteStatus } from '@autoinstall/shared'
 
 // 書き込みの司令塔。
 //
@@ -54,15 +54,22 @@ export class WriteSupervisor {
     return this.status.state === 'preparing' || this.status.state === 'writing'
   }
 
-  /** 書き込みを開始する。既に走っていれば拒否する。 */
-  async start(job: Omit<WorkerJob, 'reportPort' | 'reportToken' | 'jobId'>): Promise<{ started: boolean; message?: string }> {
-    if (this.busy) return { started: false, message: '既に書き込み中です。' }
+  /**
+   * 書き込みを開始する。既に走っていれば拒否する。
+   *
+   * 画面に出す文言は訳さずに `LocalizedText` で返す（main は利用者の言語を知らない）。
+   * `detail` は開発者向けの生の診断で、訳さないまま等幅で出す。
+   */
+  async start(
+    job: Omit<WorkerJob, 'reportPort' | 'reportToken' | 'jobId'>,
+  ): Promise<{ started: boolean; message?: LocalizedText; detail?: string | null }> {
+    if (this.busy) return { started: false, message: localized('write.errorAlreadyRunning') }
 
     this.jobId = randomBytes(8).toString('hex')
     this.token = randomBytes(24).toString('base64url')
     this.deviceId = job.devicePath
     this.resetWorkerPid()
-    this.setStatus({ state: 'preparing', message: '権限を確認しています' })
+    this.setStatus({ state: 'preparing', message: localized('write.statusCheckingPrivileges') })
 
     // ポートを開く・ジョブファイルを書く段階の失敗も必ず捕まえる。
     // ここで抜けると状態が 'preparing' のまま残り、busy が永久に true になって
@@ -80,19 +87,19 @@ export class WriteSupervisor {
       const alreadyPrivileged = await getPlatformOps().hasWriteAccess()
       this.setStatus({
         state: 'preparing',
-        message: alreadyPrivileged ? '書き込みを準備しています' : '管理者権限の許可を待っています',
+        message: localized(
+          alreadyPrivileged ? 'write.statusPreparing' : 'write.statusWaitingElevation',
+        ),
       })
       this.child = alreadyPrivileged ? this.spawnDirect(this.jobFile) : this.spawnElevated(this.jobFile)
       this.watchChild(this.child)
       return { started: true }
     } catch (err) {
       await this.cleanup()
-      this.setStatus({
-        state: 'error',
-        message: '書き込みプロセスを起動できませんでした。',
-        detail: (err as Error).message,
-      })
-      return { started: false, message: (err as Error).message }
+      // 総括は訳せる形で、原因（ポートが開けない等の開発者向け診断）は生のまま渡す。
+      const detail = (err as Error).message
+      this.setStatus({ state: 'error', message: localized('write.errorSpawnFailed'), detail })
+      return { started: false, message: localized('write.errorSpawnFailed'), detail }
     }
   }
 
@@ -129,13 +136,12 @@ export class WriteSupervisor {
           if (killed || !this.busy || this.jobId !== jobId) return
           // 落とせなかった。黙って 'cancelled' にすると、ユーザーは止まったと信じて
           // USB を抜き、書き込み途中のメディアができる。正直に伝える。
+          // 「抜かないでほしい」「タスクマネージャーで終了してほしい」は開発者向けの
+          // 診断ではなく利用者への指示なので、detail ではなく訳せる message に置く。
           this.setStatus({
             state: 'error',
-            message: '書き込みを止められませんでした。',
-            detail:
-              '管理者権限で動いている書き込み処理を停止できませんでした。'
-              + 'USB メモリはまだ書き込まれている可能性があります。'
-              + '取り外さずに、タスクマネージャーで該当のプロセスを終了するか、完了を待ってください。',
+            message: localized('write.errorCancelFailed'),
+            detail: null,
           })
           // ここだけ cleanup() を呼んでいなかった。ジョブファイルには
           // パスワードハッシュが入っており、進捗受信サーバーも開いたままになる。
@@ -189,6 +195,10 @@ export class WriteSupervisor {
       server.listen(0, '127.0.0.1', () => {
         const addr = server.address()
         if (addr === null || typeof addr === 'string') {
+          // 不変条件違反（listen のコールバックまで来て address() が無い）。
+          // 実運用では起きない開発者向けの診断なので訳さない。
+          // start() の catch で総括文（write.errorSpawnFailed）が付き、
+          // この文字列は detail として等幅で出る。
           reject(new Error('進捗受信用のポートを開けませんでした。'))
           return
         }
@@ -206,7 +216,7 @@ export class WriteSupervisor {
         // 昇格経路では this.child は PowerShell のラッパーで、実際に書いているのは
         // AppInfo が起こした別プロセス。キャンセル時に落とすべきはこちら。
         this.workerPid = msg.pid
-        this.setStatus({ state: 'preparing', message: '書き込みを開始しました' })
+        this.setStatus({ state: 'preparing', message: localized('write.statusStarted') })
         break
       case 'progress':
         this.setStatus({
@@ -230,16 +240,19 @@ export class WriteSupervisor {
         void this.cleanup()
         break
       case 'error':
-        this.setStatus({
-          state: msg.name === 'WriteCancelledError' ? 'cancelled' : 'error',
-          message: msg.message,
-          detail: msg.detail,
-        } as WriteStatus)
+        // 三項で state を決めて `as WriteStatus` で押し込んでいた。
+        // 'cancelled' は message も detail も持たない状態なので、
+        // アサーションが食い違いを隠していた（型を直すと必ず露出する）。
+        if (msg.name === 'WriteCancelledError') {
+          this.setStatus({ state: 'cancelled' })
+        } else {
+          this.setStatus({ state: 'error', message: msg.message, detail: msg.detail })
+        }
         void this.cleanup()
         break
       case 'log':
         if (this.status.state === 'preparing') {
-          this.setStatus({ state: 'preparing', message: msg.message })
+          this.setStatus({ state: 'preparing', message: msg.text })
         }
         break
     }
@@ -265,29 +278,31 @@ export class WriteSupervisor {
       // OS の生のエラー文ではなく次にすべきことだけを出す。
       // （Windows の Start-Process は UAC 拒否で InvalidOperationException を吐く）
       if (isElevationDeclined(stderr)) {
+        // 次にすべきことだけを出す。生の PowerShell 例外は見せない。
         this.setStatus({
           state: 'error',
-          message: '管理者権限が許可されませんでした。',
-          detail:
-            'USB メモリへの書き込みには管理者権限が必要です。'
-            + 'もう一度「書き込みを開始」を押し、権限の確認ダイアログで「はい」を選んでください。',
+          message: localized('write.errorElevationDeclined'),
+          detail: null,
         })
         void this.cleanup()
         return
       }
+      // stderr があればそれが開発者向けの詳細。無ければ「次にすること」を総括文に畳む
+      // （案内文を detail に置くと、等幅の診断欄に利用者向けの文が出てしまう）。
+      const raw = stderr.trim()
       this.setStatus({
         state: 'error',
-        message: `書き込みプロセスが異常終了しました (終了コード ${code})。`,
-        detail:
-          stderr.trim() ||
-          '管理者権限の要求がキャンセルされた可能性があります。もう一度試してください。',
+        message: raw
+          ? localized('write.errorWorkerExited', { code })
+          : localized('write.errorWorkerExitedNoOutput', { code }),
+        detail: raw || null,
       })
       void this.cleanup()
     })
     child.on('error', (err) => {
       this.setStatus({
         state: 'error',
-        message: '書き込みプロセスを起動できませんでした。',
+        message: localized('write.errorSpawnFailed'),
         detail: err.message,
       })
       void this.cleanup()

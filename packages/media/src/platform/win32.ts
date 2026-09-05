@@ -93,7 +93,10 @@ export function parseWindowsDisks(json: string): RemovableDevice[] {
     const removable = bus === 'usb' || bus === 'sd'
     return classifyDevice({
       id: `\\\\.\\PhysicalDrive${d.Number}`,
-      description: (d.FriendlyName ?? `ディスク ${d.Number}`).trim(),
+      // description はハードウェア名を運ぶ素の string（訳さない）。
+      // FriendlyName が無いときの既定名も、ロケール中立の表記にする
+      // （ここだけ LocalizedText にすると description の型を広げることになる）。
+      description: (d.FriendlyName ?? `Disk ${d.Number}`).trim(),
       sizeBytes: Number(d.Size ?? 0),
       bus,
       removable,

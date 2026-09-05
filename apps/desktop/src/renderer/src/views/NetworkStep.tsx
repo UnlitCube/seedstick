@@ -1,6 +1,6 @@
 import type { InterfaceSelector, NetworkConfig } from '@autoinstall/shared'
 import { useStore } from '../store.js'
-import { useT } from '../lib/i18n.js'
+import { useT, useTx } from '../lib/i18n.js'
 import {
   Badge,
   Callout,
@@ -28,6 +28,7 @@ const DEFAULT_STATIC = {
 
 export function NetworkStep(): React.JSX.Element {
   const t = useT()
+  const tx = useTx()
   const network = useStore((s) => s.profile.network)
   const update = useStore((s) => s.updateProfile)
 
@@ -81,18 +82,18 @@ export function NetworkStep(): React.JSX.Element {
             {
               value: 'dhcp',
               label: t('network.modeDhcp'),
-              description: '特定のネットワークカードだけを DHCP にしたい場合に選びます。',
+              description: t('network.modeDhcpHint'),
             },
             {
               value: 'static',
               label: t('network.modeStatic'),
-              description: 'サーバー用途で IP アドレスを固定したい場合に選びます。',
+              description: t('network.modeStaticHint'),
             },
             {
               value: 'raw',
               label: t('network.modeRaw'),
               badge: <Badge>{t('common.advanced')}</Badge>,
-              description: 'bond / VLAN / 複数 NIC など、複雑な構成を自分で書く場合に選びます。',
+              description: t('network.modeRawHint'),
             },
           ]}
         />
@@ -100,14 +101,15 @@ export function NetworkStep(): React.JSX.Element {
 
       {network.mode === 'installer-default' && (
         <Callout tone="info">
-          インストーラが <code className="font-mono">eth*</code> と{' '}
-          <code className="font-mono">en*</code> に一致するすべての有線 NIC で DHCPv4 を試し、
-          アドレスを取得できなかった NIC は自動的に無効化します。手で設定を書くより確実です。
+          {tx('network.installerDefaultBody', {
+            ethGlob: <code className="font-mono">eth*</code>,
+            enGlob: <code className="font-mono">en*</code>,
+          })}
         </Callout>
       )}
 
       {(network.mode === 'dhcp' || network.mode === 'static') && (
-        <Card title="対象のネットワークカード">
+        <Card title={t('network.interface')}>
           <InterfacePicker
             value={network.target}
             onChange={(target) => setNetwork({ ...network, target })}
@@ -124,7 +126,7 @@ export function NetworkStep(): React.JSX.Element {
       )}
 
       {network.mode === 'static' && (
-        <Card title="固定 IP の設定">
+        <Card title={t('network.staticTitle')}>
           <div className="grid gap-5 sm:grid-cols-2">
             <Field label={t('network.address')} hint={t('network.addressHint')} required>
               {(id) => (
@@ -148,7 +150,7 @@ export function NetworkStep(): React.JSX.Element {
                 />
               )}
             </Field>
-            <Field label={t('network.nameservers')} hint="カンマ区切りで複数指定できます">
+            <Field label={t('network.nameservers')} hint={t('network.nameserversHint')}>
               {(id) => (
                 <TextInput
                   id={id}
@@ -161,7 +163,7 @@ export function NetworkStep(): React.JSX.Element {
                 />
               )}
             </Field>
-            <Field label={t('network.searchDomains')} hint="社内ドメインなど（任意）">
+            <Field label={t('network.searchDomains')} hint={t('network.searchDomainsHint')}>
               {(id) => (
                 <TextInput
                   id={id}
@@ -179,20 +181,13 @@ export function NetworkStep(): React.JSX.Element {
             </Field>
           </div>
           <div className="mt-4">
-            <Callout tone="warning">
-              固定 IP を設定した物理サーバーでは、「インストール後は cloud-init にネットワークを触らせない」
-              （インストール後の設定）も合わせて有効にすることをおすすめします。再起動のたびに設定が
-              書き戻されるのを防げます。
-            </Callout>
+            <Callout tone="warning">{t('network.staticCloudInitNote')}</Callout>
           </div>
         </Card>
       )}
 
       {network.mode === 'raw' && (
-        <Card
-          title="netplan の設定を直接書く"
-          description="autoinstall の network キーにそのまま入ります。netplan v2 の形式です。"
-        >
+        <Card title={t('network.rawTitle')} description={t('network.rawDescription')}>
           <TextArea
             rows={14}
             value={network.yaml}
@@ -200,13 +195,18 @@ export function NetworkStep(): React.JSX.Element {
             onChange={(e) => setNetwork({ mode: 'raw', yaml: e.target.value })}
           />
           <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-            例: bond、VLAN、複数 NIC の静的設定など。
-            <button
-              onClick={() => void window.autoinstall.openExternal('https://netplan.io/reference')}
-              className="ml-1 text-sky-700 underline-offset-2 hover:underline dark:text-sky-400"
-            >
-              netplan のリファレンス
-            </button>
+            {tx('network.rawExample', {
+              link: (
+                <button
+                  onClick={() =>
+                    void window.autoinstall.openExternal('https://netplan.io/reference')
+                  }
+                  className="ml-1 text-sky-700 underline-offset-2 hover:underline dark:text-sky-400"
+                >
+                  {t('network.netplanReference')}
+                </button>
+              ),
+            })}
           </p>
         </Card>
       )}
@@ -243,10 +243,7 @@ function InterfacePicker({
         )}
       </Field>
       {value.kind === 'name' && (
-        <Field
-          label="ネットワークカードの名前"
-          hint="例: enp0s3, eno1, ens18。事前に確認しておく必要があります。"
-        >
+        <Field label={t('network.interfaceName')} hint={t('network.interfaceNameHint')}>
           {(id) => (
             <TextInput
               id={id}
@@ -259,7 +256,7 @@ function InterfacePicker({
         </Field>
       )}
       {value.kind === 'mac' && (
-        <Field label="MAC アドレス" hint="例: 52:54:00:12:34:56。機器を入れ替えても確実に一致します。">
+        <Field label={t('network.macAddress')} hint={t('network.macAddressHint')}>
           {(id) => (
             <TextInput
               id={id}

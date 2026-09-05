@@ -1,6 +1,8 @@
 // リムーバブルデバイスの列挙と、書き込み前後の OS 別処理。
 // 「システムディスクを絶対に選ばせない」ことが最優先の設計目標。
 
+import { localized, type LocalizedText } from '@autoinstall/shared'
+
 export type DeviceBus = 'usb' | 'sd' | 'nvme' | 'sata' | 'scsi' | 'virtual' | 'unknown'
 
 export interface RemovableDevice {
@@ -23,7 +25,11 @@ export interface RemovableDevice {
    * 判定は列挙側で完結させ、UI 側に安全判断を持ち込ませない。
    */
   readonly selectable: boolean
-  readonly blockedReason: string | null
+  /**
+   * ブロックした理由。**訳さずに運ぶ**（このパッケージは利用者の言語を知らない。
+   * 昇格ワーカーは別プロセスで locale を持たない）。renderer が `formatLocalized` で訳す。
+   */
+  readonly blockedReason: LocalizedText | null
 }
 
 export interface PlatformOps {
@@ -43,17 +49,26 @@ export interface PlatformOps {
 // 「確認を強めるべきか」の判定は renderer からも使うので @autoinstall/shared 側にある。
 export { EXTRA_CAUTION_SIZE_BYTES, needsExtraCaution } from '@autoinstall/shared'
 
+/** これ未満は Ubuntu Server の ISO が入らない。 */
+export const MIN_DEVICE_BYTES = 4 * 1000 * 1000 * 1000
+/** これを超えるものは外付け HDD の可能性が高い。誤選択の被害が大きいのでブロックする。 */
+export const MAX_DEVICE_BYTES = 2 * 1000 * 1000 * 1000 * 1000
+
 /** 危険なデバイスをブロックする共通判定。列挙結果を必ずこれに通す。 */
 export function classifyDevice(
   d: Omit<RemovableDevice, 'selectable' | 'blockedReason'>,
 ): RemovableDevice {
-  const block = (reason: string): RemovableDevice => ({ ...d, selectable: false, blockedReason: reason })
+  const block = (reason: LocalizedText): RemovableDevice => ({
+    ...d,
+    selectable: false,
+    blockedReason: reason,
+  })
 
-  if (d.isSystem) return block('OS が入っているシステムディスクです')
-  if (d.readOnly) return block('書き込み禁止になっています')
-  if (d.sizeBytes <= 0) return block('容量を取得できませんでした')
+  if (d.isSystem) return block(localized('device.blockedSystemDisk'))
+  if (d.readOnly) return block(localized('device.blockedReadOnly'))
+  if (d.sizeBytes <= 0) return block(localized('device.blockedUnknownSize'))
   // 仮想ディスク（.vhd などのファイル実体）は書き込み先として想定していない
-  if (d.bus === 'virtual') return block('仮想ディスクのため対象外です')
+  if (d.bus === 'virtual') return block(localized('device.blockedVirtual'))
   // **「内蔵らしいものを弾く」ではなく「取り外せる根拠があるものだけ通す」。**
   //
   // 以前は bus が nvme / sata / scsi のときだけ弾いていたので、
@@ -66,13 +81,15 @@ export function classifyDevice(
   // 分からないものは危険側に倒す。USB か SD、または OS が明示的に
   // removable と言っているものだけを候補にする。
   if (!d.removable && d.bus !== 'usb' && d.bus !== 'sd') {
-    return block('取り外し可能なデバイスとして認識できませんでした')
+    return block(localized('device.blockedNotRemovable'))
   }
-  // 4 GB 未満は Ubuntu Server の ISO が入らない
-  if (d.sizeBytes < 4 * 1000 * 1000 * 1000) return block('容量が小さすぎます（4 GB 以上が必要）')
-  // 2 TB 超のデバイスは外付け HDD の可能性が高い。誤選択の被害が大きいので警告的にブロックする。
-  if (d.sizeBytes > 2 * 1000 * 1000 * 1000 * 1000) {
-    return block('2 TB を超えるデバイスは対象外です（外付けドライブの誤選択防止）')
+  // 容量の表記は訳す側で組み立てられないので、ここで整形して差し込む
+  // （辞書は「{min} 以上が必要」という枠だけを持つ）。
+  if (d.sizeBytes < MIN_DEVICE_BYTES) {
+    return block(localized('device.blockedTooSmall', { min: formatSize(MIN_DEVICE_BYTES) }))
+  }
+  if (d.sizeBytes > MAX_DEVICE_BYTES) {
+    return block(localized('device.blockedTooLarge', { max: formatSize(MAX_DEVICE_BYTES) }))
   }
   return { ...d, selectable: true, blockedReason: null }
 }

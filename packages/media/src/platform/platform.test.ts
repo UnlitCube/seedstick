@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { classifyDevice, formatSize } from './types.js'
+import { formatLocalized, localized } from '@autoinstall/shared'
+import { classifyDevice, formatSize, MAX_DEVICE_BYTES, MIN_DEVICE_BYTES } from './types.js'
 import { diskNumberFromId, mapBusType, parseWindowsDisks } from './win32.js'
 import { mapBusProtocol, parsePlist, toDevice } from './darwin.js'
 import { mapTransport, parseLsblk } from './linux.js'
@@ -27,7 +28,8 @@ describe('classifyDevice の安全判定', () => {
   it('システムディスクは必ずブロックする', () => {
     const d = classifyDevice({ ...base, isSystem: true })
     expect(d.selectable).toBe(false)
-    expect(d.blockedReason).toMatch(/システムディスク/)
+    // 文面ではなくキーで確かめる（列挙側は利用者の言語を知らないので訳さない）
+    expect(d.blockedReason?.key).toBe('device.blockedSystemDisk')
   })
 
   it('書き込み禁止のメディアはブロックする', () => {
@@ -57,17 +59,56 @@ describe('classifyDevice の安全判定', () => {
   it('容量が小さすぎるとブロックする', () => {
     const d = classifyDevice({ ...base, sizeBytes: 2_000_000_000 })
     expect(d.selectable).toBe(false)
-    expect(d.blockedReason).toMatch(/4 GB/)
+    expect(d.blockedReason?.key).toBe('device.blockedTooSmall')
+    // 境界の値は辞書ではなく実装から差し込む（両方を直さないと食い違う状態にしない）
+    expect(d.blockedReason?.params).toEqual({ min: formatSize(MIN_DEVICE_BYTES) })
+    expect(formatLocalized('ja', d.blockedReason!)).toContain('4.0 GB')
+    expect(formatLocalized('en', d.blockedReason!)).toContain('4.0 GB')
   })
 
   it('2 TB 超はブロックする（外付け HDD の誤選択防止）', () => {
     const d = classifyDevice({ ...base, sizeBytes: 4_000_000_000_000 })
     expect(d.selectable).toBe(false)
-    expect(d.blockedReason).toMatch(/2 TB/)
+    expect(d.blockedReason?.key).toBe('device.blockedTooLarge')
+    expect(d.blockedReason?.params).toEqual({ max: formatSize(MAX_DEVICE_BYTES) })
+    expect(formatLocalized('en', d.blockedReason!)).toContain('2.0 TB')
   })
 
   it('容量不明はブロックする', () => {
     expect(classifyDevice({ ...base, sizeBytes: 0 }).selectable).toBe(false)
+  })
+
+  it('境界の定数と判定が一致している', () => {
+    // 定数だけ変えて判定が古いまま、という食い違いを防ぐ
+    expect(classifyDevice({ ...base, sizeBytes: MIN_DEVICE_BYTES }).selectable).toBe(true)
+    expect(classifyDevice({ ...base, sizeBytes: MIN_DEVICE_BYTES - 1 }).selectable).toBe(false)
+    expect(classifyDevice({ ...base, sizeBytes: MAX_DEVICE_BYTES }).selectable).toBe(true)
+    expect(classifyDevice({ ...base, sizeBytes: MAX_DEVICE_BYTES + 1 }).selectable).toBe(false)
+  })
+
+  it('ブロック理由は訳せる形で運ぶ（英語に切り替えて日本語が残らない）', () => {
+    // 日本語の文字列をそのまま入れると、English にしてもバッジだけ日本語のまま出る。
+    const blocked = [
+      classifyDevice({ ...base, isSystem: true }),
+      classifyDevice({ ...base, readOnly: true }),
+      classifyDevice({ ...base, sizeBytes: 0 }),
+      classifyDevice({ ...base, bus: 'virtual', removable: false }),
+      classifyDevice({ ...base, bus: 'scsi', removable: false }),
+      classifyDevice({ ...base, sizeBytes: 2_000_000_000 }),
+      classifyDevice({ ...base, sizeBytes: 4_000_000_000_000 }),
+    ]
+    for (const d of blocked) {
+      const reason = d.blockedReason
+      expect(d.selectable).toBe(false)
+      expect(reason).not.toBeNull()
+      // 生の文字列ではなく「キー + 差し込み値」であること
+      expect(typeof reason).toBe('object')
+      expect(typeof reason!.key).toBe('string')
+      // 英語のひな型に日本語が残っていない（差し込む値は容量の表記だけ）
+      expect(formatLocalized('en', localized(reason!.key))).not.toMatch(/[ぁ-んァ-ヶ一-龠]/)
+      // IPC を JSON で往復しても同じもの（関数・undefined を持たない）
+      expect(JSON.parse(JSON.stringify(reason))).toEqual(reason)
+    }
   })
 
   it('外付けの SATA/USB ブリッジ (removable=true) は許可する', () => {
@@ -113,6 +154,15 @@ describe('Windows の列挙', () => {
   it('ConvertTo-Json が単体オブジェクトを返しても配列として扱う', () => {
     const single = `{"Number":1,"FriendlyName":"USB DISK","SerialNumber":null,"Size":8000000000,"BusType":"USB","IsSystem":false,"IsBoot":false,"IsReadOnly":false,"IsOffline":false,"MediaType":null,"Mountpoints":[]}`
     expect(parseWindowsDisks(single)).toHaveLength(1)
+  })
+
+  it('FriendlyName が無いときの既定名はロケール中立', () => {
+    // description は訳さない素の string（ハードウェア名を運ぶ）。
+    // ここに日本語を入れると English 表示でも日本語のまま出る。
+    const json = `{"Number":7,"FriendlyName":null,"SerialNumber":null,"Size":8000000000,"BusType":"USB","IsSystem":false,"IsBoot":false,"IsReadOnly":false,"IsOffline":false,"MediaType":null,"Mountpoints":[]}`
+    const d = parseWindowsDisks(json)[0]!
+    expect(d.description).toBe('Disk 7')
+    expect(d.description).not.toMatch(/[ぁ-んァ-ヶ一-龠]/)
   })
 
   it('IsSystem が false でも IsBoot が true ならシステム扱い', () => {

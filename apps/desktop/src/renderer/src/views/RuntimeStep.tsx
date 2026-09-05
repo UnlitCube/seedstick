@@ -98,21 +98,16 @@ export function RuntimeStep(): React.JSX.Element {
   // 分からないのは遅いので、選んだその場で出す。
   const prerequisites: string[] = []
   if (runtime.network === 'kernel-arg' && network.mode !== 'static') {
-    prerequisites.push(
-      'ネットワークを起動メニューから選ぶには、「ネットワーク」で「固定 IP」にしておく必要があります'
-        + `（今は「${network.mode}」）。`,
-    )
+    prerequisites.push(t('runtime.prereqNetwork', { mode: network.mode }))
   }
   if (runtime.disk === 'kernel-arg' && storage.mode !== 'raw' && storage.match.kind !== 'serial') {
-    prerequisites.push(
-      'ディスクを起動メニューから選ぶには、「ディスク」で「シリアル番号で指定」にしておく必要があります。',
-    )
+    prerequisites.push(t('runtime.prereqDisk'))
   }
 
   return (
     <div className="space-y-5">
       {prerequisites.length > 0 && (
-        <Callout tone="warning" title="この設定にはもう少し必要です">
+        <Callout tone="warning" title={t('runtime.prereqTitle')}>
           <ul className="list-disc space-y-1 pl-5">
             {prerequisites.map((m) => (
               <li key={m}>{m}</li>
@@ -280,7 +275,7 @@ export function RuntimeStep(): React.JSX.Element {
               <Callout tone="danger">{t('runtime.grubTooLarge')}</Callout>
             ) : config !== null ? (
               <Callout tone={config.grubFreeBytes < 200 ? 'warning' : 'success'}>
-                {t('runtime.grubFree')}: {config.grubFreeBytes} bytes
+                {t('runtime.grubFree')}: {t('runtime.grubFreeBytes', { bytes: config.grubFreeBytes })}
                 <span className="mt-0.5 block text-xs opacity-80">{t('runtime.grubFreeHint')}</span>
               </Callout>
             ) : null}

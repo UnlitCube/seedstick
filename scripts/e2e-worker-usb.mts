@@ -51,6 +51,7 @@ import {
   type AutoinstallProfile,
 } from '../packages/shared/src/index.js'
 import { sha512Crypt } from '../packages/shared/src/crypt/sha512crypt.js'
+import { printRevisionBanner } from './lib/git-revision.mts'
 
 const HASH = sha512Crypt('E2e-Passw0rd!-long', { salt: 'e2ework' })
 
@@ -154,6 +155,11 @@ function startReportServer(token: string, onMessage: (m: WorkerMessage) => void)
 }
 
 async function main(): Promise<void> {
+  // **何より先に出す。** このログがどのコードに対する結果なのかが分からないと、
+  // あとからコードを変えたときに乖離が見えない（`docs/HANDOFF.md` 3.2）。
+  // 権限チェックやビルド成果物の確認より前に置いて、必ずログの先頭に残す。
+  printRevisionBanner('scripts/e2e-worker-usb.mts')
+
   const ops = getPlatformOps()
   if (!(await ops.hasWriteAccess())) {
     console.error('管理者権限がありません。管理者の PowerShell（または sudo）で実行してください。')

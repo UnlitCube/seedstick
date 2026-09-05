@@ -580,7 +580,7 @@ describe('プロファイルの読み込み・移行', () => {
     expect(p.postInstall.services).toEqual([])
     expect(p.software.gpu.enabled).toBe(false)
     expect(p.runtimeValues.hostname).toBe('fixed')
-    expect(notes.some((n) => n.includes('古い形式'))).toBe(true)
+    expect(notes.some((n) => n.key === 'migrate.fromV1')).toBe(true)
   })
 
   it('壊れた JSON でも既定プロファイルを返す', () => {
@@ -592,12 +592,12 @@ describe('プロファイルの読み込み・移行', () => {
   it('未対応バージョンは既定に戻して知らせる', () => {
     const { profile: p, notes } = migrateProfile({ profileVersion: 4, series: '18.04' })
     expect(p.series).toBe('24.04')
-    expect(notes.some((n) => n.includes('対応していない Ubuntu バージョン'))).toBe(true)
+    expect(notes.some((n) => n.key === 'migrate.unsupportedSeries')).toBe(true)
   })
 
   it('新しいバージョンで保存されたファイルは注意を出す', () => {
     const { notes } = migrateProfile({ profileVersion: 99, series: '24.04' })
-    expect(notes.some((n) => n.includes('新しいバージョン'))).toBe(true)
+    expect(notes.some((n) => n.key === 'migrate.fromNewer')).toBe(true)
   })
 
   it('network の mode が変わっていれば丸ごと採用する', () => {

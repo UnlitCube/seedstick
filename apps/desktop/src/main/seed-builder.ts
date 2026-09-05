@@ -7,8 +7,10 @@ import {
   generateMetaData,
   generateUserData,
   validateProfile,
+  localized,
   type AutoinstallProfile,
   type GenerateOptions,
+  type LocalizedText,
   isUnattendedProfile,
 } from '@autoinstall/shared'
 import { ALIGNMENT_BYTES, DEFAULT_CIDATA_SIZE_BYTES } from '@autoinstall/media'
@@ -33,9 +35,18 @@ export interface SeedBundle {
 export const MAX_PAYLOAD_BYTES = 2 * 1024 * 1024 * 1024
 
 export class SeedBuildError extends Error {
-  constructor(message: string) {
+  /**
+   * 画面に出す文言。main も CIDATA の組み立ても利用者の言語を知らないので、
+   * **訳さずに運び、renderer が訳す**。
+   *
+   * `message`（日本語）は開発者向けの診断としてそのまま残す。ログとテストが読んでいる。
+   */
+  readonly text: LocalizedText
+
+  constructor(message: string, text: LocalizedText) {
     super(message)
     this.name = 'SeedBuildError'
+    this.text = text
   }
 }
 
@@ -86,18 +97,24 @@ export async function buildSeedBundle(options: BuildSeedOptions): Promise<SeedBu
   // 設定の ON/OFF で結果が変わらないよう、auditRecord の値によらず常に予約する。
   const reserved = new Set([...files.map((f) => f.name.toLowerCase()), AUDIT_RECORD_NAME])
   const used = new Set(reserved)
-  const claim = (name: string, what: string): void => {
+  // 第 2 引数は**カテゴリの判別子**であって文言ではない。日本語の語句を受け取ると
+  // `LocalizedText` の params には載せられない（params は string | number だけで、
+  // 訳文を入れ子にできない）ので、カテゴリごとに別のキーを引く。
+  const claim = (name: string, what: 'file' | 'deployment'): void => {
     const key = name.toLowerCase()
+    const whatJa = what === 'file' ? '追加ファイル' : 'アプリの展開'
     if (reserved.has(key)) {
       throw new SeedBuildError(
-        `${what} の名前 "${name}" は設定用パーティションの予約名です。別の名前にしてください。`,
+        `${whatJa} の名前 "${name}" は設定用パーティションの予約名です。別の名前にしてください。`,
+        localized(what === 'file' ? 'seed.reservedNameFile' : 'seed.reservedNameDeployment', { name }),
       )
     }
     if (used.has(key)) {
       // FAT は短縮名を ~1/~2 でずらすが LFN は同じままなので、
       // 同名エントリが 2 つある壊れたファイルシステムになる。
       throw new SeedBuildError(
-        `${what} の名前 "${name}" が重複しています。設定用パーティションには同じ名前を 2 つ置けません。`,
+        `${whatJa} の名前 "${name}" が重複しています。設定用パーティションには同じ名前を 2 つ置けません。`,
+        localized(what === 'file' ? 'seed.duplicateNameFile' : 'seed.duplicateNameDeployment', { name }),
       )
     }
     used.add(key)
@@ -105,14 +122,14 @@ export async function buildSeedBundle(options: BuildSeedOptions): Promise<SeedBu
 
   // GUI で直接書いたファイル
   for (const f of profile.postInstall.files) {
-    claim(f.name, '追加ファイル')
+    claim(f.name, 'file')
     files.push({ name: f.name, content: Buffer.from(f.content, 'utf8') })
   }
 
   // アプリの展開（ホスト上のファイルを読み込んで同梱する）
   for (const d of profile.postInstall.deployments) {
     if (d.source.kind === 'url') continue // 初回起動時にダウンロードするので同梱しない
-    claim(d.name, 'アプリの展開')
+    claim(d.name, 'deployment')
     if (d.source.kind === 'inline') {
       files.push({ name: d.name, content: Buffer.from(d.source.content, 'utf8') })
       continue
@@ -123,8 +140,14 @@ export async function buildSeedBundle(options: BuildSeedOptions): Promise<SeedBu
       // このエラーが下の catch に落ち、「ファイルが見つかりません」に化けていた。
       const info = await stat(d.source.path)
       if (info.size > MAX_PAYLOAD_BYTES) {
+        // 数値の整形は main 側で済ませる。`LocalizedText` の params は string | number だけで、
+        // 「単位付きの表記」まで運べない（renderer の formatBytes は main から使えない）。
+        const name = basename(d.source.path)
+        const size = `${(info.size / 1e9).toFixed(2)} GB`
+        const limit = `${Math.round(MAX_PAYLOAD_BYTES / 1024 ** 3)} GB`
         throw new SeedBuildError(
-          `${basename(d.source.path)} は ${(info.size / 1e9).toFixed(2)} GB あり、USB の設定用パーティションに載せられません（上限 2 GB）。URL からのダウンロードに切り替えてください。`,
+          `${name} は ${size} あり、USB の設定用パーティションに載せられません（上限 ${limit}）。URL からのダウンロードに切り替えてください。`,
+          localized('seed.payloadTooLarge', { name, size, limit }),
         )
       }
       const content = await readFile(d.source.path)

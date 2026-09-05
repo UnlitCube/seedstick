@@ -1,4 +1,5 @@
 import { Document, Scalar, parseDocument, isMap, type Node } from 'yaml'
+import { localized, type LocalizedText } from '../i18n/index.js'
 import type {
   AutoinstallProfile,
   InterfaceSelector,
@@ -34,6 +35,29 @@ import {
 // 生成物には日本語/英語の説明コメントを付ける（初心者が YAML を読んで意味を理解できるようにするため）。
 
 export type CommentLocale = 'ja' | 'en'
+
+/**
+ * 生成が止まった理由を **訳せる形で** 運ぶ例外。`SeedBuildError` と同じ形。
+ *
+ * `message`（日本語）は開発者向けの診断としてそのまま残す（ログとテストが読む）。
+ * 画面に出すのは `text` の方で、受け取る側は **キーから引いた文** を使う。
+ * `message` を英文に連結すると、English を選んでいる利用者に
+ * 「Failed to generate YAML: 上書き YAML の構文エラー: …」という
+ * 半分日本語の行が出る（実際にそうなっていた）。
+ *
+ * `field` は GUI がどのステップへ飛べばよいかを示す（`ValidationIssue.field` と同じ語彙）。
+ */
+export class GenerateError extends Error {
+  readonly text: LocalizedText
+  readonly field: string
+
+  constructor(message: string, text: LocalizedText, field: string) {
+    super(message)
+    this.name = 'GenerateError'
+    this.text = text
+    this.field = field
+  }
+}
 
 export interface GenerateOptions {
   /** コメントの言語。`none` はコメントなし。 */
@@ -632,16 +656,38 @@ function buildUserData(profile: AutoinstallProfile): Record<string, unknown> | u
   return Object.keys(ud).length > 0 ? ud : undefined
 }
 
-function parseOverlay(yaml: string): Record<string, unknown> | undefined {
+/**
+ * 上書き YAML を読む。**検証と生成の唯一の実装**。
+ *
+ * 以前は `validate.ts` に同じ判定の写しがあり、`# コメントだけ` の上書き
+ * （`toJS()` が null）で食い違っていた。検証は「問題なし」と言い、生成だけが
+ * 例外で落ちるので、画面には「YAML の生成に失敗しました」だけが出て
+ * どこを直せばよいか分からなかった。コメントだけ＝上書き無しとして扱う。
+ */
+export function parseOverlay(yaml: string): Record<string, unknown> | undefined {
   const trimmed = yaml.trim()
   if (!trimmed) return undefined
   const doc = parseDocument(trimmed)
   if (doc.errors.length > 0) {
-    throw new Error(`上書き YAML の構文エラー: ${doc.errors[0]!.message}`)
+    const detail = doc.errors[0]!.message
+    throw new GenerateError(
+      // `message` は開発者向けの診断として日本語のまま残す（ログとテストが読む）。
+      // 画面に出すのは `text` の方。**連結して英文に混ぜない**。
+      `上書き YAML の構文エラー: ${detail}`,
+      // YAML パーサの原文はもともと英語なので、そのまま両方の言語に載せる。
+      localized('generate.overlaySyntax', { detail }),
+      'advanced.rawOverlayYaml',
+    )
   }
   const js: unknown = doc.toJS()
-  if (js === null || typeof js !== 'object' || Array.isArray(js)) {
-    throw new Error('上書き YAML はキーと値のマッピングである必要があります')
+  // コメントだけ / `~` だけの上書きは「上書き無し」。エラーにしない。
+  if (js === null || js === undefined) return undefined
+  if (typeof js !== 'object' || Array.isArray(js)) {
+    throw new GenerateError(
+      '上書き YAML はキーと値のマッピングである必要があります',
+      localized('generate.overlayNotMapping'),
+      'advanced.rawOverlayYaml',
+    )
   }
   return js as Record<string, unknown>
 }

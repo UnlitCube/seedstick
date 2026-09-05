@@ -77,13 +77,14 @@ export function AdditionalUsersSection(): React.JSX.Element {
                   {u.sudo === 'password' && <Badge>sudo</Badge>}
                   {u.systemAccount && <Badge>system</Badge>}
                   {!u.passwordHash && u.sshAuthorizedKeys.length === 0 && (
-                    <Badge tone="danger">ログイン不可</Badge>
+                    <Badge tone="danger">{t('users.badgeNoLogin')}</Badge>
                   )}
                 </p>
                 <p className="truncate text-xs text-slate-500 dark:text-slate-400">
                   {u.realname || '—'} · {u.shell}
                   {u.groups.length > 0 && ` · ${u.groups.join(', ')}`}
-                  {u.sshAuthorizedKeys.length > 0 && ` · SSH 鍵 ${u.sshAuthorizedKeys.length}`}
+                  {u.sshAuthorizedKeys.length > 0 &&
+                    ` · ${t('users.sshKeyCount', { n: u.sshAuthorizedKeys.length })}`}
                 </p>
               </div>
               <div className="flex shrink-0 gap-1">
@@ -91,9 +92,9 @@ export function AdditionalUsersSection(): React.JSX.Element {
                   variant="ghost"
                   onClick={() => setEditing({ index: i, user: u, password: '' })}
                 >
-                  編集
+                  {t('common.edit')}
                 </Button>
-                <Button variant="ghost" onClick={() => remove(i)} aria-label="削除">
+                <Button variant="ghost" onClick={() => remove(i)} aria-label={t('common.delete')}>
                   <Trash2 className="size-4" aria-hidden />
                 </Button>
               </div>
@@ -182,7 +183,7 @@ export function AdditionalUsersSection(): React.JSX.Element {
               label={t('users.password')}
               hint={
                 editing.user.passwordHash && !editing.password
-                  ? 'パスワードは設定済みです。変更する場合だけ入力してください。'
+                  ? t('users.passwordAlreadySet')
                   : t('users.passwordHint')
               }
             >
@@ -214,7 +215,7 @@ export function AdditionalUsersSection(): React.JSX.Element {
                         })
                       }
                     >
-                      消す
+                      {t('users.clearPassword')}
                     </Button>
                   )}
                 </div>
@@ -312,10 +313,7 @@ export function AdditionalUsersSection(): React.JSX.Element {
             </div>
 
             {editing.user.sudo === 'nopasswd' && (
-              <Callout tone="warning">
-                このユーザーはパスワード無しで root 権限を取得できます。サービス専用アカウントには
-                通常「なし」を選んでください。
-              </Callout>
+              <Callout tone="warning">{t('users.nopasswdWarning')}</Callout>
             )}
           </div>
         )}

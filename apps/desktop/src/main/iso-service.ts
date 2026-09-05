@@ -7,33 +7,84 @@ import {
   SERIES_CATALOG,
   parseSha256Sums,
   recognizeIso,
+  localized,
   type ChecksumResult,
   type IsoFileInfo,
   type IsoOpenResult,
+  type LocalizedText,
+  type MsgKey,
 } from '@autoinstall/shared'
 
 // ISO ファイルの検査とチェックサム確認。ネットワークアクセスは main 側でのみ行う
 // （packaged app の CSP は connect-src 'self' なので renderer からは外部に出られない）。
+
+/**
+ * 認識できなかった ISO の理由を、renderer が訳せる形にする。
+ *
+ * `detail` は文言ではなく**生のボリューム ID / バージョン文字列**なので、
+ * そのまま差し込み値にしてよい（訳す対象ではない）。
+ *
+ * ここを通すのは、実 ISO を用意せずに分岐を試せるようにするため。
+ */
+export function unsupportedIsoText(
+  reason: 'not-ubuntu' | 'not-server' | 'unknown-series',
+  detail: string,
+): LocalizedText {
+  if (reason === 'not-ubuntu') return localized('iso.rejectNotUbuntu', { volumeId: detail })
+  if (reason === 'not-server') return localized('iso.notServer', { volumeId: detail })
+  return localized('iso.unknownSeries', { version: detail })
+}
+
+/**
+ * `IsoValidationError` の理由（ISO の構造が想定と違う）ごとの文言。
+ *
+ * `satisfies Record<IsoValidationError['reason'], MsgKey>` にしてあるので、
+ * `@autoinstall/media` 側の union に理由を 1 つ足すと**ここがコンパイルエラーになる**。
+ * 一律 `iso.unsupported` に潰すと、Callout のタイトルと本文が同じ文字列になり、
+ * 意味のある情報が開発者向けの `detail` にしか残らない（実際にそう退行した）。
+ *
+ * 訳文に**数値やオフセットを入れない**。それらは生の `err.message` として
+ * `detail` に等幅で出る。訳文が伝えるのは「何が起きたか」と「次に何をするか」だけ。
+ */
+const INVALID_ISO_KEYS = {
+  'not-iso9660': 'iso.rejectNotIso9660',
+  'no-casper': 'iso.rejectNoCasper',
+  'no-grub-cfg': 'iso.rejectNoGrubCfg',
+  'no-kernel-line': 'iso.rejectNoKernelLine',
+  'grub-too-large': 'iso.rejectGrubTooLarge',
+} satisfies Record<IsoValidationError['reason'], MsgKey>
+
+/**
+ * 構造を理由に拒否した ISO の説明を、renderer が訳せる形にする。
+ *
+ * 実 ISO を用意せずに 5 分岐を試せるように export している。
+ */
+export function invalidIsoText(reason: IsoValidationError['reason']): LocalizedText {
+  // 型の上では網羅しているが、`reason` は別パッケージから来る文字列なので、
+  // 版がずれた場合に `undefined` を訳しに行かないように受け止める。
+  // （この経路でも生の `err.message` は `detail` に残る）
+  const key: MsgKey | undefined = INVALID_ISO_KEYS[reason]
+  return localized(key ?? 'iso.unsupported')
+}
 
 export async function openIso(path: string): Promise<IsoOpenResult> {
   let dev: FileBlockDevice | null = null
   try {
     const info = await stat(path)
     if (!info.isFile()) {
-      return { ok: false, reason: 'not-a-file', detail: 'ファイルではありません。' }
+      return { ok: false, reason: 'not-a-file', text: localized('iso.rejectNotAFile'), detail: null }
     }
     dev = await FileBlockDevice.open(path, 'r')
     const inspection = await inspectIso(dev)
 
     const recognized = recognizeIso(inspection.volumeId, inspection.diskInfo ?? undefined)
     if (recognized.kind !== 'supported') {
-      const detail =
-        recognized.reason === 'not-ubuntu'
-          ? `Ubuntu の ISO ではないようです（ボリューム名: ${recognized.detail}）。`
-          : recognized.reason === 'not-server'
-            ? `Ubuntu Server の live-server 版ではないようです（ボリューム名: ${recognized.detail}）。Desktop 版や他のフレーバーには対応していません。`
-            : `対応していないバージョンです（${recognized.detail}）。`
-      return { ok: false, reason: recognized.reason, detail }
+      return {
+        ok: false,
+        reason: recognized.reason,
+        text: unsupportedIsoText(recognized.reason, recognized.detail),
+        detail: null,
+      }
     }
 
     const patchPlan = buildIsoPatches(inspection, { args: ['autoinstall'], markTitle: true })
@@ -53,16 +104,20 @@ export async function openIso(path: string): Promise<IsoOpenResult> {
     return { ok: true, info: result }
   } catch (err) {
     if (err instanceof IsoValidationError) {
-      return { ok: false, reason: err.reason, detail: err.message }
+      // 壊れた ISO の内部構造（オフセット・バイト数）は**開発者向けの診断**なので訳さない。
+      // 訳した総括文 + 生の詳細の 2 本立てにして、詳細は等幅で出してもらう。
+      // 総括文は理由ごとに変える。一律にすると Callout のタイトルと本文が同じになる。
+      return { ok: false, reason: err.reason, text: invalidIsoText(err.reason), detail: err.message }
     }
     const e = err as NodeJS.ErrnoException
     if (e.code === 'ENOENT') {
-      return { ok: false, reason: 'not-found', detail: 'ファイルが見つかりません。' }
+      return { ok: false, reason: 'not-found', text: localized('iso.rejectNotFound'), detail: null }
     }
     if (e.code === 'EACCES' || e.code === 'EPERM') {
-      return { ok: false, reason: 'permission', detail: 'ファイルを読む権限がありません。' }
+      return { ok: false, reason: 'permission', text: localized('iso.rejectPermission'), detail: null }
     }
-    return { ok: false, reason: 'unknown', detail: (err as Error).message }
+    // 想定していない失敗。原因は分からないので、生のメッセージを詳細として添える。
+    return { ok: false, reason: 'unknown', text: localized('error.unknown'), detail: (err as Error).message }
   } finally {
     await dev?.close().catch(() => undefined)
   }

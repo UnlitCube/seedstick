@@ -1,3 +1,4 @@
+import { localized, type LocalizedText } from '@autoinstall/shared'
 import { SECTOR_SIZE, type BlockDevice } from '../blockdev/index.js'
 import {
   GPT_ATTR,
@@ -26,6 +27,13 @@ export const DEFAULT_CIDATA_SIZE_BYTES = 64 * 1024 * 1024
 /** cloud-init の NoCloud が既定で探すラベル。大文字小文字は問わないが FAT は大文字で保持する。 */
 export const CIDATA_LABEL = 'CIDATA'
 
+/**
+ * 1 手順ぶんの書き込み指示。
+ *
+ * `label` は進捗バーの下にそのまま出るので**利用者向けの文言**。
+ * ここ（と昇格ワーカー）は利用者の言語を知らないので、訳さずに
+ * `LocalizedText` で運び、renderer が訳す。
+ */
 export type WriteOp =
   /** ISO ファイルの一部をコピーする（コピー中に patches を適用する） */
   | {
@@ -33,12 +41,12 @@ export type WriteOp =
       readonly diskOffset: number
       readonly isoOffset: number
       readonly length: number
-      readonly label: string
+      readonly label: LocalizedText
     }
   /** 用意済みのバイト列を書く */
-  | { readonly kind: 'bytes'; readonly diskOffset: number; readonly data: Buffer; readonly label: string }
+  | { readonly kind: 'bytes'; readonly diskOffset: number; readonly data: Buffer; readonly label: LocalizedText }
   /** ゼロで埋める */
-  | { readonly kind: 'zero'; readonly diskOffset: number; readonly length: number; readonly label: string }
+  | { readonly kind: 'zero'; readonly diskOffset: number; readonly length: number; readonly label: LocalizedText }
 
 export interface UsbLayoutPlan {
   readonly diskSizeBytes: number
@@ -69,6 +77,7 @@ export interface UsbLayoutPlan {
 
 export class LayoutError extends Error {
   constructor(
+    /** 開発者向けの生の文言（ログとバグ報告の突き合わせに使うので日本語のまま）。 */
     message: string,
     readonly reason:
       | 'disk-too-small'
@@ -76,6 +85,8 @@ export class LayoutError extends Error {
       | 'not-protective-mbr'
       | 'cidata-too-small'
       | 'iso-truncated',
+    /** 画面に出す文言。訳すのは renderer なので、ここではキーと差し込み値だけを持つ。 */
+    readonly text: LocalizedText,
   ) {
     super(message)
     this.name = 'LayoutError'
@@ -107,6 +118,12 @@ function alignUp(sectors: number, alignment: number): number {
   return Math.ceil(sectors / alignment) * alignment
 }
 
+// 文言に差し込む容量は**ここで文字列にしてから**渡す。
+// `LocalizedText.params` は `string | number` だけを運ぶ純粋なデータ（JSON を往復する）なので、
+// 「バイト数と単位」を分けて持たせることはできない。
+const gb = (bytes: number): string => `${(bytes / 1e9).toFixed(2)} GB`
+const mb = (bytes: number): string => `${(bytes / 1e6).toFixed(0)} MB`
+
 /** ISO を書き込んだ USB のレイアウトを計算する。デバイスには一切書かない。 */
 export async function planUsbLayout(options: PlanUsbLayoutOptions): Promise<UsbLayoutPlan> {
   const { isoDevice, diskSizeBytes } = options
@@ -120,11 +137,16 @@ export async function planUsbLayout(options: PlanUsbLayoutOptions): Promise<UsbL
     throw new LayoutError(
       'この ISO には protective MBR がありません。Ubuntu の live-server ISO ではない可能性があります。',
       'not-protective-mbr',
+      localized('layout.notProtectiveMbr'),
     )
   }
   const isoGpt = await readGpt(isoDevice)
   if (!isoGpt) {
-    throw new LayoutError('この ISO には GPT がありません。対応していない形式です。', 'no-gpt')
+    throw new LayoutError(
+      'この ISO には GPT がありません。対応していない形式です。',
+      'no-gpt',
+      localized('layout.noGpt'),
+    )
   }
 
   // **ISO のパーティションがファイルの中に収まっているかを先に確かめる。**
@@ -141,10 +163,15 @@ export async function planUsbLayout(options: PlanUsbLayoutOptions): Promise<UsbL
       const needed = (e.endLba + 1) * SECTOR_SIZE
       throw new LayoutError(
         `この ISO は途中で切れています。パーティション "${e.name}" は ` +
-          `${(needed / 1e9).toFixed(2)} GB の位置まで続いていますが、ファイルは ` +
-          `${(isoSizeBytes / 1e9).toFixed(2)} GB しかありません。` +
+          `${gb(needed)} の位置まで続いていますが、ファイルは ` +
+          `${gb(isoSizeBytes)} しかありません。` +
           'ダウンロードが完了しているか、SHA256 が公式のものと一致するかを確認してください。',
         'iso-truncated',
+        localized('layout.isoTruncated', {
+          partition: e.name,
+          needed: gb(needed),
+          fileSize: gb(isoSizeBytes),
+        }),
       )
     }
   }
@@ -164,12 +191,22 @@ export async function planUsbLayout(options: PlanUsbLayoutOptions): Promise<UsbL
   if (cidataEndLba > lastUsableLba) {
     const needed = (cidataStartLba + cidataSectors + entrySectors + 2) * SECTOR_SIZE
     throw new LayoutError(
-      `USB の容量が足りません。ISO (${(isoSizeBytes / 1e9).toFixed(2)} GB) と設定用パーティション (${(cidataSizeBytes / 1e6).toFixed(0)} MB) を書くには少なくとも ${(needed / 1e9).toFixed(2)} GB 必要ですが、このデバイスは ${(diskSizeBytes / 1e9).toFixed(2)} GB です。`,
+      `USB の容量が足りません。ISO (${gb(isoSizeBytes)}) と設定用パーティション (${mb(cidataSizeBytes)}) を書くには少なくとも ${gb(needed)} 必要ですが、このデバイスは ${gb(diskSizeBytes)} です。`,
       'disk-too-small',
+      localized('layout.diskTooSmall', {
+        isoSize: gb(isoSizeBytes),
+        cidataSize: mb(cidataSizeBytes),
+        required: gb(needed),
+        deviceSize: gb(diskSizeBytes),
+      }),
     )
   }
   if (cidataSectors < 2048) {
-    throw new LayoutError('設定用パーティションは 1 MiB 以上にしてください。', 'cidata-too-small')
+    throw new LayoutError(
+      '設定用パーティションは 1 MiB 以上にしてください。',
+      'cidata-too-small',
+      localized('layout.cidataTooSmall'),
+    )
   }
 
   // --- パーティションテーブル ---
@@ -225,43 +262,43 @@ export async function planUsbLayout(options: PlanUsbLayoutOptions): Promise<UsbL
   const ops: WriteOp[] = [
     // 最初に MBR を消す。ここで中断されても「起動しないディスク」になり、
     // 中途半端に起動して壊れたインストールが走ることがない。
-    { kind: 'zero', diskOffset: 0, length: SECTOR_SIZE, label: 'パーティションテーブルの無効化' },
+    { kind: 'zero', diskOffset: 0, length: SECTOR_SIZE, label: localized('writeOp.clearTable') },
     {
       kind: 'copy-iso',
       diskOffset: isoBodyStart,
       isoOffset: isoBodyStart,
       length: isoBodyEnd - isoBodyStart,
-      label: 'ISO イメージ本体',
+      label: localized('writeOp.isoBody'),
     },
     {
       kind: 'zero',
       diskOffset: isoBodyEnd,
       length: (isoSectors * SECTOR_SIZE) - isoBodyEnd,
-      label: 'ISO 末尾の古いバックアップ GPT を消去',
+      label: localized('writeOp.clearStaleGpt'),
     },
     {
       kind: 'zero',
       diskOffset: isoSectors * SECTOR_SIZE,
       length: cidataStartLba * SECTOR_SIZE - isoSectors * SECTOR_SIZE,
-      label: '境界までの隙間を消去',
+      label: localized('writeOp.clearGap'),
     },
     {
       kind: 'bytes',
       diskOffset: cidataStartLba * SECTOR_SIZE,
       data: fat.data,
-      label: '設定用パーティション (CIDATA)',
+      label: localized('writeOp.cidata'),
     },
     {
       kind: 'bytes',
       diskOffset: gpt.backupEntriesLba * SECTOR_SIZE,
       data: gpt.entryArray,
-      label: 'バックアップ GPT エントリ',
+      label: localized('writeOp.backupGptEntries'),
     },
     {
       kind: 'bytes',
       diskOffset: gpt.backupHeaderLba * SECTOR_SIZE,
       data: gpt.backupHeader,
-      label: 'バックアップ GPT ヘッダ',
+      label: localized('writeOp.backupGptHeader'),
     },
   ]
 
@@ -270,19 +307,19 @@ export async function planUsbLayout(options: PlanUsbLayoutOptions): Promise<UsbL
       kind: 'bytes',
       diskOffset: isoGpt.header.partitionEntryLba * SECTOR_SIZE,
       data: gpt.entryArray,
-      label: 'GPT パーティションエントリ',
+      label: localized('writeOp.gptEntries'),
     },
     {
       kind: 'bytes',
       diskOffset: 1 * SECTOR_SIZE,
       data: gpt.primaryHeader,
-      label: 'GPT ヘッダ',
+      label: localized('writeOp.gptHeader'),
     },
     {
       kind: 'bytes',
       diskOffset: 0,
       data: updateProtectiveMbr(mbrSector, diskSectors),
-      label: 'protective MBR (GRUB ブートコード込み)',
+      label: localized('writeOp.protectiveMbr'),
     },
   ]
 

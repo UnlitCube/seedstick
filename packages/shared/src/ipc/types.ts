@@ -2,6 +2,7 @@ import type { AutoinstallProfile } from '../autoinstall/model.js'
 import type { ProfileSummary } from '../autoinstall/migrate.js'
 import type { ValidationIssue } from '../autoinstall/validate.js'
 import type { IsoIdentity } from '../iso/catalog.js'
+import type { LocalizedText } from '../i18n/index.js'
 
 // preload の contextBridge が公開する API の型。main と renderer の唯一の契約。
 // renderer は main を import できないので、この型を共有パッケージ経由で共有する。
@@ -24,7 +25,14 @@ export interface IsoFileInfo {
 
 export type IsoOpenResult =
   | { readonly ok: true; readonly info: IsoFileInfo }
-  | { readonly ok: false; readonly reason: string; readonly detail: string }
+  | {
+      readonly ok: false
+      readonly reason: string
+      /** 画面に出す説明（renderer が訳す） */
+      readonly text: LocalizedText
+      /** 開発者向けの生の詳細（等幅で出す）。無ければ null。 */
+      readonly detail: string | null
+    }
 
 export interface ChecksumResult {
   readonly sha256: string
@@ -43,7 +51,8 @@ export interface DeviceInfo {
   readonly mountpoints: readonly string[]
   readonly serial: string | null
   readonly selectable: boolean
-  readonly blockedReason: string | null
+  /** 選べない理由。列挙側（media）は利用者の言語を知らないので、訳さずに運ぶ。 */
+  readonly blockedReason: LocalizedText | null
 }
 
 export interface GeneratedConfig {
@@ -93,13 +102,13 @@ export interface WriteRequest {
 
 export type WriteStatus =
   | { readonly state: 'idle' }
-  | { readonly state: 'preparing'; readonly message: string }
+  | { readonly state: 'preparing'; readonly message: LocalizedText }
   | {
       readonly state: 'writing'
       readonly phase: string
       readonly bytesDone: number
       readonly bytesTotal: number
-      readonly label: string
+      readonly label: LocalizedText
       readonly bytesPerSecond: number | null
       readonly etaSeconds: number | null
     }
@@ -110,7 +119,8 @@ export type WriteStatus =
       readonly verified: boolean
       readonly elapsedMs: number
     }
-  | { readonly state: 'error'; readonly message: string; readonly detail: string | null }
+  // message は訳す総括文、detail は開発者向けの生の詳細（訳さない）。
+  | { readonly state: 'error'; readonly message: LocalizedText; readonly detail: string | null }
   | { readonly state: 'cancelled' }
 
 export interface AppSettings {
@@ -150,8 +160,15 @@ export interface AutoinstallApi {
   listProfiles(): Promise<ProfileSummary[]>
   /** `id` を渡すと上書き保存、null なら新規保存 */
   saveNamedProfile(id: string | null, name: string, profile: AutoinstallProfile): Promise<SavedProfileRef>
-  /** 保存済みプロファイルを開く。古い形式は移行され、`notes` に注意点が入る。 */
-  loadNamedProfile(id: string): Promise<{ profile: AutoinstallProfile; notes: string[] } | null>
+  /**
+   * 保存済みプロファイルを開く。古い形式は移行され、`notes` に注意点が入る。
+   *
+   * `notes` は**訳さないまま**運ぶ（main は利用者の言語を知らない）。
+   * 訳すのは renderer が描画するとき。
+   */
+  loadNamedProfile(
+    id: string,
+  ): Promise<{ profile: AutoinstallProfile; notes: LocalizedText[] } | null>
   deleteNamedProfile(id: string): Promise<boolean>
   duplicateNamedProfile(id: string, newName: string): Promise<SavedProfileRef | null>
   renameNamedProfile(id: string, newName: string): Promise<SavedProfileRef | null>
@@ -160,7 +177,7 @@ export interface AutoinstallApi {
 
   // --- プロファイル（ファイル入出力） ---
   saveProfile(profile: AutoinstallProfile): Promise<string | null>
-  loadProfile(): Promise<{ profile: AutoinstallProfile; notes: string[] } | null>
+  loadProfile(): Promise<{ profile: AutoinstallProfile; notes: LocalizedText[] } | null>
   importProfileToLibrary(): Promise<SavedProfileRef | null>
   exportBundle(profile: AutoinstallProfile): Promise<string | null>
 
@@ -174,7 +191,9 @@ export interface AutoinstallApi {
   listDevices(): Promise<DeviceInfo[]>
 
   // --- 書き込み ---
-  startWrite(req: WriteRequest): Promise<{ started: boolean; message?: string }>
+  startWrite(
+    req: WriteRequest,
+  ): Promise<{ started: boolean; message?: LocalizedText; detail?: string | null }>
   cancelWrite(): Promise<void>
   onWriteStatus(cb: (s: WriteStatus) => void): () => void
   getWriteStatus(): Promise<WriteStatus>

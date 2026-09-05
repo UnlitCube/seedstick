@@ -127,4 +127,10 @@ export {
   type WorkerJob,
   type WorkerMessage,
 } from './worker/protocol.js'
-export { connectReporter, runWorkerJob, type WorkerReporter } from './worker/run.js'
+export {
+  assertDeviceIsWritable,
+  connectReporter,
+  DeviceRejectedError,
+  runWorkerJob,
+  type WorkerReporter,
+} from './worker/run.js'

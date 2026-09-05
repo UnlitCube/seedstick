@@ -77,7 +77,7 @@ export function ServicesSection(): React.JSX.Element {
   }
 
   const userOptions = [
-    { value: '', label: 'root（既定）' },
+    { value: '', label: t('service.userRootDefault') },
     { value: primaryUser, label: primaryUser },
     ...users.map((u) => ({ value: u.username, label: u.username })),
   ].filter((o, i, arr) => arr.findIndex((x) => x.value === o.value) === i)
@@ -96,18 +96,22 @@ export function ServicesSection(): React.JSX.Element {
               <div className="min-w-0">
                 <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-slate-800 dark:text-slate-200">
                   <Cog className="size-4 shrink-0 text-slate-500" aria-hidden />
-                  <span className="font-mono">{s.name || '(名前なし)'}.service</span>
-                  {s.enabled ? <Badge tone="success">自動起動</Badge> : <Badge>手動</Badge>}
+                  <span className="font-mono">{s.name || t('service.unnamed')}.service</span>
+                  {s.enabled ? (
+                    <Badge tone="success">{t('service.badgeEnabled')}</Badge>
+                  ) : (
+                    <Badge>{t('service.badgeManual')}</Badge>
+                  )}
                 </p>
                 <p className="truncate font-mono text-xs text-slate-500 dark:text-slate-400">
-                  {s.execStart || '(コマンド未設定)'}
+                  {s.execStart || t('service.noCommand')}
                 </p>
               </div>
               <div className="flex shrink-0 gap-1">
                 <Button variant="ghost" onClick={() => setEditing({ index: i, item: s })}>
-                  編集
+                  {t('common.edit')}
                 </Button>
-                <Button variant="ghost" onClick={() => remove(i)} aria-label="削除">
+                <Button variant="ghost" onClick={() => remove(i)} aria-label={t('common.delete')}>
                   <Trash2 className="size-4" aria-hidden />
                 </Button>
               </div>
@@ -150,7 +154,7 @@ export function ServicesSection(): React.JSX.Element {
                 hint={t('service.nameHint')}
                 required
                 {...(editing.item.name && !isValidServiceName(editing.item.name)
-                  ? { error: '使えない文字が含まれています' }
+                  ? { error: t('service.nameInvalid') }
                   : {})}
               >
                 {(id) => (
@@ -255,10 +259,10 @@ export function ServicesSection(): React.JSX.Element {
                       setEditing({ ...editing, item: { ...editing.item, serviceType: v as ServiceType } })
                     }
                     options={[
-                      { value: 'simple', label: 'simple（常駐）' },
+                      { value: 'simple', label: t('service.typeSimple') },
                       { value: 'exec', label: 'exec' },
-                      { value: 'forking', label: 'forking（自分で daemon 化する）' },
-                      { value: 'oneshot', label: 'oneshot（1 回だけ）' },
+                      { value: 'forking', label: t('service.typeForking') },
+                      { value: 'oneshot', label: t('service.typeOneshot') },
                       { value: 'notify', label: 'notify' },
                     ]}
                   />

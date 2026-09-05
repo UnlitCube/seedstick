@@ -7,6 +7,7 @@ import type {
   DeviceInfo,
   GeneratedConfig,
   IsoOpenResult,
+  LocalizedText,
   PickedFile,
   ProfileSummary,
   SavedProfileRef,
@@ -58,7 +59,7 @@ const api: AutoinstallApi = {
   loadNamedProfile: (id: string) =>
     ipcRenderer.invoke('loadNamedProfile', id) as Promise<{
       profile: AutoinstallProfile
-      notes: string[]
+      notes: LocalizedText[]
     } | null>,
   deleteNamedProfile: (id: string) => ipcRenderer.invoke('deleteNamedProfile', id) as Promise<boolean>,
   duplicateNamedProfile: (id: string, newName: string) =>
@@ -72,7 +73,7 @@ const api: AutoinstallApi = {
   loadProfile: () =>
     ipcRenderer.invoke('loadProfile') as Promise<{
       profile: AutoinstallProfile
-      notes: string[]
+      notes: LocalizedText[]
     } | null>,
   importProfileToLibrary: () =>
     ipcRenderer.invoke('importProfileToLibrary') as Promise<SavedProfileRef | null>,
@@ -86,7 +87,12 @@ const api: AutoinstallApi = {
   listDevices: () => ipcRenderer.invoke('listDevices') as Promise<DeviceInfo[]>,
 
   startWrite: (req: WriteRequest) =>
-    ipcRenderer.invoke('startWrite', req) as Promise<{ started: boolean; message?: string }>,
+    ipcRenderer.invoke('startWrite', req) as Promise<{
+      started: boolean
+      // 訳す総括文（renderer が訳す）と、開発者向けの生の詳細。
+      message?: LocalizedText
+      detail?: string | null
+    }>,
   cancelWrite: () => ipcRenderer.invoke('cancelWrite') as Promise<void>,
   onWriteStatus: (cb) => subscribe('write-status', cb),
   getWriteStatus: () => ipcRenderer.invoke('getWriteStatus') as Promise<WriteStatus>,

@@ -115,6 +115,59 @@ afterEach(() => {
   h.victims = []
 })
 
+// main は利用者の言語を知らない（昇格ワーカーは別プロセスで locale を持たない）。
+// 画面に出す文言は **訳さずにキーで運び**、renderer が訳す。
+// ここで日本語の文面を正として固定すると、English に切り替えても直らない状態が
+// テストで守られてしまう（落とし穴 56）。だから見るのは文面ではなくキー。
+const JAPANESE = /[぀-ヿ㐀-鿿]/
+
+describe('書き込みの文言はキーで運ぶ', () => {
+  it('二重に start すると write.errorAlreadyRunning を返す', async () => {
+    const sup = new WriteSupervisor()
+    h.killMode = 'ok'
+    h.victimDies = true
+    await sup.start(job)
+    const second = await sup.start(job)
+    expect(second).toEqual({ started: false, message: { key: 'write.errorAlreadyRunning' } })
+    expect(JSON.stringify(second)).not.toMatch(JAPANESE)
+    await sup.dispose()
+  })
+
+  it('準備中の状態もキーで運ぶ（昇格を待っている間）', async () => {
+    const sup = new WriteSupervisor()
+    h.killMode = 'ok'
+    h.victimDies = true
+    await sup.start(job)
+    // hasWriteAccess は false に差し替えてあるので「許可を待っています」になる
+    expect(sup.getStatus()).toEqual({
+      state: 'preparing',
+      message: { key: 'write.statusWaitingElevation' },
+    })
+    // IPC を通るので JSON で往復しても同じものであること
+    expect(JSON.parse(JSON.stringify(sup.getStatus()))).toEqual(sup.getStatus())
+    await sup.dispose()
+  })
+
+  it('止められなかったときは write.errorCancelFailed を運び、detail は生の診断だけにする', async () => {
+    const sup = new WriteSupervisor()
+    h.killMode = 'denied' // 昇格ワーカーは taskkill を拒否する（落とし穴 38 / 52）
+    await sup.start(job)
+    vi.useFakeTimers()
+    await quitSequence(sup)
+    const status = sup.getStatus()
+    // 「止めました」と嘘をつかない：cancelled ではなく error のままであること
+    expect(status).toEqual({
+      state: 'error',
+      message: { key: 'write.errorCancelFailed' },
+      // 利用者への指示（抜かないで／タスクマネージャーで終了して）は訳せる message 側。
+      // detail は等幅で出す開発者向けの欄なので、案内文を入れない。
+      detail: null,
+    })
+    expect(JSON.stringify(status)).not.toMatch(JAPANESE)
+    await sup.dispose()
+  })
+})
+
 describe('終了時に shutdownWrite が二重に走るか（index.ts:98 / index.ts:104）', () => {
   it('現実の経路：cancel を無視するワーカーでも taskkill が通れば ~5 秒で busy が下り、2 回目は即座に返る', async () => {
     const sup = new WriteSupervisor()

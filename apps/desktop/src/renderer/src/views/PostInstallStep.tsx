@@ -8,7 +8,7 @@ import {
   type ReportingTarget,
 } from '@autoinstall/shared'
 import { useStore } from '../store.js'
-import { useT } from '../lib/i18n.js'
+import { useT, useTx } from '../lib/i18n.js'
 import {
   Badge,
   Button,
@@ -79,6 +79,7 @@ export function PostInstallStep(): React.JSX.Element {
 
 function PresetsTab(): React.JSX.Element {
   const t = useT()
+  const tx = useTx()
   const locale = useStore((s) => s.locale)
   const presets = useStore((s) => s.profile.postInstall.presets)
   const aptFullUpgrade = useStore((s) => s.profile.postInstall.aptFullUpgrade)
@@ -101,7 +102,7 @@ function PresetsTab(): React.JSX.Element {
 
   return (
     <>
-      <Card title={t('postinstall.presets')} description="よくある設定をチェックするだけで追加できます。">
+      <Card title={t('postinstall.presets')} description={t('postinstall.presetsHint')}>
         <div className="grid gap-2 lg:grid-cols-2">
           {POST_INSTALL_PRESETS.map((preset) => (
             <Switch
@@ -112,7 +113,7 @@ function PresetsTab(): React.JSX.Element {
               label={
                 <span className="flex flex-wrap items-center gap-2">
                   {locale === 'ja' ? preset.titleJa : preset.titleEn}
-                  {preset.needsNetwork && <Badge tone="info">ネット必須</Badge>}
+                  {preset.needsNetwork && <Badge tone="info">{t('postinstall.needsNetwork')}</Badge>}
                 </span>
               }
               description={locale === 'ja' ? preset.descriptionJa : preset.descriptionEn}
@@ -121,7 +122,7 @@ function PresetsTab(): React.JSX.Element {
         </div>
       </Card>
 
-      <Card title="システムの更新">
+      <Card title={t('postinstall.systemUpdate')}>
         <Switch
           checked={aptFullUpgrade}
           onChange={(v) =>
@@ -132,9 +133,9 @@ function PresetsTab(): React.JSX.Element {
         />
         <div className="mt-3">
           <Callout tone="info">
-            「ソフトウェア」の「インストール時の更新」がセキュリティ更新のみ適用するのに対し、こちらは
-            インストール完了後に <code className="font-mono">apt full-upgrade</code> を実行して
-            すべてのパッケージを最新にします。カーネルが更新されることもあります。
+            {tx('postinstall.fullUpgradeExplain', {
+              command: <code className="font-mono">apt full-upgrade</code>,
+            })}
           </Callout>
         </div>
       </Card>
@@ -144,6 +145,7 @@ function PresetsTab(): React.JSX.Element {
 
 function FilesTab(): React.JSX.Element {
   const t = useT()
+  const tx = useTx()
   const profile = useStore((s) => s.profile)
   const update = useStore((s) => s.updateProfile)
   // 正規化した配列から value を作ると、改行を打った瞬間に消える（落とし穴 58）
@@ -173,10 +175,10 @@ function FilesTab(): React.JSX.Element {
     <>
       <Card
         title={t('postinstall.files')}
-        description="小さな設定ファイルをここに直接書けます。大きなファイルやアーカイブは「アプリの展開」を使ってください。"
+        description={t('postinstall.filesHint')}
       >
         {profile.postInstall.files.length === 0 ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400">まだファイルはありません。</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{t('postinstall.filesEmpty')}</p>
         ) : (
           <ul className="space-y-2">
             {profile.postInstall.files.map((f, i) => (
@@ -189,14 +191,15 @@ function FilesTab(): React.JSX.Element {
                     {f.targetPath}
                   </p>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    {f.name} · {f.mode} · {f.owner} · {f.content.length} 文字
+                    {f.name} · {f.mode} · {f.owner} ·{' '}
+                    {t('postinstall.fileChars', { n: f.content.length })}
                   </p>
                 </div>
                 <div className="flex shrink-0 gap-1">
                   <Button variant="ghost" onClick={() => setEditing({ index: i, file: f })}>
-                    編集
+                    {t('postinstall.edit')}
                   </Button>
-                  <Button variant="ghost" onClick={() => removeFile(i)} aria-label="削除">
+                  <Button variant="ghost" onClick={() => removeFile(i)} aria-label={t('common.delete')}>
                     <Trash2 className="size-4" aria-hidden />
                   </Button>
                 </div>
@@ -221,58 +224,53 @@ function FilesTab(): React.JSX.Element {
 
       <Card
         title={t('postinstall.lateCommands')}
-        description="インストール完了後、再起動する直前に実行されます。1 行に 1 コマンド。"
+        description={t('postinstall.lateCommandsDesc')}
       >
         <TextArea
           rows={5}
           spellCheck={false}
           placeholder={'curtin in-target -- apt-get install -y nginx\ncurtin in-target -- systemctl enable nginx'}
           value={lateCommandsDraft.text}
-          onChange={(e) =>
-            update((p) => ({
-              ...p,
-              postInstall: {
-                ...p.postInstall,
-                lateCommands: e.target.value.split('\n').map((l) => l.trim()).filter(Boolean),
-              },
-            }))
-          }
+          onChange={(e) => {
+            // 下書きを持っているのに change() を通さないと setDraft が一度も走らず、
+            // 行末で改行を打った瞬間に消える（落とし穴 58）。値は必ず下書き経由で作る。
+            const list = lateCommandsDraft.change(e.target.value)
+            update((p) => ({ ...p, postInstall: { ...p.postInstall, lateCommands: list } }))
+          }}
         />
         <div className="mt-3">
-          <Callout tone="info" title="実行される場所に注意">
-            コマンドは<strong>インストーラ環境</strong>で実行され、新しいシステムは{' '}
-            <code className="font-mono">/target</code> にマウントされています。
-            新しいシステムの中で実行したい場合は{' '}
-            <code className="font-mono">curtin in-target -- </code> を先頭に付けてください。
+          <Callout tone="info" title={t('postinstall.lateCommandsWhere')}>
+            {tx('postinstall.lateCommandsWhereBody', {
+              installerEnv: <strong>{t('postinstall.installerEnv')}</strong>,
+              target: <code className="font-mono">/target</code>,
+              inTarget: <code className="font-mono">curtin in-target -- </code>,
+            })}
           </Callout>
         </div>
       </Card>
 
       <Card
         title={t('postinstall.firstBoot')}
-        description="インストール後の初回起動時に cloud-init が実行します。ネットワークが上がった後に走るので、外部との通信が必要な処理に向いています。"
+        description={t('postinstall.firstBootDesc')}
       >
         <TextArea
           rows={4}
           spellCheck={false}
           placeholder={'curl -fsSL https://example.com/setup.sh | bash'}
           value={firstBootCommandsDraft.text}
-          onChange={(e) =>
-            update((p) => ({
-              ...p,
-              postInstall: {
-                ...p.postInstall,
-                firstBootCommands: e.target.value.split('\n').map((l) => l.trim()).filter(Boolean),
-              },
-            }))
-          }
+          onChange={(e) => {
+            const list = firstBootCommandsDraft.change(e.target.value)
+            update((p) => ({ ...p, postInstall: { ...p.postInstall, firstBootCommands: list } }))
+          }}
         />
       </Card>
 
       <Modal
         open={editing !== null}
         onClose={() => setEditing(null)}
-        title={editing && editing.index < 0 ? 'ファイルを追加' : 'ファイルを編集'}
+        title={
+          editing && editing.index < 0 ? t('postinstall.addFile') : t('postinstall.editFile')
+        }
         footer={
           <>
             <Button onClick={() => setEditing(null)}>{t('common.cancel')}</Button>
@@ -284,7 +282,11 @@ function FilesTab(): React.JSX.Element {
       >
         {editing && (
           <div className="space-y-4">
-            <Field label={t('postinstall.fileTarget')} hint="インストール先での絶対パス" required>
+            <Field
+              label={t('postinstall.fileTarget')}
+              hint={t('postinstall.fileTargetHint')}
+              required
+            >
               {(id) => (
                 <TextInput
                   id={id}
@@ -297,7 +299,7 @@ function FilesTab(): React.JSX.Element {
               )}
             </Field>
             <div className="grid grid-cols-3 gap-3">
-              <Field label={t('postinstall.fileName')} hint="USB 上での名前">
+              <Field label={t('postinstall.fileName')} hint={t('postinstall.fileNameHint')}>
                 {(id) => (
                   <TextInput
                     id={id}
@@ -309,7 +311,7 @@ function FilesTab(): React.JSX.Element {
                   />
                 )}
               </Field>
-              <Field label={t('postinstall.fileMode')} hint="例 0644">
+              <Field label={t('postinstall.fileMode')} hint={t('postinstall.fileModeHint')}>
                 {(id) => (
                   <TextInput
                     id={id}
@@ -321,7 +323,7 @@ function FilesTab(): React.JSX.Element {
                   />
                 )}
               </Field>
-              <Field label={t('postinstall.fileOwner')} hint="例 root">
+              <Field label={t('postinstall.fileOwner')} hint={t('postinstall.fileOwnerHint')}>
                 {(id) => (
                   <TextInput
                     id={id}
@@ -356,6 +358,7 @@ function FilesTab(): React.JSX.Element {
 
 function AdvancedTab(): React.JSX.Element {
   const t = useT()
+  const tx = useTx()
   const profile = useStore((s) => s.profile)
   const update = useStore((s) => s.updateProfile)
   const errorCommandsDraft = useListDraft(profile.postInstall.errorCommands, '\n')
@@ -466,9 +469,7 @@ function AdvancedTab(): React.JSX.Element {
         )}
         {profile.behavior.interactiveAll && (
           <div className="mt-3">
-            <Callout tone="warning">
-              対話セクションがあると subiquity は reporting を無視します。
-            </Callout>
+            <Callout tone="warning">{t('postinstall.reportingIgnored')}</Callout>
           </div>
         )}
       </Card>
@@ -522,8 +523,10 @@ function AdvancedTab(): React.JSX.Element {
         {!features.codecsOemAd && profile.activeDirectory.enabled && (
           <div className="mt-3">
             <Callout tone="warning">
-              Ubuntu {profile.series} の autoinstall には <code className="font-mono">active-directory</code>{' '}
-              キーがありません。出力からは省かれます。
+              {tx('postinstall.adKeyMissing', {
+                series: profile.series,
+                key: <code className="font-mono">active-directory</code>,
+              })}
             </Callout>
           </div>
         )}
@@ -540,7 +543,7 @@ function AdvancedTab(): React.JSX.Element {
             description={t('adv.refreshInstallerHint')}
           />
           {profile.behavior.refreshInstaller && (
-            <Field label="channel" hint="空なら subiquity の既定チャンネルを使います。">
+            <Field label="channel" hint={t('postinstall.refreshChannelHint')}>
               {(id) => (
                 <TextInput
                   id={id}
@@ -572,8 +575,8 @@ function AdvancedTab(): React.JSX.Element {
       </Card>
 
       <Card
-        title="生の YAML で上書きする"
-        description="ここに書いた内容が、生成された autoinstall にマージされます（同じキーは上書き、配列は置き換え）。"
+        title={t('postinstall.rawYaml')}
+        description={t('postinstall.rawYamlHint')}
       >
         <TextArea
           rows={8}
@@ -586,8 +589,8 @@ function AdvancedTab(): React.JSX.Element {
         />
         <div className="mt-4">
           <Field
-            label="追加のカーネル引数"
-            hint="GRUB のカーネル行に追加されます。autoinstall は自動で付くので不要です。; & | は使えません。"
+            label={t('postinstall.extraKernelArgs')}
+            hint={t('postinstall.extraKernelArgsHint')}
           >
             {(id) => (
               <TextInput

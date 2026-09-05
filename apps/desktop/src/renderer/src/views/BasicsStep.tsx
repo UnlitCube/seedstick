@@ -71,7 +71,7 @@ export function BasicsStep(): React.JSX.Element {
             hint={t('basics.hostnameHint')}
             required
             {...(hostnameInvalid
-              ? { error: '英数字とハイフンのみ、先頭と末尾は英数字にしてください' }
+              ? { error: t('basics.hostnameInvalid') }
               : {})}
           >
             {(id) => (

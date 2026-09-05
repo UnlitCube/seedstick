@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { AlertTriangle } from 'lucide-react'
+import { useT } from '../lib/i18n.js'
 
 /**
  * 画面が白くなるのを防ぐ。
@@ -42,42 +43,55 @@ export class ErrorBoundary extends Component<Props, State> {
   override render(): ReactNode {
     const { error } = this.state
     if (!error) return this.props.children
+    return <ErrorFallback message={error.message} onRetry={this.reset} />
+  }
+}
 
-    return (
-      <div className="rounded-xl border border-rose-300 bg-rose-50 p-5 dark:border-rose-800 dark:bg-rose-950/40">
-        <div className="flex items-start gap-3">
-          <AlertTriangle className="mt-0.5 size-5 shrink-0 text-rose-600 dark:text-rose-400" aria-hidden />
-          <div className="min-w-0 space-y-3">
-            <h2 className="text-base font-semibold text-rose-900 dark:text-rose-200">
-              この画面を表示できませんでした
-            </h2>
-            <p className="text-sm text-rose-800 dark:text-rose-300">
-              設定の内容が想定と違うため、画面の描画に失敗しました。
-              手で編集したプロファイルや、別のバージョンで保存されたプロファイルを開くと
-              起こることがあります。
-            </p>
-            <pre className="max-h-40 overflow-auto rounded-lg bg-white/70 p-3 font-mono text-xs text-rose-900 dark:bg-slate-900/60 dark:text-rose-200">
-              {error.message}
-            </pre>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={this.reset}
-                className="inline-flex items-center rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-rose-500"
-              >
-                もう一度表示する
-              </button>
-              <button
-                type="button"
-                onClick={() => window.location.reload()}
-                className="inline-flex items-center rounded-lg border border-rose-300 bg-white px-4 py-2 text-sm font-medium text-rose-800 transition hover:bg-rose-50 dark:border-rose-700 dark:bg-slate-800 dark:text-rose-200"
-              >
-                アプリを読み込み直す
-              </button>
-            </div>
+/**
+ * 表示部分だけを関数コンポーネントに分ける。
+ *
+ * クラスコンポーネントではフックを呼べないので、`useT()` を使うために
+ * ここへ切り出す。ロケールを購読するのもこちら側になり、
+ * エラー表示中に言語を切り替えても訳文が追従する。
+ */
+function ErrorFallback({
+  message,
+  onRetry,
+}: {
+  message: string
+  onRetry: () => void
+}): React.JSX.Element {
+  const t = useT()
+  return (
+    <div className="rounded-xl border border-rose-300 bg-rose-50 p-5 dark:border-rose-800 dark:bg-rose-950/40">
+      <div className="flex items-start gap-3">
+        <AlertTriangle className="mt-0.5 size-5 shrink-0 text-rose-600 dark:text-rose-400" aria-hidden />
+        <div className="min-w-0 space-y-3">
+          <h2 className="text-base font-semibold text-rose-900 dark:text-rose-200">
+            {t('boundary.title')}
+          </h2>
+          <p className="text-sm text-rose-800 dark:text-rose-300">{t('boundary.body')}</p>
+          <pre className="max-h-40 overflow-auto rounded-lg bg-white/70 p-3 font-mono text-xs text-rose-900 dark:bg-slate-900/60 dark:text-rose-200">
+            {message}
+          </pre>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={onRetry}
+              className="inline-flex items-center rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-rose-500"
+            >
+              {t('boundary.retry')}
+            </button>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="inline-flex items-center rounded-lg border border-rose-300 bg-white px-4 py-2 text-sm font-medium text-rose-800 transition hover:bg-rose-50 dark:border-rose-700 dark:bg-slate-800 dark:text-rose-200"
+            >
+              {t('boundary.reload')}
+            </button>
           </div>
         </div>
       </div>
-    )
-  }
+    </div>
+  )
 }

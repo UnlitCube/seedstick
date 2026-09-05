@@ -92,7 +92,7 @@ export function UserStep(): React.JSX.Element {
             label={t('user.username')}
             hint={t('user.usernameHint')}
             required
-            {...(usernameInvalid ? { error: '使えない文字が含まれています' } : {})}
+            {...(usernameInvalid ? { error: t('user.usernameInvalid') } : {})}
           >
             {(id) => (
               <TextInput
@@ -203,7 +203,7 @@ export function UserStep(): React.JSX.Element {
             }}
             tone="warning"
             label={t('user.sudoNoPassword')}
-            description="自動化には便利ですが、このユーザーのログインを奪われると即座に root 権限を取られます。"
+            description={t('user.sudoNoPasswordHint')}
           />
         </div>
 
@@ -212,7 +212,7 @@ export function UserStep(): React.JSX.Element {
             label={t('adv.identityGroups')}
             hint={
               features.identityGroups
-                ? 'docker や libvirt など、追加で入れたいグループをスペース区切りで書きます。'
+                ? t('user.identityGroupsHint')
                 : t('adv.identityGroupsUnsupported')
             }
           >
@@ -231,9 +231,9 @@ export function UserStep(): React.JSX.Element {
                     update((p) => ({ ...p, user: { ...p.user, groups } }))
                   }}
                   options={[
-                    { value: 'default', label: 'インストーラの既定のまま (sudo, adm など)' },
-                    { value: 'append', label: '既定に加えて追加する' },
-                    { value: 'override', label: '指定したグループだけにする' },
+                    { value: 'default', label: t('user.groupsModeDefault') },
+                    { value: 'append', label: t('user.groupsModeAppend') },
+                    { value: 'override', label: t('user.groupsModeOverride') },
                   ]}
                 />
                 {profile.user.groups.mode !== 'default' && (
@@ -259,9 +259,7 @@ export function UserStep(): React.JSX.Element {
                   />
                 )}
                 {profile.user.groups.mode === 'override' && (
-                  <Callout tone="warning">
-                    sudo を外すと管理者権限が無くなり、インストール後に設定を変えられなくなります。
-                  </Callout>
+                  <Callout tone="warning">{t('user.groupsOverrideWarning')}</Callout>
                 )}
               </div>
             )}
@@ -282,7 +280,7 @@ export function UserStep(): React.JSX.Element {
             disabled={!profile.ssh.installServer}
             onChange={(v) => update((p) => ({ ...p, ssh: { ...p.ssh, allowPasswordAuth: v } }))}
             label={t('ssh.allowPassword')}
-            description="オフにすると公開鍵でしかログインできません。必ず先に公開鍵を登録してください。"
+            description={t('ssh.allowPasswordHint')}
           />
         </div>
 
@@ -305,10 +303,10 @@ export function UserStep(): React.JSX.Element {
                   </Button>
                   {keys.length > 0 && (
                     <span className="text-xs text-slate-500 dark:text-slate-400">
-                      {keys.length} 個の鍵
+                      {t('ssh.keyCount', { n: keys.length })}
                       {keys.some((k) => !SSH_KEY_RE.test(k)) && (
                         <span className="ml-2 text-rose-600 dark:text-rose-400">
-                          形式が正しくない鍵があります
+                          {t('ssh.keysInvalid')}
                         </span>
                       )}
                     </span>
@@ -321,9 +319,8 @@ export function UserStep(): React.JSX.Element {
 
         {lockedOut && (
           <div className="mt-4">
-            <Callout tone="danger" title="このままではログインできなくなります">
-              SSH のパスワードログインを禁止しているのに公開鍵が登録されていません。公開鍵を追加するか、
-              パスワードログインを許可してください。
+            <Callout tone="danger" title={t('ssh.lockedOutTitle')}>
+              {t('ssh.lockedOutBody')}
             </Callout>
           </div>
         )}

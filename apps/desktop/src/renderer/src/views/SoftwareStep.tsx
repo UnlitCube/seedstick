@@ -12,7 +12,7 @@ import {
   type KernelChoice,
 } from '@autoinstall/shared'
 import { useStore } from '../store.js'
-import { useT } from '../lib/i18n.js'
+import { useT, useTx } from '../lib/i18n.js'
 import {
   Badge,
   Callout,
@@ -39,6 +39,7 @@ function nextSourceName(existing: readonly AptSource[]): string {
 
 export function SoftwareStep(): React.JSX.Element {
   const t = useT()
+  const tx = useTx()
   const locale = useStore((s) => s.locale)
   const profile = useStore((s) => s.profile)
   const update = useStore((s) => s.updateProfile)
@@ -121,13 +122,12 @@ export function SoftwareStep(): React.JSX.Element {
                 value: 'ubuntu-server' as const,
                 label: t('software.sourceFull'),
                 badge: <Badge tone="success">{t('common.recommended')}</Badge>,
-                description: '通常のサーバー構成。よく使うツールが最初から入っています。',
+                description: t('software.sourceFullHint'),
               },
               {
                 value: 'ubuntu-server-minimal' as const,
                 label: t('software.sourceMinimal'),
-                description:
-                  'パッケージ数を最小限にします。コンテナホストなど用途が決まっている場合に。',
+                description: t('software.sourceMinimalHint'),
               },
             ]}
           />
@@ -149,7 +149,7 @@ export function SoftwareStep(): React.JSX.Element {
         <div className="mt-4">
           <Field
             label={t('software.customPackages')}
-            hint="apt でインストールできるパッケージ名をスペース区切りで書きます"
+            hint={t('software.customPackagesHint')}
           >
             {(id) => (
               <TextInput
@@ -168,7 +168,7 @@ export function SoftwareStep(): React.JSX.Element {
       </Card>
 
       <Card title={t('software.snaps')}>
-        <Field label="snap 名（1 行に 1 つ。channel を指定する場合は `名前 channel`）">
+        <Field label={t('software.snapsLabel')}>
           {(id) => (
             <TextArea
               id={id}
@@ -185,7 +185,7 @@ export function SoftwareStep(): React.JSX.Element {
         </Field>
       </Card>
 
-      <Card title="更新とドライバ">
+      <Card title={t('software.updatesDriversTitle')}>
         <div className="grid gap-5 sm:grid-cols-2">
           <Field label={t('software.updates')}>
             {(id) => (
@@ -227,9 +227,9 @@ export function SoftwareStep(): React.JSX.Element {
                     }))
                   }
                   options={[
-                    { value: 'default', label: 'インストーラの既定にまかせる' },
-                    { value: 'on', label: '有効にする' },
-                    { value: 'off', label: '無効にする' },
+                    { value: 'default', label: t('software.crashDumpsDefault') },
+                    { value: 'on', label: t('software.crashDumpsOn') },
+                    { value: 'off', label: t('software.crashDumpsOff') },
                   ]}
                 />
               )}
@@ -241,7 +241,7 @@ export function SoftwareStep(): React.JSX.Element {
             checked={profile.software.installDrivers}
             onChange={(v) => update((p) => ({ ...p, software: { ...p.software, installDrivers: v } }))}
             label={t('software.drivers')}
-            description="NVIDIA など、サードパーティのドライバを自動で検出してインストールします。"
+            description={t('software.driversHint')}
           />
           {features.source && (
             // Switch だと「探索を止める」(false) が選べず null に戻ってしまうので 3 状態にする。
@@ -369,24 +369,24 @@ export function SoftwareStep(): React.JSX.Element {
             {
               value: 'default' as const,
               label: t('software.aptMirrorDefault'),
-              description: 'archive.ubuntu.com を使います。',
+              description: t('software.aptMirrorDefaultHint'),
             },
             {
               value: 'country-mirror' as const,
               label: t('software.aptMirrorCountry'),
               badge: <Badge tone="success">{t('common.recommended')}</Badge>,
-              description: 'インストーラが接続元の国から最寄りのミラーを選びます。ダウンロードが速くなります。',
+              description: t('software.aptMirrorCountryHint'),
             },
             {
               value: 'custom' as const,
               label: t('software.aptMirrorCustom'),
-              description: '社内ミラーなどを指定します。',
+              description: t('software.aptMirrorCustomHint'),
             },
           ]}
         />
         {profile.apt.mode === 'custom' && (
           <div className="mt-4 space-y-3">
-            <Field label="ミラーの URL">
+            <Field label={t('software.aptMirrorUrl')}>
               {(id) => (
                 <TextInput
                   id={id}
@@ -411,7 +411,7 @@ export function SoftwareStep(): React.JSX.Element {
           </div>
         )}
         <div className="mt-4">
-          <Field label={t('software.aptProxy')} hint="社内プロキシ経由でパッケージを取得する場合（任意）">
+          <Field label={t('software.aptProxy')} hint={t('software.aptProxyHint')}>
             {(id) => (
               <TextInput
                 id={id}
@@ -486,8 +486,9 @@ export function SoftwareStep(): React.JSX.Element {
         {profile.apt.sources.some((s) => isDebLineSource(s.source)) && (
           <div className="mt-3">
             <Callout tone="warning">
-              deb 行を直接書いた場合、署名鍵は自分で用意する必要があります（`signed-by=` を指定するか、
-              上級者向けタブの生 YAML で <code className="font-mono">apt.sources</code> に鍵を書きます）。
+              {tx('software.aptDebLineKeyNote', {
+                sources: <code className="font-mono">apt.sources</code>,
+              })}
             </Callout>
           </div>
         )}
@@ -516,8 +517,8 @@ export function SoftwareStep(): React.JSX.Element {
 
       <Card title={t('software.ubuntuPro')}>
         <Field
-          label="トークン"
-          hint="C で始まる 24〜30 文字。設定すると ESM などのサービスが有効になります（任意）。"
+          label={t('software.ubuntuProTokenLabel')}
+          hint={t('software.ubuntuProTokenHint')}
         >
           {(id) => (
             <TextInput
@@ -534,8 +535,11 @@ export function SoftwareStep(): React.JSX.Element {
         {!features.ubuntuPro && profile.software.ubuntuProToken && (
           <div className="mt-3">
             <Callout tone="info">
-              Ubuntu {profile.series} では <code className="font-mono">ubuntu-advantage</code> キーとして
-              出力されます（<code className="font-mono">ubuntu-pro</code> は 24.04 以降）。
+              {tx('software.ubuntuProKeyNote', {
+                series: profile.series,
+                advantage: <code className="font-mono">ubuntu-advantage</code>,
+                pro: <code className="font-mono">ubuntu-pro</code>,
+              })}
             </Callout>
           </div>
         )}

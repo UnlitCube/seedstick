@@ -20,7 +20,12 @@ import {
   generateUserData,
   migrateProfile,
   validateProfile,
+  addUniqueIssue,
+  generateErrorIssue,
+  createTranslator,
+  localized,
   type AppSettings,
+  type ValidationIssue,
   type AutoinstallProfile,
   type DeviceInfo,
   type GeneratedConfig,
@@ -102,6 +107,17 @@ function mainWindow(): BrowserWindow {
   return win
 }
 
+/**
+ * OS ネイティブのダイアログ用の翻訳関数。
+ *
+ * ダイアログのタイトルとファイル種別は renderer を通らない（Electron が OS に渡す）ので、
+ * `LocalizedText` では運べない。ここだけは **main が自分で訳す**。
+ */
+async function dialogT(): Promise<ReturnType<typeof createTranslator>> {
+  const settings = await getSettings()
+  return createTranslator(settings.locale)
+}
+
 /** 設定の生成と検証。ペイロードの実体は読まずにサイズだけ集計する。 */
 async function generate(profile: AutoinstallProfile): Promise<GeneratedConfig> {
   const settings = await getSettings()
@@ -174,9 +190,10 @@ export function registerIpc(): void {
   // --- ISO ---
   ipcMain.handle('chooseIso', async () => {
     const settings = await getSettings()
+    const t = createTranslator(settings.locale)
     const result = await dialog.showOpenDialog(mainWindow(), {
-      title: 'Ubuntu Server の ISO ファイルを選ぶ',
-      filters: [{ name: 'ISO イメージ', extensions: ['iso'] }],
+      title: t('dialog.chooseIso'),
+      filters: [{ name: t('dialog.filterIso'), extensions: ['iso'] }],
       properties: ['openFile'],
       ...(settings.lastIsoDirectory ? { defaultPath: settings.lastIsoDirectory } : {}),
     })
@@ -193,7 +210,11 @@ export function registerIpc(): void {
 
   // ドラッグ&ドロップで渡されたパスも、実際に ISO として読めた場合のみ許可リストに入れる
   ipcMain.handle('openIso', async (_e, path: unknown) => {
-    if (typeof path !== 'string') return { ok: false, reason: 'invalid', detail: 'パスが不正です。' }
+    // renderer が string 以外を送ってきた場合のガード。文言は「バグ／攻撃の検出」なので
+    // 訳す価値が無い。総括だけ訳し、生の理由は開発者向けの詳細として添える。
+    if (typeof path !== 'string') {
+      return { ok: false, reason: 'invalid', text: localized('error.unknown'), detail: 'パスが不正です。' }
+    }
     const opened = await openIso(path)
     if (opened.ok) {
       allowedIsoPaths.add(path)
@@ -218,22 +239,25 @@ export function registerIpc(): void {
     } catch (err) {
       // ここで reject すると renderer は config を null にするだけなので、
       // 確認画面はエラーも理由も出さずに「次へ」が無効になる（実機で確認）。
-      // 生成できない理由をエラー 1 件として返し、必ず画面に出す。
+      // 生成できない理由をエラーとして返し、必ず画面に出す。
+      //
+      // **検証の結果を捨てない。** 以前はここで作った 1 件だけを issues にしていたので、
+      // 生成が落ちた瞬間に他の指摘（ロックアウト・危険なディスク指定など）が
+      // すべて消えていた。`validateProfile` は壊れた設定でも投げない契約なので、
+      // ここで取り直して生成の指摘を足す。
+      const issues: ValidationIssue[] = []
+      try {
+        issues.push(...validateProfile(profile).issues)
+      } catch {
+        // 検証まで落ちたら生成の指摘だけを出す（何も出さないよりよい）
+      }
+      // 文言はキーから引く。日本語の診断 (`Error.message`) を英文に連結しない。
+      addUniqueIssue(issues, generateErrorIssue(err))
       return {
         userData: '',
         metaData: '',
         autoinstallYaml: '',
-        issues: [
-          {
-            severity: 'error' as const,
-            // 生成のどこで落ちたかは分からないので、特定の設定項目のせいにしない。
-            // `advanced.rawOverlayYaml` と書くと、上書き YAML を使っていない人まで
-            // 無関係な画面へ探しに行くことになる。
-            field: 'generate',
-            messageJa: `設定を生成できませんでした: ${(err as Error).message}`,
-            messageEn: `Could not generate the configuration: ${(err as Error).message}`,
-          },
-        ],
+        issues,
         ok: false,
         unattended: false,
         payloadBytes: 0,
@@ -291,10 +315,11 @@ export function registerIpc(): void {
 
   // --- プロファイル（ファイル入出力） ---
   ipcMain.handle('saveProfile', async (_e, profile: AutoinstallProfile) => {
+    const t = await dialogT()
     const result = await dialog.showSaveDialog(mainWindow(), {
-      title: 'プロファイルをファイルに書き出す',
+      title: t('dialog.saveProfile'),
       defaultPath: `${profile.meta.name || 'autoinstall'}.profile.json`,
-      filters: [{ name: 'プロファイル', extensions: ['json'] }],
+      filters: [{ name: t('dialog.filterProfile'), extensions: ['json'] }],
     })
     if (result.canceled || !result.filePath) return null
     await profileStore.exportProfileFile(profile, result.filePath)
@@ -302,9 +327,10 @@ export function registerIpc(): void {
   })
 
   ipcMain.handle('loadProfile', async () => {
+    const t = await dialogT()
     const result = await dialog.showOpenDialog(mainWindow(), {
-      title: 'プロファイルをファイルから読み込む',
-      filters: [{ name: 'プロファイル', extensions: ['json'] }],
+      title: t('dialog.openProfile'),
+      filters: [{ name: t('dialog.filterProfile'), extensions: ['json'] }],
       properties: ['openFile'],
     })
     const path = result.filePaths[0]
@@ -318,9 +344,10 @@ export function registerIpc(): void {
   })
 
   ipcMain.handle('importProfileToLibrary', async () => {
+    const t = await dialogT()
     const result = await dialog.showOpenDialog(mainWindow(), {
-      title: 'プロファイルを取り込む',
-      filters: [{ name: 'プロファイル', extensions: ['json'] }],
+      title: t('dialog.importProfile'),
+      filters: [{ name: t('dialog.filterProfile'), extensions: ['json'] }],
       properties: ['openFile'],
     })
     const path = result.filePaths[0]
@@ -338,8 +365,9 @@ export function registerIpc(): void {
   })
 
   ipcMain.handle('exportBundle', async (_e, profile: AutoinstallProfile) => {
+    const settings = await getSettings()
     const result = await dialog.showOpenDialog(mainWindow(), {
-      title: '設定一式の保存先フォルダを選ぶ',
+      title: createTranslator(settings.locale)('dialog.exportBundleDir'),
       properties: ['openDirectory', 'createDirectory'],
     })
     const dir = result.filePaths[0]
@@ -348,27 +376,15 @@ export function registerIpc(): void {
     await writeFile(join(dir, 'user-data'), config.userData, 'utf8')
     await writeFile(join(dir, 'meta-data'), config.metaData, 'utf8')
     await writeFile(join(dir, 'autoinstall.yaml'), config.autoinstallYaml, 'utf8')
+    // README は画面ではなく**生成物**なので、生成物のコメント言語に合わせる。
+    // 'none'（コメントを入れない）のときは読む人が居ないわけではないので、UI の言語に落とす。
+    const readmeLocale = settings.commentLanguage === 'none' ? settings.locale : settings.commentLanguage
     await writeFile(
       join(dir, 'README.txt'),
-      [
-        'Ubuntu Server 自動インストール設定',
-        '',
-        '使い方（このツール以外で USB を作る場合）:',
-        '1. Ubuntu の live-server ISO を Rufus / balenaEtcher などで USB に書き込む（DD モード）。',
-        '2. 別の USB メモリを FAT32 でフォーマットし、ボリュームラベルを CIDATA にする。',
-        '3. そこに user-data と meta-data をコピーする。',
-        '4. 両方の USB を挿してサーバーを起動する。',
-        '5. GRUB のメニューで e を押し、linux の行の末尾（--- の前）に autoinstall を追加して Ctrl+X で起動する。',
-        '   ※ この手順を省くと "Continue with autoinstall? (yes|no)" で止まります。',
-        '',
-        'このツールで USB を作れば、上記 2〜5 はすべて自動で行われます。',
-        '',
-        '注意: アプリの展開を設定している場合、そのファイルはここには書き出されません。',
-        '      late-commands が CIDATA パーティションをマウントして参照します。',
-        '',
-        `生成: ${app.getName()} ${app.getVersion()}`,
-        `日時: ${new Date().toISOString()}`,
-      ].join('\n'),
+      createTranslator(readmeLocale)('bundle.readme', {
+        tool: `${app.getName()} ${app.getVersion()}`,
+        date: new Date().toISOString(),
+      }),
       'utf8',
     )
     return dir
@@ -376,12 +392,16 @@ export function registerIpc(): void {
 
   // --- アプリ展開のペイロード ---
   ipcMain.handle('pickPayloadFile', async (): Promise<PickedFile | null> => {
+    const t = await dialogT()
     const result = await dialog.showOpenDialog(mainWindow(), {
-      title: 'インストール先に展開するファイルを選ぶ',
+      title: t('dialog.pickPayload'),
       properties: ['openFile'],
       filters: [
-        { name: 'アーカイブ', extensions: ['tar.gz', 'tgz', 'tar.xz', 'txz', 'tar.bz2', 'tar', 'zip'] },
-        { name: 'すべてのファイル', extensions: ['*'] },
+        {
+          name: t('dialog.filterArchive'),
+          extensions: ['tar.gz', 'tgz', 'tar.xz', 'txz', 'tar.bz2', 'tar', 'zip'],
+        },
+        { name: t('dialog.filterAllFiles'), extensions: ['*'] },
       ],
     })
     const path = result.filePaths[0]
@@ -415,31 +435,29 @@ export function registerIpc(): void {
   ipcMain.handle('startWrite', async (_e, req: WriteRequest) => {
     // renderer から来たパス・デバイス ID を検証する。ここが最後の砦。
     if (!allowedIsoPaths.has(req.isoPath)) {
-      return { started: false, message: 'この ISO は選択されていません。選び直してください。' }
+      return { started: false, message: localized('write.isoNotSelected'), detail: null }
     }
     if (!selectableDeviceIds.has(req.deviceId)) {
-      return {
-        started: false,
-        message: 'このデバイスには書き込めません。デバイス一覧を再読み込みしてください。',
-      }
+      return { started: false, message: localized('write.deviceNotWritable'), detail: null }
     }
     for (const d of req.profile.postInstall.deployments) {
       if (d.source.kind === 'host-file' && !allowedPayloadPaths.has(d.source.path)) {
         return {
           started: false,
-          message: `展開するファイル "${d.name}" が選択されていません。選び直してください。`,
+          message: localized('write.payloadNotSelected', { name: d.name }),
+          detail: null,
         }
       }
     }
     const validation = validateProfile(req.profile)
     if (!validation.ok) {
-      return { started: false, message: '設定にエラーがあります。確認画面で修正してください。' }
+      return { started: false, message: localized('write.configInvalidBody'), detail: null }
     }
 
     const devices = await getPlatformOps().listDevices()
     const device = devices.find((d) => d.id === req.deviceId)
     if (!device || !device.selectable) {
-      return { started: false, message: 'デバイスが見つかりません。挿し直して再読み込みしてください。' }
+      return { started: false, message: localized('write.deviceGone'), detail: null }
     }
 
     // ISO のパッチは main 側で作る。画面に見せた内容とワーカーが書く内容を一致させるため。
@@ -471,7 +489,12 @@ export function registerIpc(): void {
         await isoDev.close().catch(() => undefined)
       }
     } catch (err) {
-      return { started: false, message: (err as Error).message }
+      // ISO の内部構造の話は**開発者向けの診断**。訳した総括文と生の詳細の 2 本立てにする。
+      return {
+        started: false,
+        message: localized('write.isoPrepareFailed'),
+        detail: (err as Error).message,
+      }
     }
 
     const settings = await getSettings()
@@ -486,13 +509,15 @@ export function registerIpc(): void {
         minimumCidataSize: req.cidataSizeBytes || settings.cidataSizeBytes,
       })
     } catch (err) {
-      if (err instanceof SeedBuildError) return { started: false, message: err.message }
+      // `err.message`（日本語）はログ用に残してあるが、画面には訳せる `err.text` を出す。
+      if (err instanceof SeedBuildError) return { started: false, message: err.text, detail: null }
       throw err
     }
     if (bundle.missingSources.length > 0) {
       return {
         started: false,
-        message: `展開するファイルが見つかりません: ${bundle.missingSources.join(', ')}`,
+        message: localized('write.payloadMissing', { files: bundle.missingSources.join(', ') }),
+        detail: null,
       }
     }
 
@@ -547,13 +572,17 @@ export function registerIpc(): void {
   })
 
   ipcMain.handle('readTextFile', async () => {
+    const t = await dialogT()
     const result = await dialog.showOpenDialog(mainWindow(), {
-      title: 'ファイルを選ぶ',
+      title: t('dialog.readTextFile'),
       properties: ['openFile'],
       filters: [
-        { name: '公開鍵', extensions: ['pub'] },
-        { name: 'テキスト', extensions: ['txt', 'yaml', 'yml', 'cfg', 'conf', 'json', 'service', 'sh'] },
-        { name: 'すべて', extensions: ['*'] },
+        { name: t('dialog.filterPublicKey'), extensions: ['pub'] },
+        {
+          name: t('dialog.filterText'),
+          extensions: ['txt', 'yaml', 'yml', 'cfg', 'conf', 'json', 'service', 'sh'],
+        },
+        { name: t('dialog.filterAllFiles'), extensions: ['*'] },
       ],
     })
     const path = result.filePaths[0]

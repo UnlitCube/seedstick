@@ -1,7 +1,8 @@
 import { parseDocument } from 'yaml'
 import type { AutoinstallProfile } from './model.js'
 import { SERIES_FEATURES } from './model.js'
-import { buildAutoinstallObject, collectPackages } from './generate.js'
+import { GenerateError, buildAutoinstallObject, collectPackages, parseOverlay } from './generate.js'
+import { formatLocalized, localized } from '../i18n/index.js'
 import { isValidSha512CryptHash, looksLikeCryptHash } from '../crypt/validate.js'
 import { getPreset } from './presets.js'
 import { ARCHIVE_REQUIREMENTS } from './provisioning.js'
@@ -25,6 +26,14 @@ export interface ValidationIssue {
   readonly field: string
   readonly messageJa: string
   readonly messageEn: string
+  /**
+   * 開発者向けの生の診断（訳さない）。**総括は必ず `messageJa` / `messageEn` に入れる**。
+   *
+   * ここに入るのは「訳せる情報を持たない例外」の `Error.message` だけ。
+   * 総括を訳し、生の詳細は別の行に出す 2 本立ては `WriteStatus.detail` と同じ方針。
+   * 訳文に連結すると英語の画面に日本語が混ざる（実際にそうなっていた）。
+   */
+  readonly detail?: string
 }
 
 export interface ValidationResult {
@@ -107,17 +116,50 @@ function knownPresetIds(profile: AutoinstallProfile): {
   return { known, unknown }
 }
 
-/** 上書き YAML が書き換えるトップレベルのキー。壊れた YAML でも例外にしない。 */
+/**
+ * 上書き YAML が書き換えるトップレベルのキー。壊れた YAML でも例外にしない。
+ *
+ * 判定は生成側 (`parseOverlay`) と**同じ実装**を通す。写しを持つと
+ * 「検証は通るのに生成だけ落ちる」食い違いが戻る。
+ */
 function overlayTopLevelKeys(yamlText: string): string[] {
   try {
-    const doc = parseDocument(yamlText)
-    if (doc.errors.length > 0) return []
-    const js = doc.toJS() as unknown
-    if (js === null || typeof js !== 'object' || Array.isArray(js)) return []
-    return Object.keys(js as Record<string, unknown>)
+    return Object.keys(parseOverlay(yamlText) ?? {})
   } catch {
     return []
   }
+}
+
+/**
+ * 生成の例外を指摘 1 件にする。**日本語の診断を英文に連結しない**。
+ *
+ * `GenerateError` は訳せる文言 (`text`) を持つので、両方の言語をキーから引く。
+ * 持たない例外（手で編集された JSON からの TypeError など）は総括だけを訳し、
+ * 生の `Error.message` は訳さない `detail` として別に運ぶ。
+ */
+export function generateErrorIssue(err: unknown): ValidationIssue {
+  if (err instanceof GenerateError) {
+    return {
+      severity: 'error',
+      field: err.field,
+      messageJa: formatLocalized('ja', err.text),
+      messageEn: formatLocalized('en', err.text),
+    }
+  }
+  return {
+    severity: 'error',
+    // 生成のどこで落ちたかは分からないので、特定の設定項目のせいにしない。
+    field: 'generate',
+    messageJa: formatLocalized('ja', localized('generate.failed')),
+    messageEn: formatLocalized('en', localized('generate.failed')),
+    detail: err instanceof Error ? err.message : String(err),
+  }
+}
+
+/** 同じ場所・同じ文言の指摘を二重に出さない（検証と生成で同じ例外を 2 度見るため）。 */
+export function addUniqueIssue(issues: ValidationIssue[], issue: ValidationIssue): void {
+  if (issues.some((i) => i.field === issue.field && i.messageJa === issue.messageJa)) return
+  issues.push(issue)
 }
 
 export function validateProfile(profile: AutoinstallProfile): ValidationResult {
@@ -1209,15 +1251,13 @@ export function validateProfile(profile: AutoinstallProfile): ValidationResult {
   }
 
   // --- 上書き YAML ---
+  // ここで先に見ておく。最後の buildAutoinstallObject でも同じ例外は出るが、
+  // それより前で別の理由が投げると上書き YAML の指摘が隠れる（field も 'generate' に落ちる）。
   if (profile.advanced.rawOverlayYaml.trim()) {
-    const doc = parseDocument(profile.advanced.rawOverlayYaml)
-    if (doc.errors.length > 0) {
-      add('error', 'advanced.rawOverlayYaml', `上書き YAML の構文エラー: ${doc.errors[0]!.message}`, `Overlay YAML syntax error: ${doc.errors[0]!.message}`)
-    } else {
-      const js: unknown = doc.toJS()
-      if (js !== null && (typeof js !== 'object' || Array.isArray(js))) {
-        add('error', 'advanced.rawOverlayYaml', '上書き YAML はキーと値のマッピングにしてください。', 'The overlay YAML must be a mapping.')
-      }
+    try {
+      parseOverlay(profile.advanced.rawOverlayYaml)
+    } catch (err) {
+      addUniqueIssue(issues, generateErrorIssue(err))
     }
   }
   // grub.cfg の中で意味を持つ文字は全部弾く。; & | だけでは足りない
@@ -1249,11 +1289,12 @@ export function validateProfile(profile: AutoinstallProfile): ValidationResult {
     )
   }
 
-  // 生成そのものが失敗しないかを最後に確認する
+  // 生成そのものが失敗しないかを最後に確認する。
+  // 例外のメッセージ（日本語の診断）を訳文に連結しない — `generateErrorIssue` を通す。
   try {
     buildAutoinstallObject(profile)
   } catch (err) {
-    add('error', 'generate', `YAML の生成に失敗しました: ${(err as Error).message}`, `Failed to generate YAML: ${(err as Error).message}`)
+    addUniqueIssue(issues, generateErrorIssue(err))
   }
 
   return { ok: !issues.some((i) => i.severity === 'error'), issues }

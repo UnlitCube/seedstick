@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import {
   createDefaultProfile,
+  localized,
   resolveLocale,
   type AppSettings,
   type ChecksumResult,
@@ -9,11 +10,26 @@ import {
   type GeneratedConfig,
   type IsoFileInfo,
   type Locale,
+  type LocalizedText,
   type ProfileSummary,
   type WriteStatus,
 } from '@autoinstall/shared'
 
 // アプリ全体の状態。ステップを移動しても入力が消えないよう 1 つのストアに集約する。
+
+/**
+ * ISO を受け付けなかった理由。
+ *
+ * `text` は訳す総括文（main は利用者の言語を知らないのでキーのまま運ばれる）、
+ * `detail` は開発者向けの生の詳細（壊れた ISO の内部構造など。訳さず等幅で出す）。
+ * かつてはここが `string` 1 本で、`IsoOpenResult.detail` をそのまま入れていた。
+ * `detail` が「詳細」の意味に変わったあともそのままだと、通常の拒否は
+ * `detail: null` なので**本文が空の Callout** が出る（型は通る）。
+ */
+export interface IsoRejection {
+  readonly text: LocalizedText
+  readonly detail: string | null
+}
 
 export type StepId =
   | 'iso'
@@ -47,7 +63,7 @@ interface AppState {
   step: StepId
   profile: AutoinstallProfile
   iso: IsoFileInfo | null
-  isoError: string | null
+  isoError: IsoRejection | null
   isoBusy: boolean
   checksum: ChecksumResult | null
   checksumProgress: { bytesDone: number; bytesTotal: number } | null
@@ -66,8 +82,11 @@ interface AppState {
   currentProfileId: string | null
   /** 最後の保存以降に変更があったか */
   dirty: boolean
-  /** プロファイル読み込み時の注意（古い形式の移行など） */
-  profileNotes: string[]
+  /**
+   * プロファイル読み込み時の注意（古い形式の移行など）。
+   * **訳す前**のまま持つ（描画するときに `useTl` で訳す）。
+   */
+  profileNotes: LocalizedText[]
 
   init(): Promise<void>
   setStep(step: StepId): void
@@ -88,9 +107,9 @@ interface AppState {
   saveSettings(update: (s: AppSettings) => AppSettings): Promise<void>
   loadProfileFromDisk(): Promise<void>
   /** 開いたプロファイルの series を、選択中の ISO に合わせる（内部用） */
-  _alignSeriesToIso(loaded: { profile: AutoinstallProfile; notes: string[] }): {
+  _alignSeriesToIso(loaded: { profile: AutoinstallProfile; notes: LocalizedText[] }): {
     profile: AutoinstallProfile
-    notes: string[]
+    notes: LocalizedText[]
   }
   setLocale(locale: Locale): Promise<void>
   refreshProfiles(): Promise<void>
@@ -179,7 +198,7 @@ export const useStore = create<AppState>((set, get) => ({
       const result = await window.autoinstall.chooseIso()
       if (!result) return
       if (!result.ok) {
-        set({ isoError: result.detail, iso: null })
+        set({ isoError: { text: result.text, detail: result.detail }, iso: null })
         return
       }
       set({ iso: result.info, isoError: null, checksum: null, checksumProgress: null })
@@ -194,7 +213,7 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       const result = await window.autoinstall.openIso(path)
       if (!result.ok) {
-        set({ isoError: result.detail, iso: null })
+        set({ isoError: { text: result.text, detail: result.detail }, iso: null })
         return
       }
       set({ iso: result.info, isoError: null, checksum: null, checksumProgress: null })
@@ -265,11 +284,13 @@ export const useStore = create<AppState>((set, get) => ({
       auditRecord: settings.auditRecord,
     })
     if (!result.started) {
+      // 文言は訳さずキーのまま state に置く。訳すのは描画するときで、
+      // そうしないと表示中に言語を切り替えても、この一文だけ古い言語のまま残る。
       set({
         writeStatus: {
           state: 'error',
-          message: result.message ?? '書き込みを開始できませんでした。',
-          detail: null,
+          message: result.message ?? localized('store.writeStartFailed'),
+          detail: result.detail ?? null,
         },
       })
     }
@@ -318,9 +339,9 @@ export const useStore = create<AppState>((set, get) => ({
    * 基準にするので「問題なし」と表示され、そのまま書き込めてしまう。
    * ISO を選んでいるなら、そちらが正。合わせたことは画面で伝える。
    */
-  _alignSeriesToIso(loaded: { profile: AutoinstallProfile; notes: string[] }): {
+  _alignSeriesToIso(loaded: { profile: AutoinstallProfile; notes: LocalizedText[] }): {
     profile: AutoinstallProfile
-    notes: string[]
+    notes: LocalizedText[]
   } {
     const iso = get().iso
     if (!iso || iso.identity.series === loaded.profile.series) return loaded
@@ -328,9 +349,14 @@ export const useStore = create<AppState>((set, get) => ({
       profile: { ...loaded.profile, series: iso.identity.series },
       notes: [
         ...loaded.notes,
-        `このプロファイルは Ubuntu ${loaded.profile.series} 用に保存されていましたが、`
-          + `選択中の ISO (${iso.identity.series}) に合わせました。`
-          + 'バージョンによって使える設定が違うので、確認画面で内容を見てください。',
+        // **ここで訳さない。** 訳すのは描画するとき（`startWrite` と同じ方針）。
+        // 訳した文字列を state に置くと、表示中に言語を切り替えても
+        // この一文だけ古い言語のまま残る。移行の notes と混在させると、
+        // 同じ箇条書きの中で英語と日本語が混ざる。
+        localized('store.seriesAligned', {
+          savedSeries: loaded.profile.series,
+          isoSeries: iso.identity.series,
+        }),
       ],
     }
   },

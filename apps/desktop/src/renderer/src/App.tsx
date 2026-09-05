@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { Check, ChevronLeft, ChevronRight, Disc3, Languages } from 'lucide-react'
 import type { MsgKey } from '@autoinstall/shared'
 import { STEP_ORDER, useStore, type StepId } from './store.js'
-import { useT } from './lib/i18n.js'
+import { useT, useTl } from './lib/i18n.js'
 import { Button, Callout } from './components/ui.js'
 import { ErrorBoundary } from './components/ErrorBoundary.js'
 import { ProfileBar } from './views/ProfileBar.js'
@@ -45,6 +45,8 @@ const STEP_VIEWS: Record<StepId, () => React.JSX.Element> = {
 
 export function App(): React.JSX.Element {
   const t = useT()
+  // 移行の notes は訳す前の LocalizedText で届く（main は利用者の言語を知らない）
+  const tl = useTl()
   const ready = useStore((s) => s.ready)
   const init = useStore((s) => s.init)
   const step = useStore((s) => s.step)
@@ -149,8 +151,8 @@ export function App(): React.JSX.Element {
             {profileNotes.length > 0 && (
               <Callout tone="info" title={t('profile.migrated')}>
                 <ul className="list-inside list-disc">
-                  {profileNotes.map((n) => (
-                    <li key={n}>{n}</li>
+                  {profileNotes.map((n, i) => (
+                    <li key={`${n.key}-${i}`}>{tl(n)}</li>
                   ))}
                 </ul>
                 <button

@@ -29,7 +29,14 @@ function isAllZero(buf: Buffer): boolean {
   return true
 }
 
-/** 読み取り専用デバイスに write が来たら即座に落とす（テストと安全策）。 */
+/**
+ * 読み取り専用デバイスに write が来たら即座に落とす（テストと安全策）。
+ *
+ * 文言は**訳さない**。アプリ本体で書き込み先になるのは `RawBlockDevice` だけで
+ * （`worker/run.ts`）、`FileBlockDevice` は ISO を 'r' で開くだけ、
+ * `SparseFixtureDevice` はテスト専用なので、この例外が画面に届く経路が無い。
+ * 出たとしたらこちら側のバグなので、バグ報告と突き合わせられる生の文のまま残す。
+ */
 export class ReadOnlyError extends Error {
   constructor(offset: number) {
     super(`読み取り専用デバイスへの書き込みが試みられました (offset=${offset})`)
@@ -76,6 +83,9 @@ export class FileBlockDevice implements BlockDevice {
         data.length - written,
         offset + written,
       )
+      // 訳さない開発者向け診断。`FileBlockDevice` の書き込みは .img を作るテスト・
+      // smoke・e2e スクリプトからしか呼ばれない（アプリ内では常に読み取り専用）。
+      // 実デバイス側の同種の失敗は `RawBlockDevice` の `DeviceWriteStalledError` が扱う。
       if (bytesWritten === 0) throw new Error(`書き込みが進みませんでした (offset=${offset + written})`)
       written += bytesWritten
     }

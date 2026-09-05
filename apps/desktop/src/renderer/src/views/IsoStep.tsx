@@ -2,7 +2,7 @@ import { useState, type DragEvent } from 'react'
 import { CheckCircle2, Disc3, ExternalLink, FileWarning, Loader2, ShieldCheck } from 'lucide-react'
 import { SERIES_CATALOG, isEndOfLife, monthsUntilEol, type ChecksumResult } from '@autoinstall/shared'
 import { useStore } from '../store.js'
-import { useT } from '../lib/i18n.js'
+import { useT, useTl, useTx } from '../lib/i18n.js'
 import { formatBytes } from '../lib/format.js'
 import { Badge, Button, Callout, Card, CodeBlock, ProgressBar } from '../components/ui.js'
 
@@ -19,7 +19,7 @@ function EolNotice({ series }: { series: keyof typeof SERIES_CATALOG }): React.J
       <Callout tone="danger" title={t('iso.eol')}>
         <p>{t('iso.eolBody')}</p>
         <p className="mt-1 text-xs">
-          Ubuntu {entry.series} ({entry.codename}) の標準サポートは {entry.eol} に終了しました。
+          {t('iso.eolDetail', { series: entry.series, codename: entry.codename, eol: entry.eol })}
         </p>
       </Callout>
     )
@@ -28,7 +28,7 @@ function EolNotice({ series }: { series: keyof typeof SERIES_CATALOG }): React.J
   if (months <= 6) {
     return (
       <Callout tone="warning" title={t('iso.eolSoon')}>
-        Ubuntu {entry.series} の標準サポートは {entry.eol} に終了します（残り約 {months} か月）。
+        {t('iso.eolSoonDetail', { series: entry.series, eol: entry.eol, months })}
       </Callout>
     )
   }
@@ -37,6 +37,8 @@ function EolNotice({ series }: { series: keyof typeof SERIES_CATALOG }): React.J
 
 export function IsoStep(): React.JSX.Element {
   const t = useT()
+  const tl = useTl()
+  const tx = useTx()
   const { iso, isoError, isoBusy, checksum, checksumProgress } = useStore()
   const chooseIso = useStore((s) => s.chooseIso)
   const openIsoPath = useStore((s) => s.openIsoPath)
@@ -101,16 +103,18 @@ export function IsoStep(): React.JSX.Element {
                   <Detail label={t('iso.arch')}>{iso.identity.arch}</Detail>
                   <Detail label={t('iso.size')}>{formatBytes(iso.sizeBytes)}</Detail>
                   {iso.identity.codename !== undefined && (
-                    <Detail label="コードネーム">{iso.identity.codename}</Detail>
+                    <Detail label={t('iso.codename')}>{iso.identity.codename}</Detail>
                   )}
                   {iso.identity.buildId !== undefined && (
-                    <Detail label="ビルド">{iso.identity.buildId}</Detail>
+                    <Detail label={t('iso.build')}>{iso.identity.buildId}</Detail>
                   )}
-                  <Detail label="必要な USB 容量">{formatBytes(iso.minimumDeviceBytes)} 以上</Detail>
+                  <Detail label={t('iso.minimumDevice')}>
+                    {t('iso.minimumDeviceValue', { size: formatBytes(iso.minimumDeviceBytes) })}
+                  </Detail>
                 </dl>
               </div>
               <Button variant="ghost" onClick={clearIso}>
-                選び直す
+                {t('iso.chooseAgain')}
               </Button>
             </div>
 
@@ -128,15 +132,15 @@ export function IsoStep(): React.JSX.Element {
                 onClick={() => setShowGrub(!showGrub)}
                 className="text-sm text-sky-700 underline-offset-2 hover:underline dark:text-sky-400"
               >
-                {showGrub ? '起動メニューの変更内容を隠す' : '起動メニューにどんな変更を加えるか見る'}
+                {showGrub ? t('iso.grubHide') : t('iso.grubShow')}
               </button>
               {showGrub && (
                 <div className="mt-3 space-y-3">
                   <Callout tone="info">
-                    ISO の中の <code className="font-mono">/boot/grub/grub.cfg</code> だけを書き換え、
-                    カーネル引数に <code className="font-mono">autoinstall</code> を追加します。
-                    これが無いと「Continue with autoinstall? (yes|no)」で止まってしまうため必須です。
-                    ISO ファイル自体は変更しません。
+                    {tx('iso.grubExplain', {
+                      path: <code className="font-mono">/boot/grub/grub.cfg</code>,
+                      arg: <code className="font-mono">autoinstall</code>,
+                    })}
                   </Callout>
                   <CodeBlock code={iso.patchedGrubCfg} maxHeight="18rem" />
                 </div>
@@ -148,20 +152,30 @@ export function IsoStep(): React.JSX.Element {
         {isoError !== null && (
           <div className="mt-4">
             <Callout tone="danger" title={t('iso.unsupported')}>
-              <p>{isoError}</p>
+              {/*
+                本文は必ず**理由**（casper が無い / grub.cfg が 1 セクタに収まらない…）。
+                main が理由を一律 `iso.unsupported` に潰していた時期があり、
+                タイトルと本文がまったく同じ文字列になって、意味のある情報が
+                開発者向けの `detail` にしか残らなかった。
+                万一また同じ文字列が届いても二度書きしない（情報は増えないため）。
+              */}
+              {tl(isoError.text) !== t('iso.unsupported') && (
+                <p>{tl(isoError.text) || t('error.unknown')}</p>
+              )}
+              {isoError.detail !== null && (
+                <pre className="mt-2 max-h-40 overflow-auto rounded bg-slate-900/10 p-2 text-[11px] dark:bg-slate-950/40">
+                  {isoError.detail}
+                </pre>
+              )}
               <p className="mt-2 text-xs">
-                対応しているのは Ubuntu Server の <strong>live-server</strong> 版 ISO です。
-                Desktop 版や他のフレーバー、他のディストリビューションには対応していません。
+                {tx('iso.supportedEditionsOnly', { edition: <strong>live-server</strong> })}
               </p>
             </Callout>
           </div>
         )}
       </Card>
 
-      <Card
-        title="ISO を持っていない場合"
-        description="このツールは ISO を同梱しません。Ubuntu の公式サイトからダウンロードしてください。"
-      >
+      <Card title={t('iso.noIsoTitle')} description={t('iso.noIsoDescription')}>
         <ul className="space-y-2">
           {Object.values(SERIES_CATALOG).map((c) => (
             <li
@@ -173,11 +187,12 @@ export function IsoStep(): React.JSX.Element {
                   Ubuntu Server {c.knownLatestVersion} {c.isLts && <Badge tone="info">LTS</Badge>}
                 </p>
                 <p className="truncate text-xs text-slate-500 dark:text-slate-400">
-                  {c.codename} · 約 {formatBytes(c.knownIsoSize)} · {t('iso.supportUntil')} {c.eol}
+                  {c.codename} · {t('iso.approxSize', { size: formatBytes(c.knownIsoSize) })} ·{' '}
+                  {t('iso.supportUntil')} {c.eol}
                   {isEndOfLife(c, TODAY) && (
                     <>
                       {' '}
-                      <Badge tone="danger">サポート終了</Badge>
+                      <Badge tone="danger">{t('iso.eolBadge')}</Badge>
                     </>
                   )}
                 </p>
@@ -221,7 +236,10 @@ function ChecksumPanel({
     return (
       <div className="space-y-2 rounded-lg border border-slate-200 p-4 dark:border-slate-700">
         <p className="text-sm text-slate-700 dark:text-slate-300">
-          チェックサムを計算しています… {formatBytes(progress.bytesDone)} / {formatBytes(totalBytes)}
+          {t('iso.checksumComputing', {
+            done: formatBytes(progress.bytesDone),
+            total: formatBytes(totalBytes),
+          })}
         </p>
         <ProgressBar value={progress.bytesDone} max={progress.bytesTotal} />
       </div>
@@ -235,12 +253,12 @@ function ChecksumPanel({
             {t('iso.checksumVerify')}
           </p>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            ダウンロードが壊れていないか、公式のチェックサムと照合します（数分かかります）
+            {t('iso.checksumVerifyHint')}
           </p>
         </div>
         <Button onClick={onVerify}>
           <ShieldCheck className="size-4" aria-hidden />
-          確認する
+          {t('iso.checksumRun')}
         </Button>
       </div>
     )
@@ -256,15 +274,12 @@ function ChecksumPanel({
     <Callout tone={tone} title={title}>
       <p className="break-all font-mono text-xs">{checksum.sha256}</p>
       {checksum.official === 'mismatch' && (
-        <p className="mt-2 font-medium">
-          この ISO は使わないでください。もう一度ダウンロードし直すことを強く推奨します。
-        </p>
+        <p className="mt-2 font-medium">{t('iso.checksumMismatchAdvice')}</p>
       )}
       {checksum.official === 'unknown' && (
         <p className="mt-2 flex items-start gap-1 text-xs">
           <FileWarning className="mt-0.5 size-3 shrink-0" aria-hidden />
-          公式の一覧を取得できませんでした。ハッシュ値は Ubuntu 公式サイトの SHA256SUMS と手動で
-          見比べてください。
+          {t('iso.checksumUnknownAdvice')}
         </p>
       )}
     </Callout>
