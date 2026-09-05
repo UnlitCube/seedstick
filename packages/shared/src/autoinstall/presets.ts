@@ -216,6 +216,17 @@ export const POST_INSTALL_PRESETS: readonly PostInstallPreset[] = [
   },
 ]
 
+/**
+ * 知らない ID なら undefined を返す。
+ *
+ * プロファイルは手で編集できるし、新しい版で作ったものを古い版で開くこともある。
+ * 生成や検証の途中で例外にすると、ユーザーには理由の分からない空の確認画面と
+ * 反応しない書き込みボタンだけが残るので、生成側はこちらを使って読み飛ばす。
+ */
+export function findPreset(id: string): PostInstallPreset | undefined {
+  return POST_INSTALL_PRESETS.find((p) => p.id === id)
+}
+
 export function getPreset(id: PostInstallPresetId): PostInstallPreset {
   const found = POST_INSTALL_PRESETS.find((p) => p.id === id)
   if (!found) throw new Error(`未知のプリセット: ${id}`)

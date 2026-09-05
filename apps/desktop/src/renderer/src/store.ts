@@ -21,6 +21,7 @@ export type StepId =
   | 'user'
   | 'network'
   | 'storage'
+  | 'runtime'
   | 'software'
   | 'postinstall'
   | 'review'
@@ -32,6 +33,7 @@ export const STEP_ORDER: readonly StepId[] = [
   'user',
   'network',
   'storage',
+  'runtime',
   'software',
   'postinstall',
   'review',
@@ -81,6 +83,8 @@ interface AppState {
   selectDevice(id: string | null): void
   startWrite(): Promise<void>
   cancelWrite(): Promise<void>
+  /** 書き込み結果を消して、もう一本作れる状態に戻す */
+  resetWrite(): void
   saveSettings(update: (s: AppSettings) => AppSettings): Promise<void>
   loadProfileFromDisk(): Promise<void>
   setLocale(locale: Locale): Promise<void>
@@ -268,6 +272,18 @@ export const useStore = create<AppState>((set, get) => ({
 
   async cancelWrite() {
     await window.autoinstall.cancelWrite()
+  },
+
+  /**
+   * 書き込み結果を片付けて、もう一本作れる状態に戻す。
+   *
+   * これが無いと writeStatus が 'done' のまま残り、完了画面から先へ進めない。
+   * 複数台ぶんの USB を続けて作るのはこのツールの主用途なので、
+   * 「アプリを再起動しないと 2 本目が作れない」のは実質的な機能欠落だった。
+   */
+  resetWrite() {
+    set({ writeStatus: { state: 'idle' } })
+    void get().refreshDevices()
   },
 
   async saveSettings(update) {

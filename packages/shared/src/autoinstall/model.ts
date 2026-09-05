@@ -4,6 +4,17 @@ import type {
   GpuConfig,
   SystemdService,
 } from './provisioning.js'
+import type { RuntimeValuesConfig } from './runtime-values.js'
+import type {
+  ActiveDirectoryConfig,
+  AptFallback,
+  AptSource,
+  KernelChoice,
+  PrimaryUserGroups,
+  ReportingTarget,
+  ResetPartitionConfig,
+  SwapConfig,
+} from './advanced.js'
 
 // GUI が編集する「プロファイル」型。これが唯一の入力で、ここから autoinstall YAML を決定的に生成する。
 // autoinstall のキー名をそのまま使わず、初心者に意味が分かる語彙にしている（変換は generate.ts）。
@@ -15,8 +26,19 @@ export const UBUNTU_SERIES: readonly UbuntuSeries[] = ['22.04', '24.04', '25.10'
 
 /** シリーズごとの autoinstall 機能差。subiquity の autoinstall-schema.json 実測に基づく。 */
 export interface SeriesFeatures {
-  /** `interactive-sections`（22.04 のスキーマには無いが実装は存在。GUI では 24.04+ でのみ提示） */
+  /**
+   * `interactive-sections` にセクション名を並べる形。
+   * subiquity はこのキーを schema ではなく直接読む (server.py) ので 20.04 から使える。
+   * 22.04 の autoinstall-schema.json に載っていないのは schema がコントローラ単位で
+   * 生成されるためで、トップレベルは additionalProperties: true なので検証も通る。
+   */
   interactiveSections: boolean
+  /**
+   * `interactive-sections: ["*"]`（全画面を出す）。
+   * アスタリスクの展開は interactive_sections_GET にあり、22.04 で同じ挙動になる
+   * 確証が取れないので 24.04+ に限る。
+   */
+  interactiveAll: boolean
   /** `source`（インストール範囲の選択: ubuntu-server / ubuntu-server-minimal） */
   source: boolean
   /** `ubuntu-pro`（22.04 は `ubuntu-advantage` のみ） */
@@ -29,44 +51,69 @@ export interface SeriesFeatures {
   zdevs: boolean
   /** HWE カーネルの menuentry が grub.cfg にある（25.10 以降は無い） */
   hweMenuEntry: boolean
+  /**
+   * `identity.groups`。26.04 で追加。
+   * identity は `additionalProperties: false` なので、古い版に出すと
+   * スキーマ検証で落ちてインストールが中止される。
+   */
+  identityGroups: boolean
+  /**
+   * `storage.layout.reset-partition`。22.04 の subiquity には無い。
+   * storage セクションはスキーマ上 `type: object` だけで中身を検証しないため、
+   * 古い版に出しても検証では落ちず、単に無視される（=作られない）。
+   * 黙って効かないほうが危ないので GUI 側で出さない。
+   */
+  resetPartition: boolean
 }
 
 export const SERIES_FEATURES: Record<UbuntuSeries, SeriesFeatures> = {
   '22.04': {
-    interactiveSections: false,
+    interactiveSections: true,
+    interactiveAll: false,
     source: false,
     ubuntuPro: false,
     codecsOemAd: false,
     kernelCrashDumps: false,
     zdevs: false,
     hweMenuEntry: true,
+    identityGroups: false,
+    resetPartition: false,
   },
   '24.04': {
     interactiveSections: true,
+    interactiveAll: true,
     source: true,
     ubuntuPro: true,
     codecsOemAd: true,
     kernelCrashDumps: false,
     zdevs: false,
     hweMenuEntry: true,
+    identityGroups: false,
+    resetPartition: true,
   },
   '25.10': {
     interactiveSections: true,
+    interactiveAll: true,
     source: true,
     ubuntuPro: true,
     codecsOemAd: true,
     kernelCrashDumps: true,
     zdevs: true,
     hweMenuEntry: false,
+    identityGroups: false,
+    resetPartition: true,
   },
   '26.04': {
     interactiveSections: true,
+    interactiveAll: true,
     source: true,
     ubuntuPro: true,
     codecsOemAd: true,
     kernelCrashDumps: true,
     zdevs: true,
     hweMenuEntry: false,
+    identityGroups: true,
+    resetPartition: true,
   },
 }
 
@@ -136,10 +183,12 @@ export type StorageConfig =
       readonly useWholeDisk: boolean
       /** LUKS 全ディスク暗号化のパスフレーズ（平文。空なら暗号化しない）。lvm レイアウトのみ。 */
       readonly encryptionPassphrase: string
-      /** swap を作らない場合 true（`swap: {size: 0}`） */
-      readonly disableSwap: boolean
+      /** swap の作り方。`none` は `swap: {size: 0}`。 */
+      readonly swap: SwapConfig
       /** パーティションテーブル形式。既定 (s390x 以外) は gpt。古い BIOS 機では msdos。 */
       readonly partitionTable: 'default' | 'gpt' | 'msdos'
+      /** リセットパーティション（メディア無しで再インストールできるようにする） */
+      readonly resetPartition: ResetPartitionConfig
     }
   /** 上級者向け: curtin の storage config をそのまま渡す */
   | { readonly mode: 'raw'; readonly yaml: string }
@@ -179,9 +228,10 @@ export type PostInstallPresetId =
 export interface AutoinstallProfile {
   /**
    * プロファイル JSON の形式バージョン（autoinstall の version とは別物）。
-   * 1: 初版 / 2: 追加ユーザー・展開・サービス・GPU を追加
+   * 1: 初版 / 2: 追加ユーザー・展開・サービス・GPU / 3: 実行時に決める値
+   * 4: kernel/apt sources/error-commands/debconf/AD など残りの autoinstall キー
    */
-  readonly profileVersion: 2
+  readonly profileVersion: 4
   readonly meta: {
     readonly name: string
     /** ISO 8601。生成時に埋める。 */
@@ -204,6 +254,8 @@ export interface AutoinstallProfile {
     readonly passwordHash: string
     /** sudo をパスワード無しにする（late-commands で sudoers.d に書く） */
     readonly sudoNoPassword: boolean
+    /** `identity.groups`。既定は subiquity が sudo/admin などを付ける。 */
+    readonly groups: PrimaryUserGroups
   }
   readonly ssh: {
     readonly installServer: boolean
@@ -224,6 +276,14 @@ export interface AutoinstallProfile {
     readonly ubuntuProToken: string
     /** NVIDIA ドライバ / CUDA。初回起動時に cloud-init が導入する。 */
     readonly gpu: GpuConfig
+    /** インストール先に入れるカーネル（HWE の選択など） */
+    readonly kernel: KernelChoice
+    /** `source.search_drivers`。null なら既定に任せる。 */
+    readonly searchDrivers: boolean | null
+    /** `codecs.install`。ubuntu-restricted-addons を入れる。 */
+    readonly codecs: boolean
+    /** `oem.install`。Server では `auto` = 入れない。 */
+    readonly oem: 'auto' | 'yes' | 'no'
   }
   readonly apt: {
     readonly mode: 'default' | 'country-mirror' | 'custom'
@@ -234,6 +294,12 @@ export interface AutoinstallProfile {
     /** APT プロキシ（空なら設定しない） */
     readonly proxy: string
     readonly disableComponents: readonly string[]
+    /** 追加リポジトリ / PPA */
+    readonly sources: readonly AptSource[]
+    /** true にすると sources.list を書き換えない（社内イメージ向け） */
+    readonly preserveSourcesList: boolean
+    /** 主ミラーがどれも使えなかったときの挙動 */
+    readonly fallback: AptFallback
   }
   readonly postInstall: {
     readonly presets: readonly PostInstallPresetId[]
@@ -250,15 +316,37 @@ export interface AutoinstallProfile {
     readonly services: readonly SystemdService[]
     /** インストール直後に apt full-upgrade を走らせる */
     readonly aptFullUpgrade: boolean
+    /** インストール失敗時に実行するコマンド（`error-commands`） */
+    readonly errorCommands: readonly string[]
+    /** 失敗時にログを集めて USB に書き戻す */
+    readonly collectLogsOnError: boolean
+    /** `debconf-selections`。無人インストールで debconf の質問に先回りして答える。 */
+    readonly debconfSelections: string
   }
+  /**
+   * ホストごとに違う値をインストール時に決めるための設定。
+   * `interactive-sections` とカーネル引数によるプレースホルダ置換の 2 系統。
+   */
+  /** AD ドメイン参加。有効にするとインストール中にパスワードを聞かれる。 */
+  readonly activeDirectory: ActiveDirectoryConfig
+  readonly runtimeValues: RuntimeValuesConfig
   readonly behavior: {
-    /** 対話させたいセクション（`["*"]` で全部対話）。空なら完全無人。 */
+    /**
+     * 対話させたいセクション（`["*"]` で全部対話）。空なら完全無人。
+     * `runtimeValues` で interactive にした項目のセクションが自動で足される。
+     */
     readonly interactiveSections: readonly string[]
     readonly shutdown: 'reboot' | 'poweroff'
     /** インストーラ本体を snap から更新する（ネットワーク必須） */
     readonly refreshInstaller: boolean
     /** 進捗をコンソールに出す（`reporting.builtin` を hidden にしない） */
     readonly reportToConsole: boolean
+    /** `interactive-sections: ["*"]`。すべての画面を出す（設定は既定値として入る）。 */
+    readonly interactiveAll: boolean
+    /** 進捗の送信先 */
+    readonly reporting: ReportingTarget
+    /** `refresh-installer.channel`。空なら既定チャンネル。 */
+    readonly refreshInstallerChannel: string
   }
   readonly advanced: {
     /** 生成結果に深いマージで上書きする YAML。空文字なら無視。 */

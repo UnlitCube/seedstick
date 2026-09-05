@@ -49,8 +49,10 @@ export function IsoStep(): React.JSX.Element {
     e.preventDefault()
     setDragOver(false)
     const file = e.dataTransfer.files[0]
-    // Electron では File にネイティブパスが乗る。無ければ何もしない。
-    const path = file ? (file as File & { path?: string }).path : undefined
+    if (!file) return
+    // `File.path` は Electron 32 で削除された（44 では常に undefined）。
+    // preload の webUtils.getPathForFile 経由でしか実体パスは取れない。
+    const path = window.autoinstall.pathForDroppedFile(file)
     if (path) void openIsoPath(path)
   }
 

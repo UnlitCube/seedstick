@@ -3,16 +3,31 @@ import type {
   AutoinstallProfile,
   InterfaceSelector,
   NetworkConfig,
+  SeriesFeatures,
   StorageConfig,
 } from './model.js'
 import { SERIES_FEATURES } from './model.js'
-import { getPreset, shellQuote } from './presets.js'
+import { findPreset, shellQuote } from './presets.js'
+import {
+  ERROR_LOG_COMMANDS,
+  buildReporting,
+  errorLogToSeedCommands,
+} from './advanced.js'
 import {
   SEED_MOUNT_PATH,
   buildProvisioningCommands,
   seedMountCommands,
   seedUmountCommands,
 } from './generate-provisioning.js'
+import {
+  baseKernelArgs,
+  buildHostMenuEntries,
+  buildSubstitutionScript,
+  interactiveSectionsFor,
+  usesKernelArgs,
+  type GrubMenuEntry,
+  type RuntimeValuesConfig,
+} from './runtime-values.js'
 
 // プロファイル → autoinstall YAML の決定的な変換。
 // GUI で作った設定と、実際にインストーラへ渡る YAML が 1 対 1 で対応することが商用ツールの信頼性の要。
@@ -129,6 +144,30 @@ const C = {
     ja: 'インストール進捗の出力先。',
     en: 'Where install progress is reported.',
   },
+  kernel: {
+    ja: 'インストール先に入れるカーネル。hwe は新しいハードウェア向け。',
+    en: 'Which kernel to install. hwe supports newer hardware.',
+  },
+  debconf: {
+    ja: 'debconf の質問に先回りして答える設定。',
+    en: 'Pre-seeded answers for debconf questions.',
+  },
+  activeDirectory: {
+    ja: 'Active Directory ドメインへの参加。パスワードはインストール中に聞かれます。',
+    en: 'Join an Active Directory domain. The password is asked during install.',
+  },
+  codecs: {
+    ja: 'multiverse の制限付きパッケージ (ubuntu-restricted-addons) を入れるか。',
+    en: 'Whether to install restricted packages (ubuntu-restricted-addons) from multiverse.',
+  },
+  oem: {
+    ja: 'OEM メタパッケージを入れるか。カーネルが変わることがあります。',
+    en: 'Whether to install OEM meta-packages. This can change the installed kernel.',
+  },
+  earlyCommands: {
+    ja: 'インストーラ起動直後に実行するコマンド。ここで設定自体を書き換えられます。',
+    en: 'Commands run as soon as the installer starts. They may rewrite the config itself.',
+  },
 } satisfies Record<string, Comment>
 
 function commentText(c: Comment, locale: CommentLocale | 'none'): string | undefined {
@@ -164,20 +203,29 @@ function interfaceKeyAndMatch(sel: InterfaceSelector): {
   }
 }
 
-function buildNetwork(net: NetworkConfig): unknown | undefined {
+function buildNetwork(net: NetworkConfig, runtime: RuntimeValuesConfig): unknown | undefined {
+  // カーネル引数で IP を渡す場合も、YAML には固定 IP をそのまま書く。
+  // early-commands が YAML を読み書きして値を差し替えるので、ここに入るのは
+  // 「引数が渡されなかったときに使う既定値」。プレースホルダは使わない
+  // （PyYAML が引用符を付け直すため、テキスト置換では正しく差し替えられない）。
+  const byKernelArg = runtime.network === 'kernel-arg'
+
   // インストーラの既定に任せる場合はキー自体を出力しない。
   // 既定は「eth*/en* に一致する全 NIC で DHCPv4、アドレスを取れなかった NIC は無効化」。
-  if (net.mode === 'installer-default') return undefined
+  if (net.mode === 'installer-default' && !byKernelArg) return undefined
   if (net.mode === 'raw') {
     const doc = parseDocument(net.yaml)
     return doc.toJS() ?? {}
   }
-  const { key, match } = interfaceKeyAndMatch(net.target)
+  const target = net.mode === 'installer-default' ? { kind: 'any' as const } : net.target
+  const { key, match } = interfaceKeyAndMatch(target)
   const iface: Record<string, unknown> = {}
   if (match) iface['match'] = match
+
+
   if (net.mode === 'dhcp') {
     iface['dhcp4'] = true
-  } else {
+  } else if (net.mode === 'static') {
     iface['dhcp4'] = false
     iface['addresses'] = [net.address]
     if (net.gateway) {
@@ -190,11 +238,15 @@ function buildNetwork(net: NetworkConfig): unknown | undefined {
     if (Object.keys(ns).length > 0) iface['nameservers'] = ns
   }
   // optional: true は「このNICが未接続でも起動を待たない」。未接続NICでの2分待ちを防ぐ。
-  if (net.optional) iface['optional'] = true
+  if (net.mode !== 'installer-default' && net.optional) iface['optional'] = true
   return { version: 2, ethernets: { [key]: iface } }
 }
 
-function buildStorage(storage: StorageConfig): unknown {
+function buildStorage(
+  storage: StorageConfig,
+  runtime: RuntimeValuesConfig,
+  features: SeriesFeatures,
+): unknown {
   if (storage.mode === 'raw') {
     const doc = parseDocument(storage.yaml)
     return doc.toJS() ?? {}
@@ -230,9 +282,33 @@ function buildStorage(storage: StorageConfig): unknown {
     if (storage.useWholeDisk) layout['sizing-policy'] = 'all'
     if (storage.encryptionPassphrase) layout['password'] = storage.encryptionPassphrase
   }
+  applyResetPartition(layout, storage, features)
   const out: Record<string, unknown> = { layout }
-  if (storage.disableSwap) out['swap'] = { size: 0 }
+  applySwap(out, storage)
   return out
+}
+
+type StructuredStorage = Extract<StorageConfig, { mode: 'lvm' | 'direct' | 'zfs' }>
+
+/** `swap` は storage の直下（layout の中ではない）。 */
+function applySwap(out: Record<string, unknown>, storage: StructuredStorage): void {
+  if (storage.swap.mode === 'none') out['swap'] = { size: 0 }
+  else if (storage.swap.mode === 'size' && storage.swap.size.trim()) {
+    out['swap'] = { size: storage.swap.size.trim() }
+  }
+}
+
+/** `reset-partition` は layout の中。true か、`12G` のようなサイズを取る。 */
+function applyResetPartition(
+  layout: Record<string, unknown>,
+  storage: StructuredStorage,
+  features: SeriesFeatures,
+): void {
+  // 22.04 の subiquity は reset-partition を知らない。storage はスキーマ上は
+  // 素通りするので検証では気づけず、黙って無視される。出さないほうが誠実。
+  if (!features.resetPartition || !storage.resetPartition.enabled) return
+  const size = storage.resetPartition.size.trim()
+  layout['reset-partition'] = size === '' ? true : size
 }
 
 function buildApt(profile: AutoinstallProfile): Record<string, unknown> | undefined {
@@ -245,7 +321,29 @@ function buildApt(profile: AutoinstallProfile): Record<string, unknown> | undefi
   if (profile.apt.disableComponents.length > 0) {
     apt['disable_components'] = [...profile.apt.disableComponents]
   }
+  if (profile.apt.preserveSourcesList) apt['preserve_sources_list'] = true
+  // 既定は abort。明示的に変えたときだけ出す。
+  if (profile.apt.fallback !== 'abort') apt['fallback'] = profile.apt.fallback
+  const sources = buildAptSources(profile)
+  if (sources) apt['sources'] = sources
   return Object.keys(apt).length > 0 ? apt : undefined
+}
+
+/**
+ * 追加リポジトリ。curtin の `apt.sources` 形式。
+ * キーが `.list` で終わるとそのファイル名になり、そうでなければ curtin が名前を決める。
+ */
+function buildAptSources(profile: AutoinstallProfile): Record<string, unknown> | undefined {
+  const entries = profile.apt.sources.filter((s) => s.source.trim())
+  if (entries.length === 0) return undefined
+  const out: Record<string, unknown> = {}
+  for (const [i, src] of entries.entries()) {
+    const key = src.name.trim() || `autoinstall-${i + 1}.list`
+    const value: Record<string, unknown> = { source: src.source.trim() }
+    if (src.key.trim()) value['key'] = `${src.key.trim()}\n`
+    out[key] = value
+  }
+  return out
 }
 
 /** CIDATA 上のファイルを新システムへコピーする late-command を作る。 */
@@ -261,7 +359,7 @@ function fileCopyCommands(profile: AutoinstallProfile): string[] {
     cmds.push(`chmod ${f.mode} ${shellQuote(dest)}`)
     if (f.owner && f.owner !== 'root') {
       // chown は新システム側の /etc/passwd を見る必要があるので in-target で実行する
-      cmds.push(`curtin in-target -- chown ${f.owner} ${shellQuote(f.targetPath)}`)
+      cmds.push(`curtin in-target -- chown ${shellQuote(f.owner)} ${shellQuote(f.targetPath)}`)
     }
   }
   return cmds
@@ -270,6 +368,65 @@ function fileCopyCommands(profile: AutoinstallProfile): string[] {
 function dirnamePosix(p: string): string {
   const i = p.lastIndexOf('/')
   return i <= 0 ? '/' : p.slice(0, i)
+}
+
+/**
+ * error-commands を組み立てる。インストールが失敗したときにだけ実行される。
+ * 既定でログを集め、CIDATA に書き戻す（再起動すると live 環境のログは消えるため）。
+ */
+export function collectErrorCommands(profile: AutoinstallProfile): string[] {
+  const cmds: string[] = []
+  if (profile.postInstall.collectLogsOnError) {
+    cmds.push(...ERROR_LOG_COMMANDS, ...errorLogToSeedCommands(SEED_MOUNT_PATH))
+  }
+  cmds.push(...profile.postInstall.errorCommands)
+  return cmds
+}
+
+/**
+ * early-commands を組み立てる。
+ * カーネル引数によるプレースホルダ置換が必要なときだけ 1 コマンドを出す。
+ */
+/**
+ * GRUB の「その場で入力する」を選んだときに出す画面。
+ *
+ * kernel-arg にした項目（＝起動時に値を渡すつもりだった項目）の画面を出す。
+ * ここを「interactive にした項目」から作ると、手入力を選んでも
+ * ホスト名の画面が出ないまま既定値でインストールが進む。
+ */
+function onDemandSections(rv: RuntimeValuesConfig): string[] {
+  const out = new Set<string>(interactiveSectionsFor(rv))
+  if (rv.hostname === 'kernel-arg') out.add('identity')
+  if (rv.network === 'kernel-arg') out.add('network')
+  if (rv.disk === 'kernel-arg') out.add('storage')
+  return [...out]
+}
+
+export function collectEarlyCommands(profile: AutoinstallProfile): string[] {
+  const rv = profile.runtimeValues
+  if (!usesKernelArgs(rv)) return []
+  const net = profile.network
+  // raw の netplan と kernel-arg は併用できない（検証でエラーにしている）ので、
+  // ここに来る net は必ず target を持つ。
+  const target: InterfaceSelector =
+    net.mode === 'installer-default' || net.mode === 'raw' ? { kind: 'any' } : net.target
+  return [
+    buildSubstitutionScript({
+      hostname: profile.basics.hostname || 'ubuntu-server',
+      interfaceKey: interfaceKeyAndMatch(target).key,
+      // 「その場で入力する」を選んだときに出す画面。
+      //
+      // このメニュー項目は「起動メニューから選ぶ」にした値を手で入れるためのものなので、
+      // kernel-arg の項目に対応する画面を出さなければ意味がない。
+      // すでに interactive にしている項目の画面も残す（消してはいけない）。
+      interactiveOnDemand: onDemandSections(rv),
+      fields: {
+        hostname: rv.hostname === 'kernel-arg',
+        network: rv.network === 'kernel-arg',
+        disk: rv.disk === 'kernel-arg',
+      },
+    }),
+  ]
 }
 
 /**
@@ -286,7 +443,11 @@ export function collectLateCommands(profile: AutoinstallProfile): string[] {
   const provisioning = buildProvisioningCommands(profile)
   const cmds: string[] = []
 
-  for (const id of profile.postInstall.presets) cmds.push(...getPreset(id).lateCommands(ctx))
+  // 知らない ID は読み飛ばす（検証側でエラーとして知らせる）
+  for (const id of profile.postInstall.presets) {
+    const preset = findPreset(id)
+    if (preset) cmds.push(...preset.lateCommands(ctx))
+  }
 
   if (provisioning.needsSeedMount) cmds.push(...seedMountCommands())
   cmds.push(...fileCopyCommands(profile))
@@ -308,7 +469,7 @@ export function collectFirstBootCommands(profile: AutoinstallProfile): string[] 
 export function collectPackages(profile: AutoinstallProfile): string[] {
   const set = new Set<string>(profile.software.packages)
   for (const id of profile.postInstall.presets) {
-    for (const pkg of getPreset(id).packages ?? []) set.add(pkg)
+    for (const pkg of findPreset(id)?.packages ?? []) set.add(pkg)
   }
   for (const pkg of buildProvisioningCommands(profile).packages) set.add(pkg)
   return [...set].sort()
@@ -326,30 +487,70 @@ export function buildAutoinstallObject(
   const features = SERIES_FEATURES[profile.series]
   const out: Record<string, unknown> = { version: 1 }
 
-  if (features.interactiveSections && profile.behavior.interactiveSections.length > 0) {
-    out['interactive-sections'] = [...profile.behavior.interactiveSections]
+  // 「インストーラで手入力する」項目のセクションを足す。
+  // kernel-arg を使う場合は、値が渡されなかったときに対話へ切り替えられるよう
+  // プレースホルダを 1 つ入れておく（early-commands が空にするか、セクション名に置換する）。
+  const interactive = [
+    ...new Set([...profile.behavior.interactiveSections, ...interactiveSectionsFor(profile.runtimeValues)]),
+  ]
+  if (features.interactiveSections) {
+    if (profile.behavior.interactiveAll && features.interactiveAll) {
+      // "*" は「通常どおり全部聞く」。設定値は各画面の既定値として使われる。
+      out['interactive-sections'] = ['*']
+    } else if (interactive.length > 0) {
+      out['interactive-sections'] = interactive
+    }
   }
+  // カーネル引数で値を渡す場合、早期コマンドで /autoinstall.yaml を書き換える。
+  // autoinstall リファレンス:「early-commands のあとに設定が再読み込みされる」。
+  const early = collectEarlyCommands(profile)
+  if (early.length > 0) out['early-commands'] = early
+
   out['locale'] = profile.basics.locale
   const keyboard: Record<string, unknown> = { layout: profile.basics.keyboard.layout }
   if (profile.basics.keyboard.variant) keyboard['variant'] = profile.basics.keyboard.variant
   if (profile.basics.keyboard.toggle) keyboard['toggle'] = profile.basics.keyboard.toggle
   out['keyboard'] = keyboard
   out['timezone'] = profile.basics.timezone
-  out['refresh-installer'] = { update: profile.behavior.refreshInstaller }
-  if (features.source) out['source'] = { id: profile.software.sourceId }
-  const network = buildNetwork(profile.network)
+  const refresh: Record<string, unknown> = { update: profile.behavior.refreshInstaller }
+  if (profile.behavior.refreshInstallerChannel.trim()) {
+    refresh['channel'] = profile.behavior.refreshInstallerChannel.trim()
+  }
+  out['refresh-installer'] = refresh
+  if (features.source) {
+    const source: Record<string, unknown> = { id: profile.software.sourceId }
+    if (profile.software.searchDrivers !== null) {
+      source['search_drivers'] = profile.software.searchDrivers
+    }
+    out['source'] = source
+  }
+  if (profile.software.kernel.mode === 'flavor') {
+    out['kernel'] = { flavor: profile.software.kernel.flavor }
+  } else if (profile.software.kernel.mode === 'package') {
+    out['kernel'] = { package: profile.software.kernel.package }
+  }
+  const network = buildNetwork(profile.network, profile.runtimeValues)
   if (network !== undefined) out['network'] = network
   if (profile.apt.proxy) out['proxy'] = profile.apt.proxy
   const apt = buildApt(profile)
   if (apt) out['apt'] = apt
-  out['storage'] = buildStorage(profile.storage)
+  out['storage'] = buildStorage(profile.storage, profile.runtimeValues, features)
   out['identity'] = {
+    // kernel-arg でもここには既定値を書く。early-commands が YAML を読み書きして
+    // 差し替えるので、引数が渡されなければこの値のままインストールが完走する。
     hostname: profile.basics.hostname,
     realname: profile.user.realname,
     username: profile.user.username,
     // autoinstall リファレンスが「特殊文字を正しく扱うためハッシュはクォートせよ」と
     // 明記しているので、YAML 的に不要でも必ず二重引用符で囲む。
     password: quoted(profile.user.passwordHash),
+    // identity は additionalProperties: false。groups は 26.04 で追加されたので、
+    // 古い版に出すとスキーマ検証で落ちてインストールが中止される。
+    ...(features.identityGroups && profile.user.groups.mode === 'append'
+      ? { groups: { append: [...profile.user.groups.groups] } }
+      : features.identityGroups && profile.user.groups.mode === 'override'
+        ? { groups: { override: [...profile.user.groups.groups] } }
+        : {}),
   }
   out['ssh'] = {
     'install-server': profile.ssh.installServer,
@@ -380,8 +581,33 @@ export function buildAutoinstallObject(
   if (late.length > 0) out['late-commands'] = late
   const userData = buildUserData(profile)
   if (userData) out['user-data'] = userData
+  if (features.codecsOemAd) {
+    if (profile.software.codecs) out['codecs'] = { install: true }
+    if (profile.software.oem !== 'auto') {
+      out['oem'] = { install: profile.software.oem === 'yes' }
+    }
+    if (profile.activeDirectory.enabled && profile.activeDirectory.domainName) {
+      // 参加に使う管理者名が空だと画面で聞かれるだけで参加できないので、
+      // 空のキーは出さない（検証側でもエラーにしている）。
+      const ad: Record<string, unknown> = { 'domain-name': profile.activeDirectory.domainName }
+      if (profile.activeDirectory.adminName.trim()) {
+        ad['admin-name'] = profile.activeDirectory.adminName.trim()
+      }
+      out['active-directory'] = ad
+    }
+  }
+  if (profile.postInstall.debconfSelections.trim()) {
+    out['debconf-selections'] = `${profile.postInstall.debconfSelections.trimEnd()}\n`
+  }
+  const errorCommands = collectErrorCommands(profile)
+  if (errorCommands.length > 0) out['error-commands'] = errorCommands
+
+  // 対話セクションがあると subiquity は reporting を無視する（リファレンスに明記）。
+  // 出しても害はないので、設定どおりに出す。
   if (profile.behavior.reportToConsole) {
-    out['reporting'] = { builtin: { type: 'print' } }
+    out['reporting'] = buildReporting(profile.behavior.reporting)
+  } else {
+    out['reporting'] = buildReporting({ kind: 'none' })
   }
   out['shutdown'] = profile.behavior.shutdown
 
@@ -460,6 +686,12 @@ const SECTION_COMMENTS: Record<string, Comment> = {
   'user-data': C.userData,
   reporting: C.reporting,
   shutdown: C.shutdown,
+  kernel: C.kernel,
+  'debconf-selections': C.debconf,
+  'active-directory': C.activeDirectory,
+  codecs: C.codecs,
+  oem: C.oem,
+  'early-commands': C.earlyCommands,
 }
 
 function attachComments(doc: Document, locale: CommentLocale | 'none'): void {
@@ -545,4 +777,47 @@ export function generateAutoinstallYaml(
  */
 export function generateMetaData(instanceId: string): string {
   return `instance-id: ${instanceId}\n`
+}
+
+// ---------------------------------------------------------------------------
+// grub.cfg
+// ---------------------------------------------------------------------------
+
+export interface GrubPlan {
+  /** すべての casper エントリに付ける引数 */
+  readonly args: readonly string[]
+  /** ホストごとに追加する menuentry */
+  readonly entries: readonly GrubMenuEntry[]
+}
+
+/**
+ * プロファイルから grub.cfg の改変内容を決める。
+ * 実際のパッチ適用は @autoinstall/media の patchGrubCfg が行う。
+ */
+export function buildGrubPlan(profile: AutoinstallProfile): GrubPlan {
+  const args = baseKernelArgs(profile.advanced.extraKernelArgs)
+  return { args, entries: buildHostMenuEntries(profile.runtimeValues, []) }
+}
+
+/**
+ * 生成される autoinstall が「電源を入れるだけで完了する」ものか。
+ *
+ * プロファイルの設定ではなく **出力される YAML** を見る。
+ * `interactive-sections` はシリーズによって出す/出さないが分かれ、
+ * 上書き YAML から入ることもあるので、設定だけを見ると表示と実際が食い違う。
+ */
+export function isUnattendedProfile(
+  profile: AutoinstallProfile,
+  options: GenerateOptions = DEFAULT_OPTIONS,
+): boolean {
+  const built = buildAutoinstallObject(profile, options)
+  const sections = built['interactive-sections']
+  // subiquity は `bool(...)` で見るので、配列でない真値も対話扱いになる。
+  if (sections !== undefined && sections !== null) {
+    if (!Array.isArray(sections)) return false
+    if (sections.length > 0) return false
+  }
+  // AD 参加はインストール中にパスワードを聞かれる（リファレンスに明記）
+  if (built['active-directory'] !== undefined) return false
+  return true
 }

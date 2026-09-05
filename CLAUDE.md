@@ -128,45 +128,240 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
 17. **NVIDIA は 25.10 向けの CUDA リポジトリを公開していない**（実測で 404）。
    `CUDA_REPO_DISTRO['25.10']` は null で、UI と検証の両方でブロックする。
 
+### 実行時に値を決める（起動メニュー）
+
+18. **`/autoinstall.yaml` を sed でテキスト置換してはいけない。**
+   subiquity は設定を PyYAML で書き直すので、こちらが出した引用形式は残らない。
+   `@@AI_X@@` は `@` が YAML の予約文字なので必ずクォートされ、中身だけ置換すると
+   `interactive-sections: [""]`（空文字 1 要素）が残る。subiquity は
+   `bool([""])` を真と見るため、無人インストールのはずが対話扱いになり、
+   `/run/casper-no-prompt` が作られず終端で止まる（実機相当の再現で確認）。
+   カンマ区切りを 1 要素に押し込む形になるため DNS の複数指定も表現できない。
+   **early-commands では python3 + PyYAML で YAML を読み書きする**。
+   どちらも live 環境に必ずある（cloud-init が Python + PyYAML に依存している）。
+19. **置換に使う値をシェルや sed の文字列に連結しない。**
+   プロファイル側の既定値（`storage.match.serial` など）は自由入力なので、
+   `"` を入れるだけでクォートを抜けてインストーラ（root）で任意コマンドが動いた。
+   値は **base64 の JSON** で渡し、シェルにも Python ソースにも現れないようにする。
+20. **`interactive-sections` はセクション名の「リスト」でなければならない。**
+   `"identity, network, storage"` のような 1 本の文字列にすると、どのコントローラの
+   `autoinstall_key` にも一致せず、画面が 1 つも出ないまま対話扱いになる。
+21. **生成する YAML は early-commands が動かなくても有効であること。**
+   プレースホルダを埋める設計だと「置換に失敗した YAML」が残る。
+   既定値をそのまま書き、early-commands は上書きするだけにする。
+
+### プロファイルの読み書き
+
+22. **「既定値にあるキーだけを写す」マージは、判別可能ユニオンを壊す。**
+   `{kind:'largest'}` を土台に `{kind:'serial', serial:'X'}` を重ねると `serial` が消え、
+   生成される YAML は `match: {}`（＝**任意のディスク**）になる。複数ディスク機で
+   別のディスクを消しかねない、このツールで最も破壊的な失敗。
+   判別子 (`kind` / `mode`) が違うオブジェクトは丸ごと採る（`isOtherVariant`）。
+   セクション直下だけでなく `storage.match` や `network.target` のような
+   **ネストしたユニオン**にも同じ罠がある。
+23. **検証・生成は「手で編集された JSON」でも例外を投げないこと。**
+   `validateProfile` や `buildAutoinstallObject` が投げると、GUI は
+   「理由の分からない空の確認画面」と「反応しない書き込みボタン」になる。
+   知らないプリセット ID は読み飛ばして検証で知らせる (`findPreset`)、
+   欠けたキーは型を確かめてから触る、を徹底する。
+24. **プロファイル JSON から来たオブジェクトはそのまま採らない。**
+   `__proto__` / `constructor` / `prototype` を落とす (`sanitize`)。
+
+### 実行時に値を決める（続き）
+
+25. **`ai.interactive=1` は既存の `interactive-sections` を上書きしてはいけない。**
+   利用者が明示的に要求した確認画面（特に storage＝ディスク消去）を、
+   起動メニューの選択だけで奪うことになる。和集合にする。
+   `["*"]` はそれより広い指定なので触らない。
+26. **「その場で入力する」で出す画面は kernel-arg にした項目のもの。**
+   interactive にした項目から作ると、手入力を選んでもホスト名を聞かれない。
+27. **引数を受け取ったのに反映できなかったら止める。**
+   黙って続けると全台が同じ IP / 同じディスクを掴み、気づくのは再起動後になる。
+   反映できた引数を数え、取りこぼしがあれば `exit 1`。
+
+28. **cloud-init の `runcmd` は各エントリを別々に実行する。`set -e` も `&&` も付かない。**
+   検証を独立したエントリにすると、失敗しても後続が走り、しかも最後のコマンドの
+   終了コードが 0 なら cloud-init は成功として記録する。
+   「失敗したら以降を止める」処理は **1 エントリにまとめて `sh -e -c` で走らせる**。
+29. **`mergeSection` のような汎用マージで判別可能ユニオンを扱わない。**
+   `mode` / `kind` を持つだけの普通のオブジェクト（`SwapConfig` など）を
+   ユニオンと誤判定して丸ごと採ると、今度はそちらのフィールドが落ちる。
+   本物のユニオンは型ごとの読み取り関数を書く（`readDiskMatch` / `readInterfaceSelector`）。
+30. **`typeof null === 'object'`。** 既定値がオブジェクトのキーに対して
+   `typeof current === typeof value` で通すと、null と配列がネストした設定を置き換える。
+   必ず `isObject()` で見る。ここを外すと「型は通るのに中身が null」になり、
+   検証も生成も例外で抜けて GUI が空の確認画面になる。
+31. **レコードの配列は要素ごとにひな型へ重ねる。** 素通しにすると
+   `files: [null]` が型だけ合った状態で通り、下流で落ちる（React のレンダリングごと）。
+
 ### プラットフォーム
 
-18. **Windows の `\\.\PhysicalDriveN` はセクタ境界・セクタ長でしか読み書きできない。**
+32. **Windows の `\\.\PhysicalDriveN` はセクタ境界・セクタ長でしか読み書きできない。**
    違反すると EINVAL になり原因が分かりにくい。部分セクタは read-modify-write する。
-19. **Windows 8 以降、マウント済みボリュームがあるディスクには書けない。** `diskpart` の
+   そのため実デバイスには必ず `RawBlockDevice` を使う。`FileBlockDevice`（素の `fs.open`）は
+   物理ドライブを開いた時点で `EINVAL` になる。`.img` では `FileBlockDevice` が正しいので、
+   テストや検証スクリプトを実デバイス向けに書き換えるときに取り違えやすい。
+33. **パーティションテーブルを書いた瞬間に OS が CIDATA をマウントして書き込んでくる。**
+   Windows はテーブルが有効になるとディスクを再スキャンし、FAT ボリュームを自動マウントして
+   `System Volume Information` を作る。読み戻し検証をその後に回すと、正常に書けた USB でも
+   ハッシュが一致せず「書き込みに失敗しました」になる（実機で再現）。
+   **本体の照合はテーブルを書く前に済ませる**。それまではディスクに有効なテーブルが無い
+   （最初の op で LBA0 をゼロにしている）ので、OS はマウントできない。
+34. **Windows 8 以降、マウント済みボリュームがあるディスクには書けない。** `diskpart` の
    `clean` でボリュームを外してから書く。
-20. **昇格した子プロセスの標準出力は親から読めない。** `Start-Process -Verb RunAs` がその代表。
+35. **昇格した子プロセスの標準出力は親から読めない。** `Start-Process -Verb RunAs` がその代表。
    進捗は 127.0.0.1 の TCP に NDJSON で流す（それがこの設計の理由）。
-21. **`ELECTRON_RUN_AS_NODE=1` を付けないと GUI がもう一つ開く。** ワーカーは Electron バイナリを
+36. **`ELECTRON_RUN_AS_NODE=1` を付けないと GUI がもう一つ開く。** ワーカーは Electron バイナリを
    素の Node として実行する。
-22. **Windows では `child.kill()` が孫プロセスを取り残す。** 昇格した実体は孫になるので
+37. **Windows では `child.kill()` が孫プロセスを取り残す。** 昇格した実体は孫になるので
    `taskkill /pid <pid> /T /F` でツリーごと落とす。
+
+38. **Windows では通常権限のプロセスから昇格プロセスを落とせない。**
+   高整合性プロセスには `PROCESS_TERMINATE` を開けないので `taskkill` は必ず失敗し、
+   UAC 昇格プロセスは AppInfo サービスが起こすため `/T` の子孫ツリーにも入らない。
+   `taskkill` の終了コードを必ず見て、落とせなければユーザーに伝える
+   （黙って「中止しました」にすると、USB を書き続けているのに抜かれる）。
+39. **書き込み中の終了要求はガードする。** ウィンドウを閉じただけで昇格ワーカーが
+   孤児になり、見えないまま USB を書き続ける。確認を出し、cancel を送って
+   終わるのを待ってから閉じる。
 
 ### ビルド / テスト
 
-23. **electron-vite の renderer `build.outDir` は相対パスの解決先が直感と食い違う。**
+40. **electron-vite の renderer `build.outDir` は相対パスの解決先が直感と食い違う。**
    `resolve(import.meta.dirname, 'out/renderer')` と絶対パスで書かないとリポジトリルートに逃げる。
-24. **npm workspaces + electron-builder は「Cannot compute electron version」で落ちる。**
+41. **npm workspaces + electron-builder は「Cannot compute electron version」で落ちる。**
    `require('electron/package.json').version` を `-c.electronVersion=` で明示的に渡す
    （`apps/desktop/scripts/dist.mjs`）。
-25. **`expect(promise).rejects` に巨大なオブジェクトを渡すと vitest が OOM する。**
+42. **`expect(promise).rejects` に巨大なオブジェクトを渡すと vitest が OOM する。**
    解決してしまった場合に pretty-format が 64 MiB の Buffer を含むオブジェクトを整形しようとして
    ヒープを使い切る。自前で try/catch して小さい値だけを assert する。
-26. **統合テストは 3 GB 級のイメージを扱うので `maxWorkers: 2` / `fileParallelism: false`。**
+43. **統合テストは 3 GB 級のイメージを扱うので `maxWorkers: 2` / `fileParallelism: false`。**
    並列度を上げるとワーカーがメモリ不足で落ちる。
-27. **ソースに U+2028 / U+2029 を直接書くと JS の行終端として扱われ、構文エラーになる。**
+44. **ソースに U+2028 / U+2029 を直接書くと JS の行終端として扱われ、構文エラーになる。**
    正規表現に入れたいときは Unicode プロパティ `\p{Zl}` / `\p{Zp}` を使う（ソースが ASCII で済む）。
 
-28. **Git Bash から Windows ネイティブ実行ファイルに渡す引数は ANSI コードページに変換される。**
+45. **Git Bash から Windows ネイティブ実行ファイルに渡す引数は ANSI コードページに変換される。**
    `openssl passwd -6 "パスワード漢字"` の結果が UTF-8 前提の実装と食い違った。
    テストベクタは UTF-8 バイトを明示できる経路で作る。
 
+### 生成するシェル（4 巡目で実際に成立していた注入）
+
+46. **値をシェルに出すところは、検証を通っていても必ずクォートする。**
+    「検証で弾いているから生成側は素のままでよい」は成立しない。
+    検証が緩い（`looksLikeCryptHash` は接頭辞しか見ない、`targetPath` は
+    `startsWith('/')` しか見ない）と、そのまま root のコマンドになる。
+    `inTargetSh()` を通せば `shellQuote` が二重にエスケープするので、
+    **内側の値も個別に `shellQuote` する**のが正しい形。
+    実際に抜けていたのは shell (`useradd -s`)・パスワードハッシュ・
+    展開先パス (`chown`)・CUDA のパッケージ名の 4 か所。
+
+47. **ヒアドキュメントでユーザーの入力を書き出さない。**
+    `<<'AUTOINSTALL_EOF' … AUTOINSTALL_EOF` は、内容の中に終端子と同じ行が
+    あるとそこで閉じる。SSH 公開鍵のコメント欄も systemd ユニットの
+    追加行も自由入力なので、`AUTOINSTALL_EOF` という行を書くだけで
+    残りが root のコマンドになる（`SSH_KEY_RE` の `(\s+\S+)?` は
+    `\s` に改行を含むので検証も通る）。
+    `printf '%s' <shellQuote した内容> > <shellQuote したパス>` を使う。
+    `echo` はバックスラッシュを解釈する実装（dash の組み込み）があるので使わない。
+
+### プロファイルの読み書き（続き）
+
+48. **`filter()` した配列の添字で、元の配列を引かない。**
+    `mergeList` は `raw.filter(isObject)` で要素を落として詰め直すので、
+    その戻り値の添字 `i` で `src[...][i]` を引くと、落とした数だけずれる。
+    アプリ展開で「B の設定に A の URL と SHA-256 が付く」状態になり、
+    ハッシュも A のものなので改ざん検出も通ってしまう。
+    要素とその中のユニオンは**同じオブジェクトから**取る。
+
+49. **判別子が読めないからといって、中の指定まで既定に戻さない。**
+    `storage.mode` が未知の値だと `match` ごと既定に落としていたため、
+    `{kind:'serial'}` が `{kind:'largest'}` になっていた。
+    落とし穴 22 と同じ「別のディスクを消す」失敗が、別の入口から再現していた。
+    読めた部分は残し、既定に戻したことは **`notes` で必ず伝える**。
+
+50. **「黙って既定に戻す」をやめる。** 3 巡分の事故はどれもこれが原因だった。
+    値が消えること自体は防げなくても、消えたと伝われば利用者は気づける。
+    `mergeList` / `rawList` は落とした要素数を `notes` に出す。
+
+### 実行時に値を決める（続き）
+
+51. **追加する menuentry を先頭に置かない。** 実 ISO の grub.cfg には
+    4 リリースとも `set default=` が無く、GRUB の既定は先頭エントリになる。
+    ホストごとの項目を先頭に挿すと、タイムアウトまで放置しただけで
+    全台が「ホスト #1」のホスト名と IP を掴む（落とし穴 27 の裏返し）。
+    元の項目の直後に置き、既定は元のままにする。
+
+### プラットフォーム（続き）
+
+52. **昇格ワーカーを殺すには、ワーカー自身の pid が要る。**
+    `child.pid` は `Start-Process -Verb RunAs` を呼んだ **PowerShell ラッパー**で、
+    実際に書いているのは AppInfo が起こした別プロセス。
+    ラッパーは自分の子なので `taskkill` が必ず成功し、その成否を採ると
+    「止めました」と表示しながらワーカーが書き続ける。
+    `hello` が運ぶ pid を覚えて、そちらの結果で判断する。
+    終了コードは 0（落とした）/ 128（既に終了）/ それ以外（失敗）の 3 通り。
+    POSIX でも `ESRCH` と `EPERM` を区別する（`catch` で一律 true は嘘になる）。
+
+53. **書き込み中の終了確認は `before-quit` ではなくウィンドウの `close` で出す。**
+    Windows では close → ウィンドウ破棄 → `window-all-closed` → `app.quit()` →
+    `before-quit` の順に進むので、そこで「続ける」を選んでも戻る画面がもう無い。
+    ウィンドウ 0 個のまま生き続け、進捗も見えず中止もできなくなる。
+
+54. **`File.path` は Electron 32 で削除された。** ドラッグ＆ドロップで
+    実体パスを得るには preload の `webUtils.getPathForFile` を通すしかない。
+    型は `File & { path?: string }` で通ってしまうので、
+    「型が合う＝動く」と判断しない。
+
+55. **「実在するファイルか」は安全性の検査ではない。**
+    プロファイル JSON に書かれたパスを実在確認だけで許可リストに入れていたため、
+    他人からもらった JSON に `.ssh/id_rsa` と書くだけで、開いて USB を作った
+    利用者のファイルが CIDATA に載った。
+    許可するのは**利用者が自分でダイアログから選んだことのあるパスだけ**にする。
+
+### ビルド / テスト（続き）
+
+56. **テストが「今の実装の形」を固定していないか疑う。**
+    4 巡目では、未クォートの `chown` や手書きクォートのハッシュを
+    `toContain` で**正として要求している**テストが 9 件見つかった。
+    脆弱なコードを直すとテストが落ち、テストに合わせて直すと脆弱なまま戻る。
+
+57. **入れた回帰テストは、変異させて落ちることまで確かめる。**
+    修正を一時的に元へ戻し、そのテストが失敗することを確認する。
+    落ちないなら、そのテストは何も検証していない。
+
+## 検証済みのこと
+
+- **実 ISO 2 種 (22.04.5 / 24.04.3) × 設定 10 パターン**を `scripts/e2e-matrix.mts` で網羅。
+  生成 → プロファイル検証 → subiquity 公式スキーマ検証 → ISO パッチ → レイアウト計画 →
+  `.img` への書き込み → 読み戻し（MBR / GPT / ISO9660 / md5sum.txt / CIDATA の FAT）まで通る。
+- **実機のデバイス列挙**。システムディスク (NVMe 2TB) が `selectable: false` で弾かれ、
+  USB (KIOXIA 31GB) だけが候補になることを実機で確認。
+- **非対応 ISO の拒否**。Desktop 版 2 種は `not-server`、Proxmox と Windows Vista は
+  `no-casper` として原因つきで拒否される。
+- **GUI 一巡**。実際のクリック／キー入力（CDP の Input ドメイン）で ISO 選択から
+  確認画面まで通し、実行時に決める値・上級者向けキーが UI から作れることを確認。
+- **昇格を断ったときの挙動**。UAC を拒否すると
+  「管理者権限が許可されませんでした」と次の操作を出す（生の OS エラーを見せない）。
+- **昇格ワーカー経路の実機確認** (`npm run e2e:usb-worker`)。GUI が実際に使う
+  ジョブ JSON + NDJSON 経路を実機で通した (18/18)。hello / progress / done の疎通、
+  ワーカー側のデバイス再検証、書き上がった USB の読み戻しまで確認済み。
+- **実 USB メモリ (KIOXIA TransMemory 31GB) への書き込み**。管理者権限で
+  `npm run e2e:usb` を実行し、3.37 GB を書いて読み戻し、MBR / GPT / ISO9660 /
+  grub.cfg / CIDATA の中身まで照合した。ここで「OS がマウントして書いてくる」不具合を発見した。
+- **Windows は `CIDATA` にドライブレターを割り当てる**（実測で `F:`）。ISO9660 側は
+  GPT bit63 で隠しているので letter は付かない。CIDATA が見えるのは意図どおりで、
+  ユーザーが seed を後から確認・修正できる。ただしマウント時に Windows が
+  `System Volume Information` を作るので、読み戻し検証はその前に済ませる必要がある。
+
 ## 検証していないこと（実機確認が必要）
 
-- 実際の USB メモリへの書き込み（`.img` ファイルへの書き出しまでは実 ISO で検証済み）
+作業の引き継ぎ状態は **`docs/HANDOFF.md`** にまとめてある（未コミットの差分、
+残作業、監査ワークフローの再開方法）。
+
 - 実機／VM からの起動と、完全無人インストールの完走
+- 起動メニューから選んだホストの値が実機で反映されるか
+  （置換スクリプトは実際に `sh` で実行して検証済みだが、subiquity 上では未実行）
 - 追加ユーザー・アプリ展開・サービス登録・CUDA が実機で意図どおり動くか
-  （生成されるコマンドは単体テストとスモークテストで検証済みだが、実行はしていない）
-- Windows が `CIDATA` にドライブレターを割り当てるか（GPT bit63 で ISO9660 側は隠している）
 - macOS / Linux でのデバイス列挙と権限昇格（コードは書いたが実機未確認）
 
 ## 開発コマンド
@@ -179,11 +374,24 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
 | `npm run typecheck` | 4 つの tsconfig をすべて検査 |
 | `npm run test:unit` | vitest（実 ISO から抜いた疎なフィクスチャを使う） |
 | `npm run smoke` | **実 ISO ファイル**を読んで `.img` に書き出し、読み戻して検証 |
+| `npm run e2e` | **実 ISO × 設定 10 パターン**を網羅（デバイス列挙・ISO 拒否・スキーマ検証を含む） |
+| `npm run e2e:usb` | **実 USB に書く**。管理者権限が必要。書いたあと読み戻して検証する |
+| `npm run e2e:usb-worker` | 同じく実 USB に書くが、**昇格ワーカー + NDJSON 経路**を通す（GUI と同じ経路） |
+| `npm run e2e:verify-usb` | 書き終わった USB を読み戻すだけ（権限が無ければ CIDATA だけ見る） |
 | `npm test` | typecheck + unit + smoke |
 | `npm run dist:win` / `dist:mac` / `dist:linux` | electron-builder でパッケージ |
 
 `npm run smoke` は `~/images`・`~/Downloads`・`C:/iso`・`/var/lib/iso` から ISO を探す。
 明示するなら `npm run smoke -- <iso のパス>`。ISO が無ければスキップして正常終了する。
+
+`npm run e2e:usb` / `npm run e2e:usb-worker` は昇格が要るので `npm test` には入れていない。
+実行すると USB の中身は消える。前者は `executeWritePlan` を直接呼び、後者は GUI と同じく
+ジョブ JSON をワーカーに渡して進捗を 127.0.0.1 の TCP に NDJSON で受け取る。
+`.e2e/run-elevated.ps1 [write|worker]` を右クリック実行すると UAC 付きで起動できる。
+
+GUI を機械的に操作したいときは `--remote-debugging-port` を付けて起動し、`.e2e/` の
+ヘルパ（`drive.mjs`）を使う。React の state を直接いじらず、CDP の Input ドメインで
+本物のクリックとキー入力を送るので、本番と同じ経路を通る。
 
 ## ポート
 

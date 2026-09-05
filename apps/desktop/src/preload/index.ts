@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type {
   AppSettings,
   AutoinstallApi,
@@ -30,6 +30,17 @@ const api: AutoinstallApi = {
   platform: process.platform,
   appVersion: process.env['npm_package_version'] ?? '0.1.0',
   systemLocale: Intl.DateTimeFormat().resolvedOptions().locale,
+
+  // ドロップされた File から実体パスを取り出す。
+  // Electron 32 で `File.path` は削除されたので、webUtils を通す以外に方法が無い
+  // （renderer から直接 webUtils は触れない。contextIsolation が有効なため）。
+  pathForDroppedFile: (file: File) => {
+    try {
+      return webUtils.getPathForFile(file)
+    } catch {
+      return ''
+    }
+  },
 
   chooseIso: () => ipcRenderer.invoke('chooseIso') as Promise<IsoOpenResult | null>,
   openIso: (path: string) => ipcRenderer.invoke('openIso', path) as Promise<IsoOpenResult>,

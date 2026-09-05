@@ -3,8 +3,10 @@
 export const APP_ID = 'app.autoinstall-ui.desktop'
 export const APP_NAME = 'Autoinstall USB Creator'
 
+export * from './autoinstall/advanced.js'
 export * from './autoinstall/model.js'
 export * from './autoinstall/provisioning.js'
+export * from './autoinstall/runtime-values.js'
 export * from './autoinstall/defaults.js'
 export * from './autoinstall/generate.js'
 export * from './autoinstall/generate-provisioning.js'

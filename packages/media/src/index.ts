@@ -63,6 +63,8 @@ export {
   countPatchableKernelLines,
   nocloudSeedArg,
   patchGrubCfg,
+  remainingGrubBytes,
+  type ExtraMenuEntry,
   type GrubPatchOptions,
   type GrubPatchResult,
 } from './grub/patch.js'

@@ -8,6 +8,13 @@
 // `---` は「ここから先はインストール済みシステムのカーネルへ渡す」という区切り。
 // autoinstall の引数はライブ環境（casper / subiquity）に効かせたいので `---` の *前* に入れる。
 
+/** 追加する menuentry（ホストごとのプリセットなど）。 */
+export interface ExtraMenuEntry {
+  readonly title: string
+  /** この項目だけに付けるカーネル引数（`args` に加えて付く） */
+  readonly args: readonly string[]
+}
+
 export interface GrubPatchOptions {
   /** 追加するカーネル引数（例 `['autoinstall']`）。既にある引数は重複させない。 */
   readonly args: readonly string[]
@@ -15,6 +22,8 @@ export interface GrubPatchOptions {
   readonly markTitle?: boolean
   /** メニューのタイムアウト秒。null なら変更しない。 */
   readonly timeout?: number | null
+  /** ホストごとの menuentry を先頭に追加する */
+  readonly extraEntries?: readonly ExtraMenuEntry[]
 }
 
 export interface GrubPatchResult {
@@ -23,6 +32,8 @@ export interface GrubPatchResult {
   readonly patchedLines: number
   /** タイトルを書き換えた menuentry の数 */
   readonly patchedTitles: number
+  /** 追加した menuentry の数 */
+  readonly addedEntries: number
 }
 
 /** `linux` / `linuxefi` / `linux16` で始まるカーネル行にマッチする。 */
@@ -77,7 +88,67 @@ function patchKernelLine(line: string, args: readonly string[]): { line: string;
 
 const MENUENTRY_RE = /^(\s*menuentry\s+)(["'])(.*?)\2(.*)$/
 
-/** grub.cfg にカーネル引数を挿入する。 */
+/** GRUB のタイトルに使えるようエスケープする（" と \ のみ意味を持つ）。 */
+function grubTitle(title: string): string {
+  return title.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
+
+/**
+ * 既存の casper エントリを雛形に、ホストごとの menuentry を組み立てる。
+ * カーネルと initrd の行はそのまま流用するので、バージョン差（HWE の有無など）に影響されない。
+ */
+/**
+ * `menuentry` ブロックの終わり（閉じ `}` の次の行）を返す。
+ * 中括弧の深さを数える。見つからなければ -1。
+ */
+function findEntryEnd(lines: readonly string[], start: number): number {
+  let depth = 0
+  let seenOpen = false
+  for (let i = start; i < lines.length; i++) {
+    const line = lines[i]!
+    for (const ch of line) {
+      if (ch === '{') {
+        depth++
+        seenOpen = true
+      } else if (ch === '}') depth--
+    }
+    if (seenOpen && depth <= 0) return i + 1
+  }
+  return -1
+}
+
+function buildExtraMenuBlocks(
+  original: string,
+  entries: readonly ExtraMenuEntry[],
+  baseArgs: readonly string[],
+): string[] {
+  const lines = original.split('\n')
+  const kernelIndex = lines.findIndex((l) => {
+    const m = KERNEL_LINE_RE.exec(l)
+    return m !== null && m[4]!.includes('/casper/')
+  })
+  if (kernelIndex < 0) return []
+  const kernelLine = lines[kernelIndex]!
+  // 直後の initrd 行を探す（間に何も無いのが実測の形）
+  const initrdLine = lines.slice(kernelIndex + 1, kernelIndex + 4).find((l) => /^\s*initrd\s/.test(l))
+  if (!initrdLine) return []
+  const gfx = lines
+    .slice(Math.max(0, kernelIndex - 3), kernelIndex)
+    .find((l) => /gfxpayload/.test(l))
+
+  return entries.map((e) => {
+    const patched = patchKernelLine(kernelLine, [...baseArgs, ...e.args])
+    return [
+      `menuentry "${grubTitle(e.title)}" {`,
+      ...(gfx ? [gfx] : []),
+      patched.changed ? patched.line : kernelLine,
+      initrdLine,
+      '}',
+    ].join('\n')
+  })
+}
+
+/** grub.cfg にカーネル引数を挿入し、必要ならホストごとの menuentry を足す。 */
 export function patchGrubCfg(original: string, options: GrubPatchOptions): GrubPatchResult {
   const lines = original.split('\n')
   let patchedLines = 0
@@ -101,7 +172,37 @@ export function patchGrubCfg(original: string, options: GrubPatchOptions): GrubP
     }
     return line
   })
-  return { text: out.join('\n'), patchedLines, patchedTitles }
+
+  const extras = options.extraEntries ?? []
+  if (extras.length === 0) {
+    return { text: out.join('\n'), patchedLines, patchedTitles, addedEntries: 0 }
+  }
+
+  // ホストごとの項目は**最初の menuentry の直後**に置く。
+  //
+  // 直前に置くと、それが GRUB のエントリ 0 になる。実 ISO の grub.cfg には
+  // 4 リリースとも `set default=` が無いので、既定は必ずエントリ 0 になり、
+  // タイムアウトまで放置しただけで「ホスト #1」が選ばれる。
+  // 起動メニューを使うのは複数台をまとめて構築するときなので、
+  // 触らなかった全台が同じホスト名・同じ IP を掴むことになる（落とし穴 27）。
+  // 既定はプロファイルどおりに入れる元の項目のままにし、
+  // ホストを選ぶのは「人が明示的に選んだとき」だけにする。
+  const blocks = buildExtraMenuBlocks(original, extras, options.args)
+  const firstEntry = out.findIndex((l) => /^\s*menuentry\s/.test(l))
+  const insertAt = firstEntry < 0 ? -1 : findEntryEnd(out, firstEntry)
+  const text =
+    insertAt < 0
+      ? [...out, ...blocks].join('\n')
+      : [...out.slice(0, insertAt), ...blocks, ...out.slice(insertAt)].join('\n')
+  return { text, patchedLines, patchedTitles, addedEntries: blocks.length }
+}
+
+/**
+ * grub.cfg は 1 セクタ (2048 バイト) に収める必要がある（インプレース改変の制約）。
+ * 追加できる menuentry の数を見積もる。
+ */
+export function remainingGrubBytes(text: string, sectorSize = 2048): number {
+  return sectorSize - Buffer.byteLength(text, 'utf8')
 }
 
 /** 何行が対象になるか（事前検証用）。0 なら ISO の構造が想定と違う。 */

@@ -58,6 +58,12 @@ export interface GeneratedConfig {
   readonly payloadBytes: number
   /** ペイロードの元ファイルが見つからないもの（プロファイルを別の PC で開いた場合など） */
   readonly missingSources: readonly string[]
+  /** 改変後の grub.cfg。ISO を選んでいないときは null。 */
+  readonly patchedGrubCfg: string | null
+  /** grub.cfg は 1 セクタ (2048B) に収める必要がある。残りバイト数。 */
+  readonly grubFreeBytes: number
+  /** grub.cfg がセクタに収まらない場合の説明 */
+  readonly grubTooLarge: boolean
 }
 
 /** ホスト上のファイルを選んだ結果（アプリ展開のペイロード用）。 */
@@ -124,6 +130,12 @@ export interface AutoinstallApi {
   readonly systemLocale: string
 
   // --- ISO ---
+  /**
+   * ドロップされた File の実体パスを返す（取れなければ空文字）。
+   * Electron 32 で `File.path` が削除されたので、preload の webUtils を通す。
+   */
+  pathForDroppedFile(file: File): string
+
   chooseIso(): Promise<IsoOpenResult | null>
   openIso(path: string): Promise<IsoOpenResult>
   computeIsoChecksum(path: string): Promise<ChecksumResult>

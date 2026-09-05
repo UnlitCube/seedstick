@@ -334,7 +334,9 @@ export function buildFatImage(options: BuildFatOptions): FatImage {
   const rootSlotCount =
     1 +
     options.files.reduce(
-      (n, f) => n + 1 + (needsLongName(f.name) ? Math.ceil(([...f.name].length + 1) / 13) : 0),
+          // LFN は 1 エントリ 13 **UTF-16 コードユニット**。コードポイントで数えると、
+    // 非 BMP 文字（サロゲートペア）を含む名前で予約が足りなくなる。
+    (n, f) => n + 1 + (needsLongName(f.name) ? Math.ceil((f.name.length + 1) / 13) : 0),
       0,
     )
   const rootClusters =

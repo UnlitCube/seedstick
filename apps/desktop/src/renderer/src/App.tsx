@@ -10,6 +10,7 @@ import { BasicsStep } from './views/BasicsStep.js'
 import { UserStep } from './views/UserStep.js'
 import { NetworkStep } from './views/NetworkStep.js'
 import { StorageStep } from './views/StorageStep.js'
+import { RuntimeStep } from './views/RuntimeStep.js'
 import { SoftwareStep } from './views/SoftwareStep.js'
 import { PostInstallStep } from './views/PostInstallStep.js'
 import { ReviewStep } from './views/ReviewStep.js'
@@ -21,6 +22,7 @@ const STEP_LABELS: Record<StepId, MsgKey> = {
   user: 'step.user',
   network: 'step.network',
   storage: 'step.storage',
+  runtime: 'step.runtime',
   software: 'step.software',
   postinstall: 'step.postinstall',
   review: 'step.review',
@@ -33,6 +35,7 @@ const STEP_VIEWS: Record<StepId, () => React.JSX.Element> = {
   user: UserStep,
   network: NetworkStep,
   storage: StorageStep,
+  runtime: RuntimeStep,
   software: SoftwareStep,
   postinstall: PostInstallStep,
   review: ReviewStep,

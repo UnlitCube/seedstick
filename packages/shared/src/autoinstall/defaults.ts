@@ -1,4 +1,5 @@
 import type { AutoinstallProfile, UbuntuSeries } from './model.js'
+import { createDefaultRuntimeValues } from './runtime-values.js'
 
 /** 何も設定していない状態のプロファイル。GUI の初期値であり、単体テストの基準でもある。 */
 export function createDefaultProfile(
@@ -7,7 +8,7 @@ export function createDefaultProfile(
   createdAt = '1970-01-01T00:00:00.000Z',
 ): AutoinstallProfile {
   return {
-    profileVersion: 2,
+    profileVersion: 4,
     meta: { name: 'default', createdAt, toolVersion },
     series,
     basics: {
@@ -21,6 +22,7 @@ export function createDefaultProfile(
       username: 'ubuntu',
       passwordHash: '',
       sudoNoPassword: false,
+      groups: { mode: 'default' },
     },
     ssh: { installServer: true, authorizedKeys: [], allowPasswordAuth: true },
     // 既定はインストーラ任せ。subiquity は eth*/en* で DHCPv4 を試し、
@@ -31,8 +33,9 @@ export function createDefaultProfile(
       match: { kind: 'largest' },
       useWholeDisk: false,
       encryptionPassphrase: '',
-      disableSwap: false,
+      swap: { mode: 'installer-default', size: '' },
       partitionTable: 'default',
+      resetPartition: { enabled: false, size: '' },
     },
     software: {
       sourceId: 'ubuntu-server',
@@ -49,6 +52,10 @@ export function createDefaultProfile(
         setupPath: true,
         containerToolkit: false,
       },
+      kernel: { mode: 'default' },
+      searchDrivers: null,
+      codecs: false,
+      oem: 'auto',
     },
     apt: {
       mode: 'default',
@@ -56,6 +63,9 @@ export function createDefaultProfile(
       primaryUri: '',
       proxy: '',
       disableComponents: [],
+      sources: [],
+      preserveSourcesList: false,
+      fallback: 'abort',
     },
     postInstall: {
       presets: [],
@@ -66,12 +76,20 @@ export function createDefaultProfile(
       deployments: [],
       services: [],
       aptFullUpgrade: false,
+      errorCommands: [],
+      collectLogsOnError: true,
+      debconfSelections: '',
     },
+    activeDirectory: { enabled: false, adminName: '', domainName: '' },
+    runtimeValues: createDefaultRuntimeValues(),
     behavior: {
       interactiveSections: [],
       shutdown: 'reboot',
       refreshInstaller: false,
       reportToConsole: true,
+      interactiveAll: false,
+      reporting: { kind: 'console' },
+      refreshInstallerChannel: '',
     },
     advanced: { rawOverlayYaml: '', extraKernelArgs: '' },
   }

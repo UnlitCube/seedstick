@@ -1,8 +1,20 @@
 import { describe, expect, it } from 'vitest'
+import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { parse } from 'yaml'
 import { createDefaultProfile } from './defaults.js'
 import { collectFirstBootCommands, collectLateCommands, collectPackages, generateUserData } from './generate.js'
-import { SEED_MOUNT_PATH } from './generate-provisioning.js'
+import { SEED_MOUNT_PATH, deploymentFirstBootCommands } from './generate-provisioning.js'
 import { migrateProfile, summarizeProfile } from './migrate.js'
 import {
   CUDA_REPO_DISTRO,
@@ -91,9 +103,11 @@ describe('追加ユーザー', () => {
       })),
     )
     const joined = late.join('\n')
-    expect(joined).toContain('id -u deploy >/dev/null 2>&1 || useradd')
+    // ユーザー名もシェルも自由入力なので必ずクォートされていること
+    // （inTargetSh が全体を再度クォートするので、内側の ' は '\'' になる）
+    expect(joined).toContain(String.raw`id -u '\''deploy'\'' >/dev/null 2>&1 || useradd`)
     expect(joined).toContain('-m')
-    expect(joined).toContain("-s /bin/bash")
+    expect(joined).toContain(String.raw`-s '\''/bin/bash'\''`)
     // ハッシュには $ が含まれるので、シェルに展開されないようクォートされていること
     expect(joined).toContain(String.raw`echo '\''deploy:` + HASH + String.raw`'\'' | chpasswd -e`)
   })
@@ -102,7 +116,7 @@ describe('追加ユーザー', () => {
     const late = collectLateCommands(
       profile((p) => ({ ...p, postInstall: { ...p.postInstall, additionalUsers: [user()] } })),
     )
-    expect(late.join('\n')).toContain('passwd -l deploy')
+    expect(late.join('\n')).toContain("passwd -l 'deploy'")
     expect(late.join('\n')).not.toContain('chpasswd')
   })
 
@@ -122,7 +136,7 @@ describe('追加ユーザー', () => {
         postInstall: { ...p.postInstall, additionalUsers: [user({ sudo: 'password' })] },
       })),
     ).join('\n')
-    expect(withPass).toContain('usermod -aG sudo deploy')
+    expect(withPass).toContain("usermod -aG sudo 'deploy'")
     expect(withPass).not.toContain('sudoers.d')
   })
 
@@ -135,9 +149,11 @@ describe('追加ユーザー', () => {
     ).join('\n')
     expect(late).toContain('/home/deploy/.ssh')
     expect(late).toContain(SSH_KEY)
-    expect(late).toContain('chmod 0700 /home/deploy/.ssh')
-    expect(late).toContain('chmod 0600 /home/deploy/.ssh/authorized_keys')
-    expect(late).toContain('chown -R deploy:deploy /home/deploy/.ssh')
+    expect(late).toContain("chmod 0700 '/home/deploy/.ssh'")
+    expect(late).toContain("chmod 0600 '/home/deploy/.ssh/authorized_keys'")
+    expect(late).toContain("chown -R 'deploy':'deploy' '/home/deploy/.ssh'")
+    // ヒアドキュメントは使わない（終端子を書かれると残りが root のコマンドになる）
+    expect(late).not.toContain('AUTOINSTALL_EOF')
   })
 
   it('システムアカウントは -r と /var/lib のホームになる', () => {
@@ -181,12 +197,13 @@ describe('アプリの展開', () => {
       profile((p) => ({ ...p, postInstall: { ...p.postInstall, deployments: [deployment()] } })),
     ).join('\n')
     expect(late).toContain(`cp '${SEED_MOUNT_PATH}/app.tar.gz' '/target/var/tmp/autoinstall-app.tar.gz'`)
-    expect(late).toContain('curtin in-target -- mkdir -p /opt/myapp')
+    // 展開先はクォートする（空白を含むパスでインストール全体が失敗するため）
+    expect(late).toContain("curtin in-target -- mkdir -p '/opt/myapp'")
     expect(late).toContain('tar -xzf')
     expect(late).toContain(String.raw`-C '\''/opt/myapp'\''`)
     // 退避したファイルは片付ける
     expect(late).toContain("rm -f '/target/var/tmp/autoinstall-app.tar.gz'")
-    expect(late).toContain('chown -R deploy:deploy /opt/myapp')
+    expect(late).toContain("chown -R deploy:deploy '/opt/myapp'")
   })
 
   it.each([
@@ -257,7 +274,8 @@ describe('アプリの展開', () => {
     expect(late).toContain("mkdir -p '/target/etc/myapp'")
     expect(late).toContain(`cp '${SEED_MOUNT_PATH}/app.conf' '/target/etc/myapp/app.conf'`)
     expect(late).toContain("chmod 0640 '/target/etc/myapp/app.conf'")
-    expect(late).toContain('chown deploy:deploy /etc/myapp/app.conf')
+    // targetPath は自由入力なので必ずクォートされていること
+    expect(late).toContain("chown deploy:deploy '/etc/myapp/app.conf'")
   })
 
   it('URL 取得は late-commands ではなく初回起動時に行う', () => {
@@ -325,9 +343,12 @@ describe('systemd サービス', () => {
       profile((p) => ({ ...p, postInstall: { ...p.postInstall, services: [service()] } })),
     ).join('\n')
     expect(late).toContain('/etc/systemd/system/myapp.service')
-    expect(late).toContain('AUTOINSTALL_EOF')
-    expect(late).toContain('chmod 0644 /etc/systemd/system/myapp.service')
-    expect(late).toContain('systemctl enable myapp.service')
+    // ヒアドキュメントは使わない（ユニットの中身に終端子を書かれると
+    // 残りが in-target の root シェルのコマンドとして実行できてしまう）
+    expect(late).not.toContain('AUTOINSTALL_EOF')
+    expect(late).toContain(String.raw`printf '\''%s'\''`)
+    expect(late).toContain("chmod 0644 '/etc/systemd/system/myapp.service'")
+    expect(late).toContain("systemctl enable 'myapp.service'")
   })
 
   it('enabled: false なら enable しない', () => {
@@ -391,11 +412,18 @@ describe('GPU / CUDA', () => {
   })
 
   it('初回起動時に keyring を入れてから apt install する', () => {
-    const first = collectFirstBootCommands(gpuProfile()).join('\n')
+    const cmds = collectFirstBootCommands(gpuProfile())
+    const gpu = cmds.filter((c) => c.includes('cuda-keyring'))
+    // cloud-init の runcmd は各エントリを別々に実行し set -e も && も付けないので、
+    // 失敗が後続を止めるよう 1 エントリの `sh -e -c` にまとめてある（落とし穴 28）
+    expect(gpu).toHaveLength(1)
+    expect(gpu[0]!.startsWith('sh -e -c ')).toBe(true)
+    const first = gpu[0]!
     expect(first).toContain('cuda-keyring_1.1-1_all.deb')
     expect(first).toContain('dpkg -i /var/tmp/cuda-keyring.deb')
     expect(first).toContain('apt-get update')
-    expect(first).toContain('apt-get install -y nvidia-open cuda-toolkit')
+    // パッケージ名は 1 つずつクォートする（toolkit は自由入力のピン留めを許す）
+    expect(first).toContain(String.raw`apt-get install -y '\''nvidia-open'\'' '\''cuda-toolkit'\''`)
     // keyring を入れる前に apt install してはいけない
     expect(first.indexOf('dpkg -i')).toBeLessThan(first.indexOf('apt-get install'))
   })
@@ -409,7 +437,10 @@ describe('GPU / CUDA', () => {
 
   it('ドライバを入れる場合は最後に再起動する', () => {
     const first = collectFirstBootCommands(gpuProfile({ driver: 'open' }))
-    expect(first.at(-1)).toBe('systemctl reboot')
+    // 1 エントリにまとめてあるので、まとめたスクリプトの末尾で確認する
+    const gpu = first.filter((c) => c.includes('cuda-keyring'))
+    expect(gpu).toHaveLength(1)
+    expect(gpu[0]!.trimEnd().endsWith(String.raw`systemctl reboot'`)).toBe(true)
   })
 
   it('ドライバ無し（ツールキットのみ）なら再起動しない', () => {
@@ -458,9 +489,21 @@ describe('生成された YAML の整合性', () => {
       autoinstall: { 'late-commands': string[]; 'user-data': { runcmd: string[] } }
     }
     expect(parsed.autoinstall['late-commands'].length).toBeGreaterThan(10)
-    expect(parsed.autoinstall['user-data'].runcmd.length).toBeGreaterThan(3)
-    // ヒアドキュメントの改行が YAML を壊していないこと
-    expect(parsed.autoinstall['late-commands'].some((c) => c.includes('AUTOINSTALL_EOF'))).toBe(true)
+    // GPU の導入は 1 エントリの `sh -e -c` にまとめてある（落とし穴 28）。
+    // 「エントリ数が多いこと」は健全性の指標ではないので、中身で確認する。
+    const runcmd = parsed.autoinstall['user-data'].runcmd
+    expect(runcmd.length).toBeGreaterThanOrEqual(1)
+    const gpuEntries = runcmd.filter((c) => c.includes('cuda-keyring'))
+    expect(gpuEntries).toHaveLength(1)
+    expect(gpuEntries[0]!.startsWith('sh -e -c ')).toBe(true)
+    // 複数行のファイル内容（systemd ユニット・authorized_keys）が YAML を壊していないこと。
+    // ヒアドキュメントはやめたので printf で書き出している。
+    expect(
+      parsed.autoinstall['late-commands'].some((c) => c.includes(String.raw`printf '\''%s'\''`)),
+    ).toBe(true)
+    expect(parsed.autoinstall['late-commands'].some((c) => c.includes('AUTOINSTALL_EOF'))).toBe(
+      false,
+    )
   })
 
   it('検証を通る', () => {
@@ -509,7 +552,7 @@ describe('生成された YAML の整合性', () => {
 })
 
 describe('プロファイルの読み込み・移行', () => {
-  it('v1 のプロファイルを v2 に移行し、新セクションを既定で埋める', () => {
+  it('v1 のプロファイルを最新形式に移行し、新セクションを既定で埋める', () => {
     const v1 = {
       profileVersion: 1,
       meta: { name: 'old', createdAt: '2026-01-01T00:00:00.000Z', toolVersion: 'x/0.0.1' },
@@ -526,7 +569,7 @@ describe('プロファイルの読み込み・移行', () => {
       advanced: { rawOverlayYaml: '', extraKernelArgs: '' },
     }
     const { profile: p, notes } = migrateProfile(v1)
-    expect(p.profileVersion).toBe(2)
+    expect(p.profileVersion).toBe(4)
     expect(p.series).toBe('22.04')
     expect(p.basics.hostname).toBe('old-host')
     expect(p.user.username).toBe('old')
@@ -536,6 +579,7 @@ describe('プロファイルの読み込み・移行', () => {
     expect(p.postInstall.additionalUsers).toEqual([])
     expect(p.postInstall.services).toEqual([])
     expect(p.software.gpu.enabled).toBe(false)
+    expect(p.runtimeValues.hostname).toBe('fixed')
     expect(notes.some((n) => n.includes('古い形式'))).toBe(true)
   })
 
@@ -546,7 +590,7 @@ describe('プロファイルの読み込み・移行', () => {
   })
 
   it('未対応バージョンは既定に戻して知らせる', () => {
-    const { profile: p, notes } = migrateProfile({ profileVersion: 2, series: '18.04' })
+    const { profile: p, notes } = migrateProfile({ profileVersion: 4, series: '18.04' })
     expect(p.series).toBe('24.04')
     expect(notes.some((n) => n.includes('対応していない Ubuntu バージョン'))).toBe(true)
   })
@@ -558,7 +602,7 @@ describe('プロファイルの読み込み・移行', () => {
 
   it('network の mode が変わっていれば丸ごと採用する', () => {
     const { profile: p } = migrateProfile({
-      profileVersion: 2,
+      profileVersion: 4,
       network: {
         mode: 'static',
         target: { kind: 'any' },
@@ -574,7 +618,7 @@ describe('プロファイルの読み込み・移行', () => {
   })
 
   it('未知の mode は既定に戻す', () => {
-    const { profile: p } = migrateProfile({ profileVersion: 2, network: { mode: 'bogus' } })
+    const { profile: p } = migrateProfile({ profileVersion: 4, network: { mode: 'bogus' } })
     expect(p.network.mode).toBe('installer-default')
   })
 
@@ -594,5 +638,204 @@ describe('プロファイルの読み込み・移行', () => {
     expect(s.highlights.services).toBe(1)
     expect(s.highlights.gpu).toBe(true)
     expect(s.highlights.staticIp).toBe(false)
+  })
+})
+
+// 回帰: cloud-init の runcmd は各エントリを別々に実行し、set -e も && も付けない
+// （util.shellify が 1 行ずつ並べるだけ）。SHA-256 の検証を独立したエントリにすると、
+// 合わなくても mv / tar が走り、しかも最後のコマンドの終了コードが 0 なので
+// cloud-init は成功として記録する。URL 取得ペイロードの唯一の改ざん検知が無効だった。
+describe('URL 取得ペイロードの改ざん検知（実際に sh で実行）', () => {
+  function urlDeployment(sha256: string, url: string, targetPath: string): Deployment {
+    return {
+      id: 'd1',
+      kind: 'file',
+      name: 'payload.bin',
+      source: { kind: 'url', url, sha256 },
+      targetPath,
+      owner: 'root',
+      group: 'root',
+      mode: '0644',
+      archiveFormat: 'tar.gz',
+      postCommand: '',
+      chownRecursive: false,
+    }
+  }
+
+  const slash = (p: string): string => p.split('\\').join('/')
+
+  /**
+   * 生成されたコマンドをそのまま sh で実行する。
+   * curl は file:// を扱えるので、ダウンロードの行も本物のまま通せる。
+   */
+  function run(body: string, sha256: string): { code: number; installed: string | null } {
+    const dir = mkdtempSync(join(tmpdir(), 'ai-deploy-'))
+    try {
+      const src = join(dir, 'remote.bin')
+      writeFileSync(src, body, 'utf8')
+      const target = join(dir, 'installed.bin')
+      const d = urlDeployment(sha256, `file:///${slash(src)}`, slash(target))
+      const cmds = deploymentFirstBootCommands(d)
+      // 1 エントリにまとまっていること自体が要件（分かれていると set -e が効かない）
+      expect(cmds).toHaveLength(1)
+      // 一時ファイルはテスト用のディレクトリへ向ける
+      const cmd = cmds[0]!.split('/var/tmp/autoinstall-payload.bin').join(
+        slash(join(dir, 'tmp.bin')),
+      )
+      let code = 0
+      try {
+        execFileSync('sh', ['-c', cmd], { stdio: 'pipe' })
+      } catch (e) {
+        code = (e as { status?: number }).status ?? 1
+      }
+      return { code, installed: existsSync(target) ? readFileSync(target, 'utf8') : null }
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  }
+
+  it('ハッシュが合わなければ配置されず、非ゼロで終わる', () => {
+    const good = createHash('sha256').update('GOOD PAYLOAD').digest('hex')
+    const r = run('TAMPERED PAYLOAD', good)
+    expect(r.code).not.toBe(0)
+    expect(r.installed).toBeNull()
+  })
+
+  it('ハッシュが合えば配置され、0 で終わる', () => {
+    const body = 'GOOD PAYLOAD'
+    const good = createHash('sha256').update(body).digest('hex')
+    const r = run(body, good)
+    expect(r.code).toBe(0)
+    expect(r.installed).toBe(body)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// シェル注入（4 巡目の監査で実際に成立していたもの）
+// ---------------------------------------------------------------------------
+//
+// 生成したコマンドを **実際に sh で実行**して、注入が起きないことを確かめる。
+// 「クォートされた文字列を含むか」を目で見る assertion は、
+// クォートの入れ子を間違えたときに一緒に間違えるので、実行して確かめる。
+describe('シェル注入', () => {
+  /** in-target を「その場で実行する」スタブにして、生成コマンドを実際に走らせる。 */
+  function runAll(cmds: readonly string[]): { syntaxErrors: string[]; leaked: string[] } {
+    const dir = mkdtempSync(join(tmpdir(), 'inject-'))
+    const bin = join(dir, 'bin')
+    try {
+      writeFileSync(join(bin + '.sh'), '')
+      rmSync(join(bin + '.sh'))
+    } catch {
+      /* ignore */
+    }
+    try {
+      execFileSync('sh', ['-c', `mkdir -p ${JSON.stringify(bin)}`])
+      // `curtin in-target -- <cmd...>` の 2 語を落として残りを実行するスタブ
+      writeFileSync(join(bin, 'curtin'), '#!/bin/sh\nshift 2\nexec "$@"\n')
+      execFileSync('sh', ['-c', `chmod +x ${JSON.stringify(join(bin, 'curtin'))}`])
+      const env = { ...process.env, PATH: `${bin}:${process.env['PATH'] ?? ''}` }
+      const syntaxErrors: string[] = []
+      for (const c of cmds) {
+        try {
+          execFileSync('sh', ['-n', '-c', c], { env, stdio: 'pipe' })
+        } catch {
+          syntaxErrors.push(c)
+        }
+        try {
+          // 正規のコマンドは /target が無いので失敗してよい。見たいのは注入の成否だけ。
+          execFileSync('sh', ['-c', c], { env, stdio: 'pipe', timeout: 10_000 })
+        } catch {
+          /* ignore */
+        }
+      }
+      const leaked = readdirSync(dir).filter((n) => n !== 'bin')
+      return { syntaxErrors, leaked }
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  }
+
+  /** 注入の目印を作るペイロード。作られたら注入が成立している。 */
+  function payload(dir: string, name: string): string {
+    return `${dir}/${name}`
+  }
+
+  it('追加ユーザーの shell / パスワードハッシュ / SSH 鍵から root コマンドを実行できない', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'inject-mark-')).replaceAll('\\', '/')
+    try {
+      const u = user({
+        // useradd -s にそのまま連結されていた
+        shell: `/bin/sh; touch ${payload(dir, 'SHELL')}; #`,
+        // looksLikeCryptHash は接頭辞しか見ないので ' を含むハッシュが検証を通る。
+        // 手書きの '…' で囲っていたためクォートを抜けられた（落とし穴 13 の退行）
+        passwordHash: `$6$x'; touch ${payload(dir, 'HASH')}; echo '`,
+        // ヒアドキュメントの終端子をコメント欄に書くと以降が root のコマンドになった
+        sshAuthorizedKeys: [`${SSH_KEY}\nAUTOINSTALL_EOF\ntouch ${payload(dir, 'KEY')}`],
+      })
+      const cmds = collectLateCommands(
+        profile((x) => ({ ...x, postInstall: { ...x.postInstall, additionalUsers: [u] } })),
+      )
+      const r = runAll(cmds)
+      expect(r.syntaxErrors).toEqual([])
+      expect(readdirSync(dir)).toEqual([])
+      expect(r.leaked).toEqual([])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('展開先のパスから root コマンドを実行できない（空白入りのパスでも壊れない）', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'inject-mark-')).replaceAll('\\', '/')
+    try {
+      const d = deployment({
+        kind: 'file',
+        targetPath: `/opt/a b; touch ${payload(dir, 'TARGET')}; x`,
+        owner: 'deploy',
+        group: 'staff',
+        source: { kind: 'host-file', path: 'C:/payload/app.bin', sizeBytes: 1 },
+      })
+      const cmds = collectLateCommands(
+        profile((x) => ({ ...x, postInstall: { ...x.postInstall, deployments: [d] } })),
+      )
+      const r = runAll(cmds)
+      expect(r.syntaxErrors).toEqual([])
+      expect(readdirSync(dir)).toEqual([])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('systemd ユニットの中身から root コマンドを実行できない', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'inject-mark-')).replaceAll('\\', '/')
+    try {
+      const svc = service({
+        environment: [`A=1\nAUTOINSTALL_EOF\ntouch ${payload(dir, 'UNIT')}`],
+      })
+      const cmds = collectLateCommands(
+        profile((x) => ({ ...x, postInstall: { ...x.postInstall, services: [svc] } })),
+      )
+      const r = runAll(cmds)
+      expect(r.syntaxErrors).toEqual([])
+      expect(readdirSync(dir)).toEqual([])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('CUDA のツールキット名から root コマンドを実行できず、検証でも弾かれる', () => {
+    const evil = 'cuda-toolkit; touch /tmp/should-not-happen'
+    const p = profile((x) => ({
+      ...x,
+      software: {
+        ...x.software,
+        gpu: { ...x.software.gpu, enabled: true, driver: 'open', toolkit: evil },
+      },
+    }))
+    // 生成側: パッケージ名が 1 つずつクォートされる
+    const first = collectFirstBootCommands(p).join('\n')
+    expect(first).toContain(String.raw`'\''cuda-toolkit; touch /tmp/should-not-happen'\''`)
+    // 検証側: apt のパッケージ名として不正なので error になる
+    const issues = validateProfile(p).issues.filter((i) => i.severity === 'error')
+    expect(issues.some((i) => i.field === 'software.gpu.toolkit')).toBe(true)
   })
 })

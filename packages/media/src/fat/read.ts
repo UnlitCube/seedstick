@@ -67,7 +67,10 @@ export function readFatImage(img: Buffer): FatFilesystem {
 
   const rootDirBuf =
     fatType === 32
-      ? readChain(img.readUInt32LE(44), bytesPerCluster)
+      // ルートも複数クラスタの鎖になりうる。1 クラスタで打ち切ると
+      // 2 個目以降のエントリが読めず、書き戻し検証が黙って素通りする。
+      // Number.MAX_SAFE_INTEGER を渡して鎖の最後まで辿らせる。
+      ? readChain(img.readUInt32LE(44), Number.MAX_SAFE_INTEGER)
       : img.subarray(
           (rsvd + numFats * fatSz) * bytesPerSec,
           (rsvd + numFats * fatSz + rootDirSectors) * bytesPerSec,

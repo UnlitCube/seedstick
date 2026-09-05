@@ -1,6 +1,12 @@
 import { useState } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
-import type { DiskMatch, StorageConfig } from '@autoinstall/shared'
+import {
+  SERIES_FEATURES,
+  isValidSizeSpec,
+  type DiskMatch,
+  type StorageConfig,
+  type SwapMode,
+} from '@autoinstall/shared'
 import { useStore } from '../store.js'
 import { useT } from '../lib/i18n.js'
 import { Badge, Button, Callout, Card, Field, RadioGroup, Select, Switch, TextArea, TextInput } from '../components/ui.js'
@@ -26,6 +32,7 @@ config:
 export function StorageStep(): React.JSX.Element {
   const t = useT()
   const storage = useStore((s) => s.profile.storage)
+  const features = SERIES_FEATURES[useStore((s) => s.profile.series)]
   const update = useStore((s) => s.updateProfile)
   const [revealPassphrase, setRevealPassphrase] = useState(false)
 
@@ -44,8 +51,9 @@ export function StorageStep(): React.JSX.Element {
         match: { kind: 'largest' },
         useWholeDisk: false,
         encryptionPassphrase: '',
-        disableSwap: false,
+        swap: { mode: 'installer-default', size: '4G' },
         partitionTable: 'default',
+        resetPartition: { enabled: false, size: '' },
       })
     } else {
       setStorage({ ...storage, mode })
@@ -107,12 +115,84 @@ export function StorageStep(): React.JSX.Element {
                   description={t('storage.wholeDiskHint')}
                 />
               )}
-              <Switch
-                checked={storage.disableSwap}
-                onChange={(disableSwap) => setStorage({ ...storage, disableSwap })}
-                label={t('storage.disableSwap')}
-                description="メモリに余裕があるサーバーや、swap を別に用意する場合に選びます。"
-              />
+              <Field label={t('adv.swapTitle')}>
+                {(id) => (
+                  <Select
+                    id={id}
+                    value={storage.swap.mode}
+                    onChange={(mode) =>
+                      setStorage({ ...storage, swap: { ...storage.swap, mode: mode as SwapMode } })
+                    }
+                    options={[
+                      { value: 'installer-default', label: t('adv.swapAuto') },
+                      { value: 'none', label: t('adv.swapNone') },
+                      { value: 'size', label: t('adv.swapSize') },
+                    ]}
+                  />
+                )}
+              </Field>
+              {storage.swap.mode === 'size' && (
+                <Field
+                  label={t('adv.swapSizeValue')}
+                  hint={t('adv.swapSizeHint')}
+                  error={
+                    isValidSizeSpec(storage.swap.size) ? undefined : t('adv.swapSizeHint')
+                  }
+                >
+                  {(id) => (
+                    <TextInput
+                      id={id}
+                      value={storage.swap.size}
+                      spellCheck={false}
+                      placeholder="4G"
+                      invalid={!isValidSizeSpec(storage.swap.size)}
+                      onChange={(e) =>
+                        setStorage({ ...storage, swap: { ...storage.swap, size: e.target.value } })
+                      }
+                    />
+                  )}
+                </Field>
+              )}
+              {features.resetPartition && (
+                <Switch
+                  checked={storage.resetPartition.enabled}
+                  onChange={(enabled) =>
+                    setStorage({ ...storage, resetPartition: { ...storage.resetPartition, enabled } })
+                  }
+                  label={t('adv.resetPartition')}
+                  description={t('adv.resetPartitionHint')}
+                />
+              )}
+              {features.resetPartition && storage.resetPartition.enabled && (
+                <Field
+                  label={t('adv.resetPartitionSize')}
+                  hint={t('adv.swapSizeHint')}
+                  error={
+                    storage.resetPartition.size === '' || isValidSizeSpec(storage.resetPartition.size)
+                      ? undefined
+                      : t('adv.swapSizeHint')
+                  }
+                >
+                  {(id) => (
+                    <TextInput
+                      id={id}
+                      value={storage.resetPartition.size}
+                      spellCheck={false}
+                      placeholder="12G"
+                      invalid={
+                        storage.resetPartition.size !== '' &&
+                        !isValidSizeSpec(storage.resetPartition.size)
+                      }
+                      onChange={(e) =>
+                        setStorage({
+                          ...storage,
+                          resetPartition: { ...storage.resetPartition, size: e.target.value },
+                        })
+                      }
+                    />
+                  )}
+                </Field>
+              )}
               {storage.mode === 'lvm' && (
                 <Switch
                   checked={storage.encryptionPassphrase.length > 0}

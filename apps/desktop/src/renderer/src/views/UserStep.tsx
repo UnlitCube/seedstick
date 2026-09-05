@@ -1,10 +1,20 @@
 import { useEffect, useState } from 'react'
 import { Eye, EyeOff, KeyRound, Upload, Wand2 } from 'lucide-react'
-import { stripLineTerminators } from '@autoinstall/shared'
+import { SERIES_FEATURES, stripLineTerminators, type PrimaryUserGroups } from '@autoinstall/shared'
 import { useStore } from '../store.js'
 import { useT } from '../lib/i18n.js'
 import { generatePassword, passwordStrength } from '../lib/format.js'
-import { Badge, Button, Callout, Card, Field, Switch, TextArea, TextInput } from '../components/ui.js'
+import {
+  Badge,
+  Button,
+  Callout,
+  Card,
+  Field,
+  Select,
+  Switch,
+  TextArea,
+  TextInput,
+} from '../components/ui.js'
 import { AdditionalUsersSection } from './sections/AdditionalUsers.js'
 
 const SSH_KEY_RE =
@@ -19,6 +29,7 @@ export function UserStep(): React.JSX.Element {
   const setPasswordDraft = useStore((s) => s.setPasswordDraft)
   const applyPassword = useStore((s) => s.applyPassword)
   const [reveal, setReveal] = useState(false)
+  const features = SERIES_FEATURES[profile.series]
 
   // 入力が落ち着いてからハッシュ化する。1 文字ごとに main を呼ぶと無駄が多い。
   useEffect(() => {
@@ -187,6 +198,67 @@ export function UserStep(): React.JSX.Element {
             label={t('user.sudoNoPassword')}
             description="自動化には便利ですが、このユーザーのログインを奪われると即座に root 権限を取られます。"
           />
+        </div>
+
+        <div className="mt-5">
+          <Field
+            label={t('adv.identityGroups')}
+            hint={
+              features.identityGroups
+                ? 'docker や libvirt など、追加で入れたいグループをスペース区切りで書きます。'
+                : t('adv.identityGroupsUnsupported')
+            }
+          >
+            {(id) => (
+              <div className="space-y-2">
+                <Select
+                  value={profile.user.groups.mode}
+                  disabled={!features.identityGroups}
+                  onChange={(mode) => {
+                    const current =
+                      profile.user.groups.mode === 'default' ? [] : profile.user.groups.groups
+                    const groups: PrimaryUserGroups =
+                      mode === 'default'
+                        ? { mode: 'default' }
+                        : { mode: mode as 'append' | 'override', groups: current }
+                    update((p) => ({ ...p, user: { ...p.user, groups } }))
+                  }}
+                  options={[
+                    { value: 'default', label: 'インストーラの既定のまま (sudo, adm など)' },
+                    { value: 'append', label: '既定に加えて追加する' },
+                    { value: 'override', label: '指定したグループだけにする' },
+                  ]}
+                />
+                {profile.user.groups.mode !== 'default' && (
+                  <TextInput
+                    id={id}
+                    spellCheck={false}
+                    placeholder="docker libvirt"
+                    disabled={!features.identityGroups}
+                    value={profile.user.groups.groups.join(' ')}
+                    onChange={(e) => {
+                      const list = e.target.value.split(/[\s,]+/).filter(Boolean)
+                      update((p) => ({
+                        ...p,
+                        user: {
+                          ...p.user,
+                          groups:
+                            p.user.groups.mode === 'default'
+                              ? p.user.groups
+                              : { mode: p.user.groups.mode, groups: list },
+                        },
+                      }))
+                    }}
+                  />
+                )}
+                {profile.user.groups.mode === 'override' && (
+                  <Callout tone="warning">
+                    sudo を外すと管理者権限が無くなり、インストール後に設定を変えられなくなります。
+                  </Callout>
+                )}
+              </div>
+            )}
+          </Field>
         </div>
       </Card>
 

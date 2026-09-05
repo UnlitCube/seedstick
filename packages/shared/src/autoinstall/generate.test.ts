@@ -79,8 +79,9 @@ describe('buildAutoinstallObject', () => {
           match: { kind: 'largest' },
           useWholeDisk: true,
           encryptionPassphrase: 'secret-passphrase',
-          disableSwap: false,
+          swap: { mode: 'installer-default', size: '' },
           partitionTable: 'default',
+          resetPartition: { enabled: false, size: '' },
         },
       })),
     )

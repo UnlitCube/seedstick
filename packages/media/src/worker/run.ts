@@ -4,7 +4,7 @@ import { RawBlockDevice } from '../blockdev/raw.js'
 import { buildIsoPatches, inspectIso } from '../isopatch/index.js'
 import { planUsbLayout } from '../layout/plan.js'
 import { executeWritePlan } from '../writer/execute.js'
-import { getPlatformOps } from '../platform/index.js'
+import { getPlatformOps, type PlatformOps } from '../platform/index.js'
 import { encodeMessage, decodeMessages, type ControlMessage, type WorkerJob, type WorkerMessage } from './protocol.js'
 
 // 昇格プロセス側の本体。ジョブ JSON を受け取り、USB に書いて、進捗を TCP で親に返す。
@@ -72,6 +72,58 @@ export function connectReporter(port: number, token: string): Promise<WorkerRepo
   })
 }
 
+/**
+ * 昇格側でのデバイス再検証。
+ *
+ * 通常権限の GUI は `classifyDevice()` を通ったものしか選ばせないが、
+ * その判定は**通常権限のプロセス**の中にしかない。ジョブ JSON は
+ * ユーザーが書ける場所に置かれ、UAC の確認が出ている間に差し替えられる。
+ * 差し替えを検知しないと「ユーザーが押した『はい』」がそのままシステムディスクの
+ * 破壊に化けるので、書く直前にもう一度確かめる。
+ */
+export class DeviceRejectedError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'DeviceRejectedError'
+  }
+}
+
+async function assertDeviceIsWritable(platform: PlatformOps, job: WorkerJob): Promise<void> {
+  const devices = await platform.listDevices()
+  const found = devices.find((d) => d.id === job.devicePath)
+  if (!found) {
+    throw new DeviceRejectedError(
+      `書き込み先 ${job.devicePath} が見つかりません。取り外されたか、書き込み対象として認められないデバイスです。`,
+    )
+  }
+  if (!found.selectable) {
+    throw new DeviceRejectedError(
+      `${job.devicePath} には書き込めません: ${found.blockedReason ?? '対象外のデバイスです'}`,
+    )
+  }
+  // サイズが食い違うと GPT のバックアップを書く位置がずれる。
+  // 差し替えの兆候でもあるので厳密に一致を求める。
+  if (found.sizeBytes !== job.deviceSizeBytes) {
+    throw new DeviceRejectedError(
+      `${job.devicePath} の容量が指示書と違います（指示 ${job.deviceSizeBytes} / 実際 ${found.sizeBytes}）。`,
+    )
+  }
+  // デバイスノードは抜き差しで再利用される。容量が同じ別のディスクを
+  // 誤って消さないよう、シリアルまで一致を求める。
+  // 列挙でシリアルが取れない環境（一部の USB ブリッジ）では説明文で代用する。
+  if (job.deviceSerial !== null && found.serial !== job.deviceSerial) {
+    throw new DeviceRejectedError(
+      `${job.devicePath} は選んだデバイスと違います（シリアル 指示 ${job.deviceSerial} / 実際 ${found.serial ?? '不明'}）。` +
+        '取り外して挿し直したか、別のデバイスに入れ替わっています。もう一度選び直してください。',
+    )
+  }
+  if (job.deviceSerial === null && found.description !== job.deviceDescription) {
+    throw new DeviceRejectedError(
+      `${job.devicePath} は選んだデバイスと違います（指示 "${job.deviceDescription}" / 実際 "${found.description}"）。`,
+    )
+  }
+}
+
 /** ジョブを実行する。例外は呼び出し側で捕まえてエラーメッセージとして送る。 */
 export async function runWorkerJob(job: WorkerJob, reporter: WorkerReporter): Promise<void> {
   const controller = new AbortController()
@@ -105,6 +157,11 @@ export async function runWorkerJob(job: WorkerJob, reporter: WorkerReporter): Pr
       timestamp: new Date(job.timestampIso),
       hideIsoPartitionFromWindows: job.hideIsoPartitionFromWindows,
     })
+
+    // ジョブファイルは通常権限のユーザーが書ける場所にあるので、
+    // 昇格側でもう一度デバイスを列挙して「書いてよい相手か」を確かめる。
+    // UAC の確認が出ている隙にジョブを差し替えられても、ここで止まる。
+    await assertDeviceIsWritable(platform, job)
 
     reporter.send({
       type: 'log',

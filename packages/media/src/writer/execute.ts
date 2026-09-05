@@ -244,21 +244,10 @@ export async function executeWritePlan(options: ExecuteOptions): Promise<WriteRe
   const survivingFor = (index: number): ByteRange[] =>
     survivingRanges(geometry[index]!, geometry.slice(index + 1))
 
-  for (const [i, op] of plan.ops.entries()) await runOp(op, survivingFor(i))
-
-  report('flushing', 'デバイスへの書き込みを完了させています', true)
-  await targetDevice.flush()
-
-  // パーティションテーブルは最後に書く。ここまでに中断された USB は起動しない。
-  for (const [i, op] of plan.finalOps.entries()) {
-    await runOp(op, survivingFor(plan.ops.length + i))
-  }
-  await targetDevice.flush()
-
-  let verified = false
-  if (verify) {
+  const verifyRanges = async (targets: readonly RangeDigest[]): Promise<void> => {
+    if (!verify || targets.length === 0) return
     report('verifying', '書き込んだ内容を読み戻して確認しています', true)
-    for (const r of ranges) {
+    for (const r of targets) {
       check()
       const h = createHash('sha256')
       for (let pos = 0; pos < r.length; pos += chunkSize) {
@@ -272,8 +261,32 @@ export async function executeWritePlan(options: ExecuteOptions): Promise<WriteRe
         )
       }
     }
-    verified = true
   }
+
+  for (const [i, op] of plan.ops.entries()) await runOp(op, survivingFor(i))
+
+  report('flushing', 'デバイスへの書き込みを完了させています', true)
+  await targetDevice.flush()
+
+  // 本体の照合は**パーティションテーブルを書く前**に済ませる。
+  //
+  // 実機で判明した問題: パーティションテーブルを書いた瞬間に Windows がディスクを
+  // 再スキャンし、CIDATA (FAT) を自動マウントして `System Volume Information` を作る。
+  // その結果、正常に書けた USB でも読み戻しハッシュが一致せず「書き込みに失敗しました」に
+  // なっていた。ここまではディスクに有効なパーティションテーブルが無い（最初の op で
+  // LBA0 をゼロにしている）ので、OS はマウントできず、書いたバイトがそのまま読み戻せる。
+  const bodyRanges = ranges.slice()
+  await verifyRanges(bodyRanges)
+
+  // パーティションテーブルは最後に書く。ここまでに中断された USB は起動しない。
+  for (const [i, op] of plan.finalOps.entries()) {
+    await runOp(op, survivingFor(plan.ops.length + i))
+  }
+  await targetDevice.flush()
+
+  // テーブル自体の照合。OS はマウント時にここへは書かないので、書いた直後で問題ない。
+  await verifyRanges(ranges.slice(bodyRanges.length))
+  const verified = verify
 
   report('done', '完了', true)
   return {

@@ -25,7 +25,7 @@ export function ReviewStep(): React.JSX.Element {
       ? (config?.userData ?? '')
       : tab === 'autoinstall'
         ? (config?.autoinstallYaml ?? '')
-        : (iso?.patchedGrubCfg ?? '')
+        : (config?.patchedGrubCfg ?? iso?.patchedGrubCfg ?? '')
 
   const copy = async (): Promise<void> => {
     await navigator.clipboard.writeText(currentCode)
@@ -165,6 +165,20 @@ export function ReviewStep(): React.JSX.Element {
           </Summary>
           <Summary label="apt full-upgrade">
             {profile.postInstall.aptFullUpgrade ? '実行する' : 'しない'}
+          </Summary>
+          <Summary label="実行時に決める値">
+            {(() => {
+              const rv = profile.runtimeValues
+              const parts = (['hostname', 'network', 'disk'] as const)
+                .filter((f) => rv[f] !== 'fixed')
+                .map((f) => {
+                  const name = f === 'hostname' ? 'ホスト名' : f === 'network' ? 'ネットワーク' : 'ディスク'
+                  return `${name}: ${rv[f] === 'kernel-arg' ? '起動メニュー' : '手入力'}`
+                })
+              if (parts.length === 0) return 'なし（すべて固定）'
+              const menu = rv.presets.length > 0 ? `／メニュー ${rv.presets.length} 件` : ''
+              return parts.join(' / ') + menu
+            })()}
           </Summary>
           <Summary label="インストール後の動作">
             {profile.behavior.shutdown === 'reboot' ? '再起動' : '電源オフ'}

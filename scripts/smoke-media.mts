@@ -220,7 +220,11 @@ async function checkFullWrite(path: string): Promise<void> {
     check('追加ユーザーのパスワードを chpasswd -e で設定する', lateText.includes('chpasswd -e'))
     check('SSH 鍵を authorized_keys に置く', lateText.includes('/home/deploy/.ssh/authorized_keys'))
     check('アーカイブを展開する', lateText.includes('tar -xzf'))
-    check('systemd ユニットを書いて enable する', lateText.includes('systemctl enable myapp.service'))
+    // サービス名も自由入力なのでクォートして渡す（未クォートだと in-target で任意コマンドが動く）
+    check(
+      'systemd ユニットを書いて enable する',
+      lateText.includes("systemctl enable 'myapp.service'"),
+    )
     check('apt full-upgrade を実行する', lateText.includes('apt-get -y full-upgrade'))
     check('最後に seed をアンマウントする', late.at(-1)?.startsWith('umount ') === true)
 
@@ -228,7 +232,12 @@ async function checkFullWrite(path: string): Promise<void> {
     if (gpuSupported) {
       check('CUDA の keyring を初回起動時に入れる', firstBoot.includes('cuda-keyring_1.1-1_all.deb'))
       check('CUDA のパッケージを apt で入れる', firstBoot.includes('nvidia-open'))
-      check('ドライバ導入後に再起動する', firstBoot.trimEnd().endsWith('systemctl reboot'))
+      // GPU の導入は 1 エントリの `sh -e -c` にまとめてある（落とし穴 28）。
+      // 途中で失敗したら reboot に到達しないのが正しい。
+      check(
+        'ドライバ導入後に再起動する',
+        firstBoot.trimEnd().endsWith("systemctl reboot'"),
+      )
     } else {
       check('CUDA 非対応バージョンでは runcmd を出さない', firstBoot === '')
     }

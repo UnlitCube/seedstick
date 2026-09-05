@@ -11,6 +11,14 @@ export interface WorkerJob {
   readonly isoPath: string
   readonly devicePath: string
   readonly deviceSizeBytes: number
+  /**
+   * ユーザーが選んだ実物を昇格側でも見分けるための情報。
+   * デバイスノード（`\\.\PhysicalDriveN` / `/dev/sdX`）は抜き差しで再利用されるので、
+   * パスと容量だけでは「同じ容量の別のディスク」を止められない。
+   * 列挙で取れなければ null。
+   */
+  readonly deviceSerial: string | null
+  readonly deviceDescription: string
   /** grub.cfg 等のインプレース改変。オフセットと base64 のデータ。 */
   readonly patches: readonly { readonly offset: number; readonly data: string; readonly label: string }[]
   /** CIDATA に入れるファイル。内容は base64。 */

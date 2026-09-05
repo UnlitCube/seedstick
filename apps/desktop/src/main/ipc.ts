@@ -7,12 +7,16 @@ import {
   buildIsoPatches,
   inspectIso,
   getPlatformOps,
+  patchGrubCfg,
+  remainingGrubBytes,
   type RemovableDevice,
 } from '@autoinstall/media'
 import {
+  buildGrubPlan,
   detectArchiveFormat,
   generateAutoinstallYaml,
   generateMetaData,
+  isUnattendedProfile,
   generateUserData,
   migrateProfile,
   validateProfile,
@@ -22,10 +26,12 @@ import {
   type GeneratedConfig,
   type PickedFile,
   type WriteRequest,
+  type GenerateOptions,
 } from '@autoinstall/shared'
 // crypt はバレルに載せていない（renderer に Node の型を持ち込まないため）。main から直接 import する。
 import { sha512Crypt } from '@autoinstall/shared/crypt'
 import { computeChecksum, openIso } from './iso-service.js'
+import { rememberChosenPayload, wasChosenByUser } from './payload-allowlist.js'
 import * as profileStore from './profile-store.js'
 import { buildSeedBundle, SeedBuildError } from './seed-builder.js'
 import { getSettings, saveSettings } from './settings.js'
@@ -36,12 +42,38 @@ import { WriteSupervisor } from './write-supervisor.js'
 
 const supervisor = new WriteSupervisor()
 
+/**
+ * プロファイルに書かれた同梱ファイルのパスを許可リストに入れる。
+ *
+ * プロファイルは他の PC から持ち込まれることを想定した機能なので、
+ * JSON に書かれたパスは信用できる入力ではない。
+ *
+ * **「実在するか」は安全性の検査ではない。** 実在確認だけで許可していたため、
+ * 他人からもらったプロファイル JSON に `.ssh/id_rsa` のような読めるファイルを
+ * 書いておくだけで、開いて USB を作った利用者のファイルが CIDATA に載っていた。
+ * 許可するのは **利用者が自分でダイアログから選んだことのあるパスだけ**にする
+ * （その記録は payload-allowlist.ts に残る）。
+ *
+ * 記録に無いパスは登録しない。後段の generate() が `missingSources` として
+ * 画面に出すので、利用者は選び直せる。
+ */
+async function allowProfilePayloads(profile: AutoinstallProfile): Promise<void> {
+  for (const d of profile.postInstall.deployments) {
+    if (d.source.kind !== 'host-file') continue
+    if (!(await wasChosenByUser(d.source.path))) continue
+    const info = await profileStore.checkHostFile(d.source.path)
+    if (info.exists) allowedPayloadPaths.add(d.source.path)
+  }
+}
+
 /** renderer が指定できる ISO パスは、ユーザーがダイアログで選んだものだけに限る。 */
 const allowedIsoPaths = new Set<string>()
 /** ペイロードとして読めるパスも、ダイアログで選ばれたものだけに限る。 */
 const allowedPayloadPaths = new Set<string>()
 /** renderer が指定できるデバイス ID は、直近の列挙結果に含まれ、かつ選択可能なものだけ。 */
 let selectableDeviceIds = new Set<string>()
+/** 直近に開いた ISO の grub.cfg 原文。確認画面のプレビューに使う。 */
+let lastIsoGrubCfg: string | null = null
 
 function toDeviceInfo(d: RemovableDevice): DeviceInfo {
   return {
@@ -89,15 +121,52 @@ async function generate(profile: AutoinstallProfile): Promise<GeneratedConfig> {
     }
   }
 
+  // grub.cfg のプレビュー。ISO を開いていれば実物を元に作る。
+  let patchedGrubCfg: string | null = null
+  let grubFreeBytes = 0
+  let grubTooLarge = false
+  if (lastIsoGrubCfg !== null) {
+    const plan = buildGrubPlan(profile)
+    const patched = patchGrubCfg(lastIsoGrubCfg, {
+      args: plan.args,
+      markTitle: true,
+      extraEntries: plan.entries,
+    })
+    patchedGrubCfg = patched.text
+    grubFreeBytes = remainingGrubBytes(patched.text)
+    grubTooLarge = grubFreeBytes < 0
+  }
+
+  // 収まらないことは「エラー」として一覧に出す。ok を false にするだけだと
+  // 確認画面は「問題ありません」のまま次へ進めなくなり、理由が分からない。
+  const issues = grubTooLarge
+    ? [
+        ...validation.issues,
+        {
+          severity: 'error' as const,
+          field: 'runtimeValues.presets',
+          messageJa: `起動メニューが 1 セクタ (2048 バイト) に収まりません（あと ${-grubFreeBytes} バイト超過）。ホストの件数を減らすか、メニュー名を短くしてください。`,
+          messageEn: `The boot menu does not fit in one sector (2048 bytes); it is ${-grubFreeBytes} bytes too large. Remove hosts or shorten the menu names.`,
+        },
+      ]
+    : validation.issues
+
   return {
     userData: generateUserData(profile, options),
     metaData: generateMetaData(`autoinstall-${profile.basics.hostname || 'ubuntu'}`),
     autoinstallYaml: generateAutoinstallYaml(profile, options),
-    issues: validation.issues,
-    ok: validation.ok,
-    unattended: profile.behavior.interactiveSections.length === 0,
+    issues,
+    ok: validation.ok && !grubTooLarge,
+    // 「電源を入れるだけで完了する」かどうか。
+    // プロファイルの設定からではなく **実際に出力される YAML** を見る。
+    // シリーズによって出さないキーがあるので、設定だけを見ると食い違う
+    // （22.04 で「対話あり」と表示しながら完全無人の YAML を出していた）。
+    unattended: isUnattendedProfile(profile, options),
     payloadBytes,
     missingSources,
+    patchedGrubCfg,
+    grubFreeBytes,
+    grubTooLarge,
   }
 }
 
@@ -115,7 +184,10 @@ export function registerIpc(): void {
     if (result.canceled || !path) return null
     await saveSettings({ ...settings, lastIsoDirectory: dirname(path) })
     const opened = await openIso(path)
-    if (opened.ok) allowedIsoPaths.add(path)
+    if (opened.ok) {
+      allowedIsoPaths.add(path)
+      lastIsoGrubCfg = opened.info.grubCfg
+    }
     return opened
   })
 
@@ -123,7 +195,10 @@ export function registerIpc(): void {
   ipcMain.handle('openIso', async (_e, path: unknown) => {
     if (typeof path !== 'string') return { ok: false, reason: 'invalid', detail: 'パスが不正です。' }
     const opened = await openIso(path)
-    if (opened.ok) allowedIsoPaths.add(path)
+    if (opened.ok) {
+      allowedIsoPaths.add(path)
+      lastIsoGrubCfg = opened.info.grubCfg
+    }
     return opened
   })
 
@@ -137,7 +212,35 @@ export function registerIpc(): void {
   })
 
   // --- 設定生成 ---
-  ipcMain.handle('generateConfig', (_e, profile: AutoinstallProfile) => generate(profile))
+  ipcMain.handle('generateConfig', async (_e, profile: AutoinstallProfile) => {
+    try {
+      return await generate(profile)
+    } catch (err) {
+      // ここで reject すると renderer は config を null にするだけなので、
+      // 確認画面はエラーも理由も出さずに「次へ」が無効になる（実機で確認）。
+      // 生成できない理由をエラー 1 件として返し、必ず画面に出す。
+      return {
+        userData: '',
+        metaData: '',
+        autoinstallYaml: '',
+        issues: [
+          {
+            severity: 'error' as const,
+            field: 'advanced.rawOverlayYaml',
+            messageJa: `設定を生成できませんでした: ${(err as Error).message}`,
+            messageEn: `Could not generate the configuration: ${(err as Error).message}`,
+          },
+        ],
+        ok: false,
+        unattended: false,
+        payloadBytes: 0,
+        missingSources: [],
+        patchedGrubCfg: null,
+        grubFreeBytes: 0,
+        grubTooLarge: false,
+      }
+    }
+  })
 
   ipcMain.handle('hashPassword', (_e, plain: unknown) => {
     if (typeof plain !== 'string') throw new Error('パスワードが不正です。')
@@ -154,9 +257,13 @@ export function registerIpc(): void {
     return profileStore.saveProfile(id, name.trim(), profile)
   })
 
-  ipcMain.handle('loadNamedProfile', (_e, id: unknown) => {
+  ipcMain.handle('loadNamedProfile', async (_e, id: unknown) => {
     if (typeof id !== 'string') throw new Error('プロファイル ID が不正です。')
-    return profileStore.loadProfile(id)
+    const loaded = await profileStore.loadProfile(id)
+    // 保存済みプロファイルを開いた場合も同梱ファイルを読めるようにする。
+    // ここを通さないと、アプリを再起動したあと「一度も書き込めない」状態になる。
+    if (loaded) await allowProfilePayloads(loaded.profile)
+    return loaded
   })
 
   ipcMain.handle('deleteNamedProfile', (_e, id: unknown) => {
@@ -201,10 +308,9 @@ export function registerIpc(): void {
     if (result.canceled || !path) return null
     const raw = JSON.parse(await readFile(path, 'utf8')) as { profile?: unknown }
     const { profile, notes } = migrateProfile(raw.profile ?? raw)
-    // 読み込んだプロファイルが参照するペイロードは、以後読めるように許可しておく
-    for (const d of profile.postInstall.deployments) {
-      if (d.source.kind === 'host-file') allowedPayloadPaths.add(d.source.path)
-    }
+    // 読み込んだプロファイルが参照するペイロードは、以後読めるように許可しておく。
+    // 取り込んだ JSON の任意パスをそのまま信じず、実在するファイルだけ登録する。
+    await allowProfilePayloads(profile)
     return { profile, notes: [...notes] }
   })
 
@@ -216,7 +322,16 @@ export function registerIpc(): void {
     })
     const path = result.filePaths[0]
     if (result.canceled || !path) return null
-    return profileStore.importProfileFile(path, basename(path).replace(/\.profile\.json$|\.json$/, ''))
+    const ref = await profileStore.importProfileFile(
+      path,
+      basename(path).replace(/\.profile\.json$|\.json$/, ''),
+    )
+    // 取り込んだ直後に開けるよう、同梱ファイルのパスも通しておく
+    if (ref) {
+      const loaded = await profileStore.loadProfile(ref.id)
+      if (loaded) await allowProfilePayloads(loaded.profile)
+    }
+    return ref
   })
 
   ipcMain.handle('exportBundle', async (_e, profile: AutoinstallProfile) => {
@@ -270,6 +385,9 @@ export function registerIpc(): void {
     if (result.canceled || !path) return null
     const info = await stat(path)
     allowedPayloadPaths.add(path)
+    // 「自分で選んだ」ことを残す。次回このプロファイルを開いたときに、
+    // 選び直さずに書き込めるのはこの記録があるパスだけ。
+    await rememberChosenPayload(path)
     return {
       path,
       name: basename(path),
@@ -322,23 +440,35 @@ export function registerIpc(): void {
     }
 
     // ISO のパッチは main 側で作る。画面に見せた内容とワーカーが書く内容を一致させるため。
-    const isoDev = await FileBlockDevice.open(req.isoPath, 'r')
+    // ここで投げる例外（grub.cfg が 1 セクタに収まらない、ISO が壊れている等）を
+    // 握らないと ipcMain.handle が reject し、GUI 側は理由の分からないまま
+    // 「書き込みを開始」が無反応になる。
     let patches
     let isoFingerprint = ''
     try {
-      const inspection = await inspectIso(isoDev)
-      const plan = buildIsoPatches(inspection, { args: ['autoinstall'], markTitle: true })
-      patches = plan.patches.map((p) => ({
-        offset: p.offset,
-        data: p.data.toString('base64'),
-        label: p.label,
-      }))
-      // 監査記録用。全体のハッシュは重いので、識別に足る情報だけを使う。
-      isoFingerprint = createHash('sha256')
-        .update(`${inspection.volumeId}|${inspection.sizeBytes}|${inspection.diskInfo ?? ''}`)
-        .digest('hex')
-    } finally {
-      await isoDev.close().catch(() => undefined)
+      const isoDev = await FileBlockDevice.open(req.isoPath, 'r')
+      try {
+        const inspection = await inspectIso(isoDev)
+        const grubPlan = buildGrubPlan(req.profile)
+        const plan = buildIsoPatches(inspection, {
+          args: grubPlan.args,
+          markTitle: true,
+          extraEntries: grubPlan.entries,
+        })
+        patches = plan.patches.map((p) => ({
+          offset: p.offset,
+          data: p.data.toString('base64'),
+          label: p.label,
+        }))
+        // 監査記録用。全体のハッシュは重いので、識別に足る情報だけを使う。
+        isoFingerprint = createHash('sha256')
+          .update(`${inspection.volumeId}|${inspection.sizeBytes}|${inspection.diskInfo ?? ''}`)
+          .digest('hex')
+      } finally {
+        await isoDev.close().catch(() => undefined)
+      }
+    } catch (err) {
+      return { started: false, message: (err as Error).message }
     }
 
     const settings = await getSettings()
@@ -367,6 +497,9 @@ export function registerIpc(): void {
       isoPath: req.isoPath,
       devicePath: device.id,
       deviceSizeBytes: device.sizeBytes,
+      // 昇格側で「ユーザーが選んだ実物」を見分けるために渡す
+      deviceSerial: device.serial,
+      deviceDescription: device.description,
       patches,
       seedFiles: bundle.files.map((f) => ({ name: f.name, content: f.content.toString('base64') })),
       cidataSizeBytes: bundle.cidataSizeBytes,
@@ -435,4 +568,25 @@ export function registerIpc(): void {
 
 export function disposeIpc(): Promise<void> {
   return supervisor.dispose()
+}
+
+/** 書き込みが走っているか（終了時の確認に使う）。 */
+export function isWriteInProgress(): boolean {
+  return supervisor.isBusy()
+}
+
+/**
+ * 書き込みを止めてから片付ける。
+ *
+ * いきなりプロセスを落とすと、昇格したワーカーが孤児になって USB を書き続ける。
+ * パーティションテーブルを書く直前で切られた USB は「起動しないのに書き込み済みに
+ * 見える」状態になるので、まず cancel を送り、終わるのを待ってから閉じる。
+ */
+export async function shutdownWrite(timeoutMs = 15000): Promise<void> {
+  if (!supervisor.isBusy()) return
+  await supervisor.cancel()
+  const deadline = Date.now() + timeoutMs
+  while (supervisor.isBusy() && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 200))
+  }
 }

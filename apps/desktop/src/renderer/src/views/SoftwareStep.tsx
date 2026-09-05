@@ -1,8 +1,29 @@
-import { APT_MIRROR_PRESETS, COMMON_PACKAGES, SERIES_FEATURES } from '@autoinstall/shared'
+import {
+  APT_FALLBACK_CHOICES,
+  APT_MIRROR_PRESETS,
+  COMMON_PACKAGES,
+  KERNEL_FLAVORS,
+  SERIES_FEATURES,
+  isDebLineSource,
+  isPpaSource,
+  type AptFallback,
+  type AptSource,
+  type KernelChoice,
+} from '@autoinstall/shared'
 import { useStore } from '../store.js'
 import { useT } from '../lib/i18n.js'
 import { Badge, Callout, Card, Field, RadioGroup, Select, Switch, TextArea, TextInput } from '../components/ui.js'
+import { Plus, Trash2 } from 'lucide-react'
 import { GpuSection } from './sections/Gpu.js'
+
+/** 既存と衝突しない `.list` 名を作る。curtin の apt.sources はマップなので名前が一意でないと消える。 */
+function nextSourceName(existing: readonly AptSource[]): string {
+  const used = new Set(existing.map((s) => s.name))
+  for (let i = 1; ; i++) {
+    const name = `extra-${i}.list`
+    if (!used.has(name)) return name
+  }
+}
 
 export function SoftwareStep(): React.JSX.Element {
   const t = useT()
@@ -25,6 +46,12 @@ export function SoftwareStep(): React.JSX.Element {
       return { ...p, software: { ...p.software, packages: [...next] } }
     })
   }
+
+  const setSource = (index: number, patch: Partial<AptSource>): void =>
+    update((p) => ({
+      ...p,
+      apt: { ...p.apt, sources: p.apt.sources.map((s, i) => (i === index ? { ...s, ...patch } : s)) },
+    }))
 
   const setCustomPackages = (text: string): void => {
     const custom = text.split(/[\s,]+/).filter(Boolean)
@@ -179,13 +206,126 @@ export function SoftwareStep(): React.JSX.Element {
             </Field>
           )}
         </div>
-        <div className="mt-4">
+        <div className="mt-4 space-y-3">
           <Switch
             checked={profile.software.installDrivers}
             onChange={(v) => update((p) => ({ ...p, software: { ...p.software, installDrivers: v } }))}
             label={t('software.drivers')}
             description="NVIDIA など、サードパーティのドライバを自動で検出してインストールします。"
           />
+          {features.source && (
+            // Switch だと「探索を止める」(false) が選べず null に戻ってしまうので 3 状態にする。
+            // null は source.search_drivers を出さない＝インストーラの既定に任せる。
+            <Field label={t('adv.searchDrivers')} hint={t('adv.searchDriversHint')}>
+              {(id) => (
+                <Select
+                  id={id}
+                  value={
+                    profile.software.searchDrivers === null
+                      ? 'default'
+                      : profile.software.searchDrivers
+                        ? 'on'
+                        : 'off'
+                  }
+                  onChange={(v) =>
+                    update((p) => ({
+                      ...p,
+                      software: {
+                        ...p.software,
+                        searchDrivers: v === 'default' ? null : v === 'on',
+                      },
+                    }))
+                  }
+                  options={[
+                    { value: 'default', label: t('adv.searchDriversDefault') },
+                    { value: 'on', label: t('adv.searchDriversOn') },
+                    { value: 'off', label: t('adv.searchDriversOff') },
+                  ]}
+                />
+              )}
+            </Field>
+          )}
+          {features.codecsOemAd && (
+            <Switch
+              checked={profile.software.codecs}
+              onChange={(codecs) => update((p) => ({ ...p, software: { ...p.software, codecs } }))}
+              label={t('adv.codecs')}
+              description={t('adv.codecsHint')}
+            />
+          )}
+          {features.codecsOemAd && (
+            <Switch
+              checked={profile.software.oem === 'yes'}
+              onChange={(on) =>
+                update((p) => ({ ...p, software: { ...p.software, oem: on ? 'yes' : 'auto' } }))
+              }
+              label={t('adv.oem')}
+              description={t('adv.oemHint')}
+            />
+          )}
+        </div>
+
+        <div className="mt-5">
+          <Field label={t('adv.kernelTitle')}>
+            {(id) => (
+              <Select
+                id={id}
+                value={
+                  profile.software.kernel.mode === 'default'
+                    ? 'default'
+                    : profile.software.kernel.mode === 'package'
+                      ? 'package'
+                      : profile.software.kernel.flavor
+                }
+                onChange={(v) => {
+                  const kernel: KernelChoice =
+                    v === 'default'
+                      ? { mode: 'default' }
+                      : v === 'package'
+                        ? {
+                            mode: 'package',
+                            package:
+                              profile.software.kernel.mode === 'package'
+                                ? profile.software.kernel.package
+                                : '',
+                          }
+                        : { mode: 'flavor', flavor: v }
+                  update((p) => ({ ...p, software: { ...p.software, kernel } }))
+                }}
+                options={[
+                  { value: 'default', label: t('adv.kernelDefault') },
+                  ...KERNEL_FLAVORS.map((f) => ({ value: f.value, label: label(f) })),
+                  { value: 'package', label: t('adv.kernelCustom') },
+                ]}
+              />
+            )}
+          </Field>
+          {profile.software.kernel.mode === 'package' && (
+            <div className="mt-3">
+              <Field label={t('adv.kernelFlavor')} required>
+                {(id) => (
+                  <TextInput
+                    id={id}
+                    spellCheck={false}
+                    placeholder="linux-generic-hwe-24.04"
+                    value={profile.software.kernel.mode === 'package' ? profile.software.kernel.package : ''}
+                    onChange={(e) =>
+                      update((p) => ({
+                        ...p,
+                        software: { ...p.software, kernel: { mode: 'package', package: e.target.value } },
+                      }))
+                    }
+                  />
+                )}
+              </Field>
+            </div>
+          )}
+          {profile.software.kernel.mode === 'flavor' &&
+            profile.software.kernel.flavor.includes('hwe') && (
+              <div className="mt-3">
+                <Callout tone="info">{t('adv.kernelHweHint')}</Callout>
+              </div>
+            )}
         </div>
       </Card>
 
@@ -252,6 +392,95 @@ export function SoftwareStep(): React.JSX.Element {
               />
             )}
           </Field>
+        </div>
+      </Card>
+
+      <Card title={t('adv.aptTitle')}>
+        <Field label={t('adv.aptSources')} hint={t('adv.aptSourcesHint')}>
+          {() => (
+            <div className="space-y-2">
+              {profile.apt.sources.map((src, i) => (
+                <div key={src.id} className="flex gap-2">
+                  <TextInput
+                    value={src.source}
+                    spellCheck={false}
+                    placeholder="ppa:ondrej/php"
+                    invalid={src.source !== '' && !isPpaSource(src.source) && !isDebLineSource(src.source)}
+                    onChange={(e) => setSource(i, { source: e.target.value })}
+                  />
+                  <button
+                    type="button"
+                    aria-label={t('common.delete')}
+                    onClick={() =>
+                      update((p) => ({
+                        ...p,
+                        apt: { ...p.apt, sources: p.apt.sources.filter((_, j) => j !== i) },
+                      }))
+                    }
+                    className="shrink-0 rounded-lg p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40"
+                  >
+                    <Trash2 className="size-4" aria-hidden />
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() =>
+                  update((p) => ({
+                    ...p,
+                    apt: {
+                      ...p.apt,
+                      sources: [
+                        ...p.apt.sources,
+                        {
+                          id: crypto.randomUUID(),
+                          // 連番だと「2 件足して 1 件消してまた足す」で名前が衝突し、
+                          // curtin の sources はマップなので片方が黙って消える。
+                          name: nextSourceName(p.apt.sources),
+                          source: '',
+                          key: '',
+                        } satisfies AptSource,
+                      ],
+                    },
+                  }))
+                }
+                className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm text-slate-600 transition hover:border-slate-400 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+              >
+                <Plus className="size-4" aria-hidden />
+                {t('common.add')}
+              </button>
+            </div>
+          )}
+        </Field>
+
+        {profile.apt.sources.some((s) => isDebLineSource(s.source)) && (
+          <div className="mt-3">
+            <Callout tone="warning">
+              deb 行を直接書いた場合、署名鍵は自分で用意する必要があります（`signed-by=` を指定するか、
+              上級者向けタブの生 YAML で <code className="font-mono">apt.sources</code> に鍵を書きます）。
+            </Callout>
+          </div>
+        )}
+
+        <div className="mt-4 space-y-3">
+          <Field label={t('adv.aptFallback')}>
+            {(id) => (
+              <Select
+                id={id}
+                value={profile.apt.fallback}
+                onChange={(v) => update((p) => ({ ...p, apt: { ...p.apt, fallback: v as AptFallback } }))}
+                options={APT_FALLBACK_CHOICES.map((c) => ({ value: c.value, label: label(c) }))}
+              />
+            )}
+          </Field>
+          <Switch
+            checked={profile.apt.preserveSourcesList}
+            onChange={(preserveSourcesList) =>
+              update((p) => ({ ...p, apt: { ...p.apt, preserveSourcesList } }))
+            }
+            label={t('adv.aptPreserve')}
+            description={t('adv.aptPreserveHint')}
+          />
         </div>
       </Card>
 

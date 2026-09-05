@@ -446,3 +446,118 @@ describe('レイアウトの安全性', () => {
     expect(lastPhase).toBe('done')
   }, 300_000)
 })
+
+// 実機（Windows + KIOXIA 31GB）で見つかった不具合の回帰テスト。
+//
+// パーティションテーブルを書いた瞬間に Windows がディスクを再スキャンして
+// CIDATA (FAT) を自動マウントし、`System Volume Information` を作る。
+// 検証をその後に回していたため、正常に書けた USB でもハッシュが一致せず
+// 「書き込みに失敗しました」になっていた。
+// 対策は「本体の照合をパーティションテーブルより先に済ませる」こと。
+describe('OS がマウントして書き込んでくる環境', () => {
+  /**
+   * LBA0 に有効なパーティションテーブルが書かれた瞬間、OS が CIDATA を
+   * マウントしてディレクトリエントリを 1 つ作る、という状況を再現するデバイス。
+   */
+  class AutoMountingDevice extends MemoryBlockDevice {
+    mounted = false
+    /** CIDATA の先頭オフセット。ここに OS が書き込む。 */
+    constructor(
+      size: number,
+      private readonly cidataOffset: number,
+    ) {
+      super(size)
+    }
+
+    override async write(offset: number, data: Buffer): Promise<void> {
+      await super.write(offset, data)
+      // MBR/GPT が書かれたらディスクが「使える」状態になり、OS がマウントする
+      if (!this.mounted && offset === 0 && data.length >= SECTOR_SIZE) {
+        this.mounted = true
+        // OS が FAT のどこかに書き込む（System Volume Information の作成に相当）
+        const dirt = Buffer.alloc(SECTOR_SIZE, 0x5a)
+        await super.write(this.cidataOffset + 64 * SECTOR_SIZE, dirt)
+      }
+    }
+  }
+
+  it('テーブルを書く前に本体を照合するので、マウントされても検証は通る', async () => {
+    const { iso, patchPlan, plan } = await makePlan(CASES[0]!)
+    const usb = new AutoMountingDevice(USB_SIZE, plan.cidata.startLba * SECTOR_SIZE)
+    const result = await executeWritePlan({
+      plan,
+      isoDevice: iso,
+      targetDevice: usb,
+      patches: patchPlan.patches,
+      verify: true,
+    })
+    expect(result.verified).toBe(true)
+    // 実際にマウントされた（＝テストが状況を再現できている）ことを確かめる
+    expect(usb.mounted).toBe(true)
+  })
+
+  it('本体の照合はパーティションテーブルの書き込みより前に行われる', async () => {
+    const { iso, patchPlan, plan } = await makePlan(CASES[0]!)
+    const cidataOffset = plan.cidata.startLba * SECTOR_SIZE
+
+    const order: string[] = []
+    class RecordingDevice extends MemoryBlockDevice {
+      override async write(offset: number, data: Buffer): Promise<void> {
+        // finalOps は LBA0 から始まる（protective MBR + GPT）
+        if (offset === 0 && data.length >= SECTOR_SIZE) order.push('write-table')
+        await super.write(offset, data)
+      }
+
+      override async read(offset: number, length: number): Promise<Buffer> {
+        if (offset >= cidataOffset && offset < cidataOffset + plan.cidata.sizeBytes) {
+          order.push('verify-cidata')
+        }
+        return super.read(offset, length)
+      }
+    }
+
+    const usb = new RecordingDevice(USB_SIZE)
+    await executeWritePlan({
+      plan,
+      isoDevice: iso,
+      targetDevice: usb,
+      patches: patchPlan.patches,
+      verify: true,
+    })
+
+    const firstVerify = order.indexOf('verify-cidata')
+    // 最初の LBA0 書き込みは「テーブルを消す」ゼロ埋め。テーブルを書くのは最後。
+    const lastTableWrite = order.lastIndexOf('write-table')
+    expect(firstVerify).toBeGreaterThanOrEqual(0)
+    expect(lastTableWrite).toBeGreaterThanOrEqual(0)
+    expect(firstVerify).toBeLessThan(lastTableWrite)
+  })
+
+  it('本当に壊れていれば検証は落ちる（マウント対策で見逃さない）', async () => {
+    const { iso, patchPlan, plan } = await makePlan(CASES[0]!)
+    const cidataOffset = plan.cidata.startLba * SECTOR_SIZE
+    class FlakyDevice extends MemoryBlockDevice {
+      override async write(offset: number, data: Buffer): Promise<void> {
+        // CIDATA の先頭セクタだけ書けていない不良メディアを模す
+        if (offset === cidataOffset) return
+        await super.write(offset, data)
+      }
+    }
+    const usb = new FlakyDevice(USB_SIZE)
+    let error: unknown = null
+    try {
+      await executeWritePlan({
+        plan,
+        isoDevice: iso,
+        targetDevice: usb,
+        patches: patchPlan.patches,
+        verify: true,
+      })
+    } catch (e) {
+      error = e
+    }
+    // 巨大なオブジェクトを expect に渡すと vitest が OOM するので自前で判定する
+    expect(error).toBeInstanceOf(VerificationError)
+    expect((error as VerificationError).diskOffset).toBe(cidataOffset)
+  })
+})

@@ -52,6 +52,22 @@ function inTargetSh(script: string): string {
   return `curtin in-target -- sh -c ${shellQuote(script)}`
 }
 
+/**
+ * 内容をファイルへ書き出すコマンド。**ヒアドキュメントは使わない。**
+ *
+ * `<<'AUTOINSTALL_EOF' … AUTOINSTALL_EOF` は、内容の中に終端子と同じ行があると
+ * そこで閉じてしまう。SSH 公開鍵のコメント欄も systemd ユニットの追加行も自由入力なので、
+ * `AUTOINSTALL_EOF` という行を書くだけで残りが in-target の root シェルの
+ * コマンドとして実行できた（実際に再現した）。
+ *
+ * `printf '%s'` に shellQuote した内容を渡せば、内容がどんなバイト列でも
+ * シェルの構文としては 1 個の引数にしかならない。`echo` ではなく `printf` なのは、
+ * `echo` がバックスラッシュを解釈する実装（dash の組み込み）があるため。
+ */
+function writeFileCommand(path: string, content: string): string {
+  return `printf '%s' ${shellQuote(content)} > ${shellQuote(path)}`
+}
+
 // ---------------------------------------------------------------------------
 // 追加ユーザー
 // ---------------------------------------------------------------------------
@@ -59,44 +75,50 @@ function inTargetSh(script: string): string {
 export function additionalUserCommands(user: AdditionalUser): string[] {
   const cmds: string[] = []
   const name = user.username
+  const q = shellQuote(name)
   const opts: string[] = []
   if (user.systemAccount) opts.push('-r')
   opts.push(user.createHome ? '-m' : '-M')
-  if (user.shell) opts.push('-s', user.shell)
+  // shell も realname も groups も自由入力。検証を通していても生成側で必ずクォートする
+  // （検証と生成のどちらか一方だけに頼らない）。
+  if (user.shell) opts.push('-s', shellQuote(user.shell))
   if (user.realname) opts.push('-c', shellQuote(user.realname))
   if (user.groups.length > 0) opts.push('-G', shellQuote(user.groups.join(',')))
 
   // 既にいる場合を考慮して `id` で存在確認する（useradd の失敗で install を落とさない）
-  cmds.push(
-    inTargetSh(`id -u ${name} >/dev/null 2>&1 || useradd ${opts.join(' ')} ${name}`),
-  )
+  cmds.push(inTargetSh(`id -u ${q} >/dev/null 2>&1 || useradd ${opts.join(' ')} ${q}`))
 
   if (user.passwordHash) {
-    // chpasswd -e はハッシュをそのまま設定する。ハッシュに `$` が含まれるので必ずクォートする。
-    cmds.push(inTargetSh(`echo '${name}:${user.passwordHash}' | chpasswd -e`))
+    // chpasswd -e はハッシュをそのまま設定する。
+    // 手書きの `'…'` で囲うと、ハッシュに `'` が 1 個あるだけでクォートを抜けられる。
+    // looksLikeCryptHash は接頭辞しか見ないので検証も通っていた（落とし穴 13 の退行）。
+    cmds.push(inTargetSh(`echo ${shellQuote(`${name}:${user.passwordHash}`)} | chpasswd -e`))
   } else {
     // パスワード未設定はロック（空パスワードでログインできてしまうのを防ぐ）
-    cmds.push(inTarget(`passwd -l ${name}`))
+    cmds.push(inTarget(`passwd -l ${q}`))
   }
 
   if (user.sudo === 'nopasswd') {
+    const sudoersPath = `/target/etc/sudoers.d/90-autoinstall-${name}`
     cmds.push(
-      `echo ${shellQuote(`${name} ALL=(ALL) NOPASSWD:ALL`)} > /target/etc/sudoers.d/90-autoinstall-${name}`,
-      `chmod 0440 /target/etc/sudoers.d/90-autoinstall-${name}`,
+      writeFileCommand(sudoersPath, `${name} ALL=(ALL) NOPASSWD:ALL` + '\n'),
+      `chmod 0440 ${shellQuote(sudoersPath)}`,
     )
   } else if (user.sudo === 'password') {
-    cmds.push(inTarget(`usermod -aG sudo ${name}`))
+    cmds.push(inTarget(`usermod -aG sudo ${q}`))
   }
 
   if (user.sshAuthorizedKeys.length > 0) {
     const home = user.systemAccount ? `/var/lib/${name}` : `/home/${name}`
+    const sshDir = `${home}/.ssh`
+    const keyFile = `${sshDir}/authorized_keys`
     const keys = user.sshAuthorizedKeys.map((k) => k.trim()).filter(Boolean).join('\n')
     cmds.push(
-      inTarget(`mkdir -p ${home}/.ssh`),
-      inTargetSh(`cat > ${home}/.ssh/authorized_keys <<'AUTOINSTALL_EOF'\n${keys}\nAUTOINSTALL_EOF`),
-      inTarget(`chmod 0700 ${home}/.ssh`),
-      inTarget(`chmod 0600 ${home}/.ssh/authorized_keys`),
-      inTarget(`chown -R ${name}:${name} ${home}/.ssh`),
+      inTarget(`mkdir -p ${shellQuote(sshDir)}`),
+      inTargetSh(writeFileCommand(keyFile, keys + '\n')),
+      inTarget(`chmod 0700 ${shellQuote(sshDir)}`),
+      inTarget(`chmod 0600 ${shellQuote(keyFile)}`),
+      inTarget(`chown -R ${q}:${q} ${shellQuote(sshDir)}`),
     )
   }
   return cmds
@@ -149,8 +171,15 @@ export function deploymentCommands(d: Deployment): string[] {
       `cp ${shellQuote(seedFile)} ${shellQuote(dest)}`,
       `chmod ${d.mode} ${shellQuote(dest)}`,
     )
+    // targetPath は `startsWith('/')` しか検証していない自由入力なので必ずクォートする。
+    // ここだけ 3 巡目のクォート修正から漏れており、`/opt/my app` のような普通のパスでも
+    // late-command が失敗し、`;` や `$( )` では root の任意コマンド実行になっていた。
     if (d.owner && d.owner !== 'root') {
-      cmds.push(inTarget(`chown ${d.owner}:${d.group || d.owner} ${d.targetPath}`))
+      cmds.push(inTarget(`chown ${d.owner}:${d.group || d.owner} ${shellQuote(d.targetPath)}`))
+    } else if (d.group && d.group !== 'root') {
+      // URL 経路（deploymentFirstBootCommands）と揃える。所有者は root のまま
+      // グループだけ変えたい設定を、USB 同梱の経路だけ黙って捨てていた。
+      cmds.push(inTarget(`chgrp ${d.group} ${shellQuote(d.targetPath)}`))
     }
     return cmds
   }
@@ -161,12 +190,17 @@ export function deploymentCommands(d: Deployment): string[] {
   cmds.push(
     `mkdir -p /target/var/tmp`,
     `cp ${shellQuote(seedFile)} ${shellQuote(staged)}`,
-    inTarget(`mkdir -p ${d.targetPath}`),
+    inTarget(`mkdir -p ${shellQuote(d.targetPath)}`),
     inTargetSh(extractCommand(d, `/var/tmp/autoinstall-${d.name}`, d.targetPath)),
     `rm -f ${shellQuote(staged)}`,
   )
-  if (d.chownRecursive && d.owner && d.owner !== 'root') {
-    cmds.push(inTarget(`chown -R ${d.owner}:${d.group || d.owner} ${d.targetPath}`))
+  if (d.chownRecursive) {
+    if (d.owner && d.owner !== 'root') {
+      cmds.push(inTarget(`chown -R ${d.owner}:${d.group || d.owner} ${shellQuote(d.targetPath)}`))
+    } else if (d.group && d.group !== 'root') {
+      // 所有者は root のままでグループだけ変えたい設定も成立する
+      cmds.push(inTarget(`chgrp -R ${d.group} ${shellQuote(d.targetPath)}`))
+    }
   }
   if (d.postCommand.trim()) {
     cmds.push(inTargetSh(`cd ${shellQuote(d.targetPath)} && ${d.postCommand.trim()}`))
@@ -174,42 +208,58 @@ export function deploymentCommands(d: Deployment): string[] {
   return cmds
 }
 
-/** URL 取得のペイロードを初回起動時に展開する runcmd。 */
+/**
+ * URL 取得のペイロードを初回起動時に展開する runcmd。
+ *
+ * **1 エントリにまとめて `sh -e` で走らせる。**
+ * cloud-init の cc_runcmd は各エントリを別々のスクリプトとして実行し、
+ * `set -e` も `&&` も付けない（util.shellify が 1 行ずつ並べるだけ）。
+ * そのため検証を独立したエントリにすると、SHA-256 が合わなくても
+ * 後続の mv / tar がそのまま走り、しかも最後のコマンドの終了コードが 0 なので
+ * cloud-init は成功として記録する。改ざん検知が完全に無効になる。
+ */
 export function deploymentFirstBootCommands(d: Deployment): string[] {
   if (d.source.kind !== 'url') return []
   const tmp = `/var/tmp/autoinstall-${d.name}`
-  const cmds: string[] = [
+  const steps: string[] = [
     `curl -fsSL --retry 3 -o ${shellQuote(tmp)} ${shellQuote(d.source.url)}`,
   ]
   if (d.source.sha256) {
-    // ハッシュが合わなければ以降を実行しない（`&&` ではなく set -e 相当にするため 1 行にまとめる）
-    cmds.push(
-      `sh -c ${shellQuote(`echo '${d.source.sha256}  ${tmp}' | sha256sum -c -`)}`,
-    )
+    // ここで落ちれば `sh -e` が以降を実行しない
+    steps.push(`echo ${shellQuote(`${d.source.sha256}  ${tmp}`)} | sha256sum -c -`)
   }
   if (d.kind === 'file') {
-    cmds.push(
+    steps.push(
       `mkdir -p ${shellQuote(parentDir(d.targetPath))}`,
       `mv ${shellQuote(tmp)} ${shellQuote(d.targetPath)}`,
       `chmod ${d.mode} ${shellQuote(d.targetPath)}`,
     )
     if (d.owner && d.owner !== 'root') {
-      cmds.push(`chown ${d.owner}:${d.group || d.owner} ${shellQuote(d.targetPath)}`)
+      steps.push(`chown ${d.owner}:${d.group || d.owner} ${shellQuote(d.targetPath)}`)
+    } else if (d.group && d.group !== 'root') {
+      // 所有者は root のままでグループだけ変えたい、という設定も成立する
+      steps.push(`chgrp ${d.group} ${shellQuote(d.targetPath)}`)
     }
   } else {
-    cmds.push(
+    steps.push(
       `mkdir -p ${shellQuote(d.targetPath)}`,
-      `sh -c ${shellQuote(extractCommand(d, tmp, d.targetPath))}`,
+      extractCommand(d, tmp, d.targetPath),
       `rm -f ${shellQuote(tmp)}`,
     )
-    if (d.chownRecursive && d.owner && d.owner !== 'root') {
-      cmds.push(`chown -R ${d.owner}:${d.group || d.owner} ${shellQuote(d.targetPath)}`)
+    if (d.chownRecursive) {
+      if (d.owner && d.owner !== 'root') {
+        steps.push(`chown -R ${d.owner}:${d.group || d.owner} ${shellQuote(d.targetPath)}`)
+      } else if (d.group && d.group !== 'root') {
+        steps.push(`chgrp -R ${d.group} ${shellQuote(d.targetPath)}`)
+      }
     }
     if (d.postCommand.trim()) {
-      cmds.push(`sh -c ${shellQuote(`cd ${d.targetPath} && ${d.postCommand.trim()}`)}`)
+      steps.push(`cd ${shellQuote(d.targetPath)}`, d.postCommand.trim())
     }
   }
-  return cmds
+  // `sh -e` なのでどれか 1 つでも失敗すれば以降は走らず、
+  // cloud-init も非ゼロ終了として記録する。
+  return [`sh -e -c ${shellQuote(steps.join('\n'))}`]
 }
 
 // ---------------------------------------------------------------------------
@@ -219,14 +269,15 @@ export function deploymentFirstBootCommands(d: Deployment): string[] {
 export function serviceCommands(svc: SystemdService): string[] {
   const unitPath = `/etc/systemd/system/${svc.name}.service`
   const cmds = [
-    // ヒアドキュメントで書く。ユニットの内容に `$` が含まれても展開されないよう 'EOF' をクォートする。
-    inTargetSh(`cat > ${unitPath} <<'AUTOINSTALL_EOF'\n${renderServiceUnit(svc)}AUTOINSTALL_EOF`),
-    inTarget(`chmod 0644 ${unitPath}`),
+    // ヒアドキュメントは使わない。ユニットの各行は自由入力なので、
+    // `AUTOINSTALL_EOF` という行を書かれるとそこで終端し、以降が root のコマンドになる。
+    inTargetSh(writeFileCommand(unitPath, renderServiceUnit(svc))),
+    inTarget(`chmod 0644 ${shellQuote(unitPath)}`),
   ]
   if (svc.enabled) {
     // インストーラ環境では systemd が動いていないので、リンクを直接作る `enable` を使う。
     // `systemctl enable` は in-target でも offline モードで動作する。
-    cmds.push(inTarget(`systemctl enable ${svc.name}.service`))
+    cmds.push(inTarget(`systemctl enable ${shellQuote(`${svc.name}.service`)}`))
   }
   return cmds
 }
@@ -265,7 +316,9 @@ export function gpuFirstBootCommands(profile: AutoinstallProfile): string[] {
   }
   cmds.push(
     'apt-get update',
-    `sh -c ${shellQuote(`DEBIAN_FRONTEND=noninteractive apt-get install -y ${pkgs.join(' ')}`)}`,
+    // toolkit は `cuda-toolkit-13-3` のようなピン留めを許す自由文字列なので、
+    // パッケージ名を 1 つずつクォートする（`x; …` で root の任意コマンドが動いていた）。
+    `DEBIAN_FRONTEND=noninteractive apt-get install -y ${pkgs.map(shellQuote).join(' ')}`,
   )
   if (gpu.setupPath) {
     // /usr/local/cuda は最新版へのシンボリックリンク。バージョンを固定しないで済む。
@@ -281,7 +334,14 @@ export function gpuFirstBootCommands(profile: AutoinstallProfile): string[] {
   }
   // ドライバを入れたらカーネルモジュールを読み込むために再起動が必要
   if (gpu.driver !== 'none') cmds.push('systemctl reboot')
-  return cmds
+
+  // **1 エントリにまとめて `sh -e` で走らせる。**
+  // cloud-init の cc_runcmd は各エントリを別々に実行し、`set -e` も `&&` も付けない。
+  // 別エントリのままだと keyring の取得に失敗しても apt-get が走り、
+  // 最後のコマンドが 0 で終われば cloud-init は成功として記録する（落とし穴 28）。
+  // 途中で失敗したときは `systemctl reboot` に到達しないので、
+  // 「再起動していないマシン＋cloud-init のエラー」として失敗が見える形で残る。
+  return [`sh -e -c ${shellQuote(cmds.join('\n'))}`]
 }
 
 // ---------------------------------------------------------------------------
@@ -312,7 +372,9 @@ export function buildProvisioningCommands(profile: AutoinstallProfile): Provisio
   // USB 同梱のペイロード展開
   const seedDeployments = postInstall.deployments.filter((d) => d.source.kind !== 'url')
   for (const d of seedDeployments) late.push(...deploymentCommands(d))
-  for (const p of deploymentPackages(seedDeployments)) packages.add(p)
+  // 展開ツール (unzip / bzip2 / xz-utils) は URL 取得のものにも要る。
+  // 初回起動時に apt が使えるとは限らないので、インストール時に入れておく。
+  for (const p of deploymentPackages(postInstall.deployments)) packages.add(p)
 
   // サービス登録（展開したアプリを起動する想定なので展開の後）
   for (const s of postInstall.services) late.push(...serviceCommands(s))

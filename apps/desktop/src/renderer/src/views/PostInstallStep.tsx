@@ -1,9 +1,26 @@
 import { useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
-import { POST_INSTALL_PRESETS, type PostInstallPresetId, type ProvisionFile } from '@autoinstall/shared'
+import {
+  POST_INSTALL_PRESETS,
+  SERIES_FEATURES,
+  type PostInstallPresetId,
+  type ProvisionFile,
+  type ReportingTarget,
+} from '@autoinstall/shared'
 import { useStore } from '../store.js'
 import { useT } from '../lib/i18n.js'
-import { Badge, Button, Callout, Card, Field, Modal, Switch, TextArea, TextInput } from '../components/ui.js'
+import {
+  Badge,
+  Button,
+  Callout,
+  Card,
+  Field,
+  Modal,
+  Select,
+  Switch,
+  TextArea,
+  TextInput,
+} from '../components/ui.js'
 import { DeploymentsSection } from './sections/Deployments.js'
 import { ServicesSection } from './sections/Services.js'
 
@@ -334,41 +351,253 @@ function FilesTab(): React.JSX.Element {
 }
 
 function AdvancedTab(): React.JSX.Element {
+  const t = useT()
   const profile = useStore((s) => s.profile)
   const update = useStore((s) => s.updateProfile)
+  const features = SERIES_FEATURES[profile.series]
+  const reporting = profile.behavior.reporting
+
+  const setReportingKind = (kind: ReportingTarget['kind']): void =>
+    update((p) => {
+      const next: ReportingTarget =
+        kind === 'rsyslog'
+          ? { kind, destination: '' }
+          : kind === 'webhook'
+            ? { kind, endpoint: '' }
+            : { kind }
+      return { ...p, behavior: { ...p.behavior, reporting: next } }
+    })
+
+  const lines = (text: string): string[] =>
+    text.split('\n').map((l) => l.trim()).filter(Boolean)
 
   return (
-    <Card
-      title="生の YAML で上書きする"
-      description="ここに書いた内容が、生成された autoinstall にマージされます（同じキーは上書き、配列は置き換え）。"
-    >
-      <TextArea
-        rows={8}
-        spellCheck={false}
-        placeholder={'kernel:\n  flavor: hwe\ndebconf-selections: |\n  postfix postfix/main_mailer_type select No configuration'}
-        value={profile.advanced.rawOverlayYaml}
-        onChange={(e) =>
-          update((p) => ({ ...p, advanced: { ...p.advanced, rawOverlayYaml: e.target.value } }))
-        }
-      />
-      <div className="mt-4">
-        <Field
-          label="追加のカーネル引数"
-          hint="GRUB のカーネル行に追加されます。autoinstall は自動で付くので不要です。; & | は使えません。"
-        >
+    <div className="space-y-5">
+      <Card title={t('adv.errorCommands')} description={t('adv.errorCommandsHint')}>
+        <Switch
+          checked={profile.postInstall.collectLogsOnError}
+          onChange={(collectLogsOnError) =>
+            update((p) => ({ ...p, postInstall: { ...p.postInstall, collectLogsOnError } }))
+          }
+          label={t('adv.collectLogs')}
+          description={t('adv.collectLogsHint')}
+        />
+        <div className="mt-4">
+          <TextArea
+            rows={3}
+            spellCheck={false}
+            placeholder={'curl -X POST https://hooks.example.com/install-failed'}
+            value={profile.postInstall.errorCommands.join('\n')}
+            onChange={(e) =>
+              update((p) => ({
+                ...p,
+                postInstall: { ...p.postInstall, errorCommands: lines(e.target.value) },
+              }))
+            }
+          />
+        </div>
+      </Card>
+
+      <Card title={t('adv.debconf')} description={t('adv.debconfHint')}>
+        <TextArea
+          rows={3}
+          spellCheck={false}
+          placeholder={'postfix postfix/main_mailer_type select No configuration'}
+          value={profile.postInstall.debconfSelections}
+          onChange={(e) =>
+            update((p) => ({
+              ...p,
+              postInstall: { ...p.postInstall, debconfSelections: e.target.value },
+            }))
+          }
+        />
+      </Card>
+
+      <Card title={t('adv.reporting')}>
+        <Field label={t('adv.reporting')}>
           {(id) => (
-            <TextInput
+            <Select
               id={id}
-              value={profile.advanced.extraKernelArgs}
-              spellCheck={false}
-              placeholder="net.ifnames=0 fsck.mode=skip"
-              onChange={(e) =>
-                update((p) => ({ ...p, advanced: { ...p.advanced, extraKernelArgs: e.target.value } }))
-              }
+              value={reporting.kind}
+              onChange={(v) => setReportingKind(v as ReportingTarget['kind'])}
+              options={[
+                { value: 'console', label: t('adv.reportingConsole') },
+                { value: 'none', label: t('adv.reportingNone') },
+                { value: 'webhook', label: t('adv.reportingWebhook') },
+                { value: 'rsyslog', label: t('adv.reportingRsyslog') },
+              ]}
             />
           )}
         </Field>
-      </div>
-    </Card>
+        {(reporting.kind === 'webhook' || reporting.kind === 'rsyslog') && (
+          <div className="mt-3">
+            <Field label={t('adv.reportingUrl')} hint={t('adv.reportingUrlHint')} required>
+              {(id) => (
+                <TextInput
+                  id={id}
+                  spellCheck={false}
+                  placeholder={
+                    reporting.kind === 'webhook'
+                      ? 'https://hooks.example.com/install'
+                      : '@@192.168.1.1:514'
+                  }
+                  value={reporting.kind === 'webhook' ? reporting.endpoint : reporting.destination}
+                  onChange={(e) =>
+                    update((p) => ({
+                      ...p,
+                      behavior: {
+                        ...p.behavior,
+                        reporting:
+                          reporting.kind === 'webhook'
+                            ? { kind: 'webhook', endpoint: e.target.value }
+                            : { kind: 'rsyslog', destination: e.target.value },
+                      },
+                    }))
+                  }
+                />
+              )}
+            </Field>
+          </div>
+        )}
+        {profile.behavior.interactiveAll && (
+          <div className="mt-3">
+            <Callout tone="warning">
+              対話セクションがあると subiquity は reporting を無視します。
+            </Callout>
+          </div>
+        )}
+      </Card>
+
+      <Card title={t('adv.adTitle')} description={t('adv.adHint')}>
+        <Switch
+          checked={profile.activeDirectory.enabled}
+          tone="warning"
+          onChange={(enabled) =>
+            update((p) => ({ ...p, activeDirectory: { ...p.activeDirectory, enabled } }))
+          }
+          label={t('adv.adTitle')}
+          description={t('adv.adWarning')}
+        />
+        {profile.activeDirectory.enabled && (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <Field label={t('adv.adDomain')} required>
+              {(id) => (
+                <TextInput
+                  id={id}
+                  spellCheck={false}
+                  placeholder="corp.example.com"
+                  value={profile.activeDirectory.domainName}
+                  onChange={(e) =>
+                    update((p) => ({
+                      ...p,
+                      activeDirectory: { ...p.activeDirectory, domainName: e.target.value },
+                    }))
+                  }
+                />
+              )}
+            </Field>
+            <Field label={t('adv.adAdmin')} required>
+              {(id) => (
+                <TextInput
+                  id={id}
+                  spellCheck={false}
+                  placeholder="Administrator"
+                  value={profile.activeDirectory.adminName}
+                  onChange={(e) =>
+                    update((p) => ({
+                      ...p,
+                      activeDirectory: { ...p.activeDirectory, adminName: e.target.value },
+                    }))
+                  }
+                />
+              )}
+            </Field>
+          </div>
+        )}
+        {!features.codecsOemAd && profile.activeDirectory.enabled && (
+          <div className="mt-3">
+            <Callout tone="warning">
+              Ubuntu {profile.series} の autoinstall には <code className="font-mono">active-directory</code>{' '}
+              キーがありません。出力からは省かれます。
+            </Callout>
+          </div>
+        )}
+      </Card>
+
+      <Card title={t('common.advanced')}>
+        <div className="space-y-3">
+          <Switch
+            checked={profile.behavior.refreshInstaller}
+            onChange={(refreshInstaller) =>
+              update((p) => ({ ...p, behavior: { ...p.behavior, refreshInstaller } }))
+            }
+            label={t('adv.refreshInstaller')}
+            description={t('adv.refreshInstallerHint')}
+          />
+          {profile.behavior.refreshInstaller && (
+            <Field label="channel" hint="空なら subiquity の既定チャンネルを使います。">
+              {(id) => (
+                <TextInput
+                  id={id}
+                  spellCheck={false}
+                  placeholder="stable/ubuntu-24.04"
+                  value={profile.behavior.refreshInstallerChannel}
+                  onChange={(e) =>
+                    update((p) => ({
+                      ...p,
+                      behavior: { ...p.behavior, refreshInstallerChannel: e.target.value },
+                    }))
+                  }
+                />
+              )}
+            </Field>
+          )}
+          {features.interactiveAll && (
+            <Switch
+              checked={profile.behavior.interactiveAll}
+              tone="warning"
+              onChange={(interactiveAll) =>
+                update((p) => ({ ...p, behavior: { ...p.behavior, interactiveAll } }))
+              }
+              label={t('adv.interactiveAll')}
+              description={t('adv.interactiveAllHint')}
+            />
+          )}
+        </div>
+      </Card>
+
+      <Card
+        title="生の YAML で上書きする"
+        description="ここに書いた内容が、生成された autoinstall にマージされます（同じキーは上書き、配列は置き換え）。"
+      >
+        <TextArea
+          rows={8}
+          spellCheck={false}
+          placeholder={'kernel:\n  flavor: hwe\nzdevs:\n  - id: 0.0.1507\n    enabled: true'}
+          value={profile.advanced.rawOverlayYaml}
+          onChange={(e) =>
+            update((p) => ({ ...p, advanced: { ...p.advanced, rawOverlayYaml: e.target.value } }))
+          }
+        />
+        <div className="mt-4">
+          <Field
+            label="追加のカーネル引数"
+            hint="GRUB のカーネル行に追加されます。autoinstall は自動で付くので不要です。; & | は使えません。"
+          >
+            {(id) => (
+              <TextInput
+                id={id}
+                value={profile.advanced.extraKernelArgs}
+                spellCheck={false}
+                placeholder="net.ifnames=0 fsck.mode=skip"
+                onChange={(e) =>
+                  update((p) => ({ ...p, advanced: { ...p.advanced, extraKernelArgs: e.target.value } }))
+                }
+              />
+            )}
+          </Field>
+        </div>
+      </Card>
+    </div>
   )
 }

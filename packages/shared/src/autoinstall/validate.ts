@@ -5,6 +5,13 @@ import { buildAutoinstallObject, collectPackages } from './generate.js'
 import { isValidSha512CryptHash, looksLikeCryptHash } from '../crypt/validate.js'
 import { getPreset } from './presets.js'
 import { CUDA_REPO_DISTRO, cudaPackages, isValidServiceName } from './provisioning.js'
+import { isDebLineSource, isPpaSource, isValidSizeSpec } from './advanced.js'
+import {
+  interactiveSectionsFor,
+  isSafePresetLabel,
+  isSafeRuntimeValue,
+  usesKernelArgs,
+} from './runtime-values.js'
 
 // プロファイルの検証。JSON Schema による構文チェックだけでは「サーバーに触れなくなる設定」を防げないので、
 // 意味論的な検査（ロックアウト、ネットワーク不要環境でのパッケージ指定など）を重視している。
@@ -53,6 +60,8 @@ const RESERVED_USERNAMES = new Set([
   'sshd',
   'admin',
 ])
+// netplan の match.macaddress に入る形
+const MAC_RE = /^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/
 const CIDR_RE = /^(\d{1,3}\.){3}\d{1,3}\/([0-9]|[12][0-9]|3[0-2])$/
 const IPV4_RE = /^(\d{1,3}\.){3}\d{1,3}$/
 const SSH_KEY_RE = /^(ssh-rsa|ssh-ed25519|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com)\s+[A-Za-z0-9+/=]+(\s+\S+)?$/
@@ -69,6 +78,43 @@ function isValidCidr(value: string): boolean {
 }
 
 /** プロファイル全体を検証する。 */
+/**
+ * 知らないプリセット ID を落とす。
+ *
+ * `getPreset` は未知の ID で例外を投げる。プロファイルは手で編集できるし、
+ * 新しい版で作ったものを古い版で開くこともあるので、ここで弾かないと
+ * 検証自体が例外で抜けて「理由の分からない空の確認画面」になる。
+ */
+function knownPresetIds(profile: AutoinstallProfile): {
+  known: AutoinstallProfile['postInstall']['presets'][number][]
+  unknown: string[]
+} {
+  const known: AutoinstallProfile['postInstall']['presets'][number][] = []
+  const unknown: string[] = []
+  for (const id of profile.postInstall.presets) {
+    try {
+      getPreset(id)
+      known.push(id)
+    } catch {
+      unknown.push(String(id))
+    }
+  }
+  return { known, unknown }
+}
+
+/** 上書き YAML が書き換えるトップレベルのキー。壊れた YAML でも例外にしない。 */
+function overlayTopLevelKeys(yamlText: string): string[] {
+  try {
+    const doc = parseDocument(yamlText)
+    if (doc.errors.length > 0) return []
+    const js = doc.toJS() as unknown
+    if (js === null || typeof js !== 'object' || Array.isArray(js)) return []
+    return Object.keys(js as Record<string, unknown>)
+  } catch {
+    return []
+  }
+}
+
 export function validateProfile(profile: AutoinstallProfile): ValidationResult {
   const issues: ValidationIssue[] = []
   const add = (
@@ -80,6 +126,21 @@ export function validateProfile(profile: AutoinstallProfile): ValidationResult {
     issues.push({ severity, field, messageJa, messageEn })
   }
   const features = SERIES_FEATURES[profile.series]
+  // 知らないプリセット ID があると getPreset が投げる。検証が例外で抜けると
+  // 確認画面が理由なく空になるので、ここで分けて以降は known だけを使う。
+  const presets = knownPresetIds(profile)
+  for (const id of presets.unknown) {
+    add(
+      'error',
+      'postInstall.presets',
+      `知らない設定 "${id}" が含まれています。新しい版で作られたプロファイルかもしれません。`,
+      `Unknown preset "${id}". The profile may have been created by a newer version.`,
+    )
+  }
+  // インストール時に手入力になるセクション（設定と「実行時に決める値」の合成）
+  const interactive = [
+    ...new Set([...profile.behavior.interactiveSections, ...interactiveSectionsFor(profile.runtimeValues)]),
+  ]
 
   // --- 基本 ---
   if (!profile.basics.hostname) {
@@ -256,8 +317,39 @@ export function validateProfile(profile: AutoinstallProfile): ValidationResult {
         'ディスク暗号化のパスフレーズは autoinstall の YAML に平文で書かれます。USB の取り扱いに注意してください。',
         'The disk encryption passphrase is written in plain text into the autoinstall YAML. Handle the USB stick accordingly.',
       )
+      if (profile.storage.mode !== 'lvm') {
+        // layout.password は lvm レイアウトにしか無い。他では黙って無視される。
+        add(
+          'error',
+          'storage.encryptionPassphrase',
+          `ディスク暗号化は LVM レイアウトでのみ使えます（${profile.storage.mode} では無視されます）。`,
+          `Disk encryption only works with the LVM layout; it is ignored for ${profile.storage.mode}.`,
+        )
+      }
     }
-    if (profile.storage.match.kind === 'largest' || profile.storage.match.kind === 'smallest') {
+    // 指定方法を選んだのに中身が空だと、一致するディスクが 1 台も無くなる。
+    // 手で編集された JSON ではキー自体が無いことがあるので、必ず型を確かめる
+    // （検証が例外で抜けると確認画面が理由なく空になり、書き込みボタンが沈黙する）。
+    const m = profile.storage.match as { kind: string } & Record<string, unknown>
+    const text = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
+    const emptyMatch =
+      (m.kind === 'serial' && !text(m['serial'])) ||
+      (m.kind === 'path' && !text(m['path'])) ||
+      (m.kind === 'model' && !text(m['model']))
+    if (emptyMatch) {
+      add(
+        'error',
+        'storage.match',
+        'ディスクの指定方法を選んだので、その値も入れてください（空だと一致するディスクがありません）。',
+        'A disk match kind was chosen but left empty, so no disk will match.',
+      )
+    }
+
+    // 実行時にディスクを決める設定なら、ここの match は使われないので助言しない
+    if (
+      profile.runtimeValues.disk === 'fixed' &&
+      (profile.storage.match.kind === 'largest' || profile.storage.match.kind === 'smallest')
+    ) {
       add(
         'info',
         'storage.match',
@@ -267,9 +359,120 @@ export function validateProfile(profile: AutoinstallProfile): ValidationResult {
     }
   }
 
+  // --- GPU / CUDA のツールキット名 ---
+  // `cuda-toolkit-13-3` のようなピン留めを自由入力で許しているので、
+  // apt のパッケージ名として妥当な形だけを通す（生成側でもクォートしているが、
+  // 「検証か生成のどちらか一方」に頼らない）。
+  {
+    const gpu = profile.software.gpu
+    const toolkit = typeof gpu.toolkit === 'string' ? gpu.toolkit : ''
+    if (gpu.enabled && toolkit && toolkit !== 'latest' && toolkit !== 'none') {
+      if (!/^[a-z0-9][a-z0-9+._-]*$/.test(toolkit)) {
+        add(
+          'error',
+          'software.gpu.toolkit',
+          `CUDA ツールキット名 "${toolkit}" が apt のパッケージ名として不正です。`,
+          `The CUDA toolkit name "${toolkit}" is not a valid apt package name.`,
+        )
+      }
+    }
+  }
+
+  // --- 追加ファイル / 展開の所有者 ---
+  // chown にそのまま渡るので、ユーザー名として妥当な形だけを許す。
+  const OWNER_RE = /^[a-z_][a-z0-9_-]{0,31}(:[a-z_][a-z0-9_-]{0,31})?$/
+  for (const f of profile.postInstall.files) {
+    if (f.owner && !OWNER_RE.test(f.owner)) {
+      add(
+        'error',
+        'postInstall.files',
+        `ファイル "${f.name}" の所有者 "${f.owner}" が不正です（ユーザー名、または user:group で書いてください）。`,
+        `File "${f.name}" has an invalid owner "${f.owner}"; use a user name or user:group.`,
+      )
+    }
+  }
+  for (const d of profile.postInstall.deployments) {
+    for (const [label, value] of [
+      ['所有者', d.owner],
+      ['グループ', d.group],
+    ] as const) {
+      if (value && !/^[a-z_][a-z0-9_-]{0,31}$/.test(value)) {
+        add(
+          'error',
+          'postInstall.deployments',
+          `展開 "${d.name}" の${label} "${value}" が不正です。`,
+          `Deployment "${d.name}" has an invalid ${label === '所有者' ? 'owner' : 'group'} "${value}".`,
+        )
+      }
+    }
+  }
+
+  // --- ネットワークカードの指定 ---
+  // netplan のキーや match にそのまま入るので、空や不正な形は実機で必ず失敗する。
+  if (profile.network.mode !== 'raw' && profile.network.mode !== 'installer-default') {
+    const target = profile.network.target
+    if (target.kind === 'name') {
+      const name = typeof target.name === 'string' ? target.name.trim() : ''
+      if (!name) {
+        add(
+          'error',
+          'network.target',
+          'ネットワークカードの名前が空です（netplan のキーになるので必須です）。',
+          'The interface name is empty; netplan needs it as the key.',
+        )
+      } else if (!/^[A-Za-z][A-Za-z0-9_.-]*$/.test(name)) {
+        add(
+          'error',
+          'network.target',
+          `ネットワークカードの名前 "${name}" が不正です（英字で始まり、英数字と . _ - のみ）。`,
+          `The interface name "${name}" is invalid; use letters, digits and . _ - starting with a letter.`,
+        )
+      }
+    }
+    if (target.kind === 'mac') {
+      const mac = typeof target.macaddress === 'string' ? target.macaddress.trim() : ''
+      if (!MAC_RE.test(mac)) {
+        add(
+          'error',
+          'network.target',
+          'MAC アドレスは "aa:bb:cc:dd:ee:ff" の形式で入力してください。',
+          'Enter the MAC address as "aa:bb:cc:dd:ee:ff".',
+        )
+      }
+    }
+  }
+
+  // --- APT ミラー ---
+  // custom を選んだのに URI が空だと、mirror-selection ごと出力から消える。
+  // 「速いミラーを指定したのに既定のまま」という気づきにくい遅さになる。
+  if (profile.apt.mode === 'custom' && !profile.apt.primaryUri.trim()) {
+    add(
+      'error',
+      'apt.primaryUri',
+      'ミラーの URL を入力してください（空だと既定のミラーが使われます）。',
+      'Enter the mirror URL; leaving it empty silently falls back to the default mirror.',
+    )
+  }
+
+  // --- 生 YAML による上書き ---
+  // rawOverlayYaml は生成結果に深くマージされるので、ここで storage や identity を
+  // 書き換えると GUI 側のディスク検証をすべて迂回できる。止めはしないが必ず知らせる。
+  if (profile.advanced.rawOverlayYaml.trim()) {
+    const overridden = overlayTopLevelKeys(profile.advanced.rawOverlayYaml)
+    const dangerous = overridden.filter((k) => k === 'storage' || k === 'identity')
+    if (dangerous.length > 0) {
+      add(
+        'warning',
+        'advanced.rawOverlayYaml',
+        `上書き YAML が ${dangerous.join(' / ')} を書き換えています。画面のディスク・ユーザー設定は無効になり、ここに書いた内容が使われます。`,
+        `The overlay YAML overrides ${dangerous.join(' / ')}, so the disk and user settings from the UI no longer apply.`,
+      )
+    }
+  }
+
   // --- ソフトウェア / ネットワーク依存 ---
   const packages = collectPackages(profile)
-  const needsNetworkPresets = profile.postInstall.presets.filter((id) => getPreset(id).needsNetwork)
+  const needsNetworkPresets = presets.known.filter((id) => getPreset(id).needsNetwork)
   if ((packages.length > 0 || profile.software.snaps.length > 0 || needsNetworkPresets.length > 0) && profile.network.mode === 'static' && !profile.network.gateway) {
     add(
       'error',
@@ -526,6 +729,351 @@ export function validateProfile(profile: AutoinstallProfile): ValidationResult {
     )
   }
 
+  if (profile.behavior.interactiveAll && !features.interactiveAll) {
+    add(
+      'warning',
+      'behavior.interactiveAll',
+      `Ubuntu ${profile.series} では interactive-sections: ["*"] の展開が確認できていないため、この指定は出力しません。個別の項目を「インストーラの画面で入力する」に設定してください。`,
+      `The ["*"] form is unverified on Ubuntu ${profile.series}, so it is omitted. Set individual items to "type it in the installer" instead.`,
+    )
+  }
+
+  if (profile.behavior.reporting.kind === 'rsyslog') {
+    // autoinstall リファレンス: "The rsyslog reporter does not yet exist."
+    add(
+      'warning',
+      'behavior.reporting',
+      'rsyslog への送信は subiquity にまだ実装がありません（公式リファレンスに明記）。進捗は届かない可能性があります。',
+      'The rsyslog reporter is documented as not yet implemented in subiquity, so progress may never arrive.',
+    )
+  }
+
+  // --- 実行時に決める値 ---
+  const rv = profile.runtimeValues
+  if (usesKernelArgs(rv)) {
+    if (!features.interactiveSections) {
+      add(
+        'warning',
+        'runtimeValues',
+        `Ubuntu ${profile.series} には interactive-sections がありません。値が渡されなかったときに手入力へ切り替えることができず、既定値が使われます。`,
+        `Ubuntu ${profile.series} has no interactive-sections, so a missing value falls back to the default instead of prompting.`,
+      )
+    }
+    if (rv.presets.length === 0) {
+      add(
+        'warning',
+        'runtimeValues.presets',
+        'カーネル引数で値を渡す設定ですが、ホストが 1 つも登録されていません。起動時に GRUB で e キーを押して自分で入力することになります。',
+        'Values are passed as kernel arguments but no hosts are registered, so you will have to type them in GRUB with the e key.',
+      )
+    }
+    const labels = new Set<string>()
+    for (const [i, p] of rv.presets.entries()) {
+      const where = `runtimeValues.presets[${i}]`
+      if (!isSafePresetLabel(p.label)) {
+        add(
+          'error',
+          `${where}.label`,
+          `ホスト #${i + 1} の表示名に使えない文字があります（" $ 改行は使えません、40 文字まで）。`,
+          `Host #${i + 1} has an invalid label (no " $ or newlines; 40 characters max).`,
+        )
+      } else if (labels.has(p.label)) {
+        add('error', `${where}.label`, `ホスト名 "${p.label}" が重複しています。`, `Host label "${p.label}" is duplicated.`)
+      }
+      labels.add(p.label)
+
+      // 手で編集された JSON ではキーが無いことがある。文字列以外は空として扱う。
+      const f = (v: unknown): string => (typeof v === 'string' ? v : '')
+      const fields: [string, string, string][] = []
+      if (rv.hostname === 'kernel-arg') fields.push(['hostname', f(p.hostname), 'ホスト名'])
+      if (rv.network === 'kernel-arg') {
+        // ゲートウェイと DNS は空でもよい（外に出ない閉じたネットワークがある）。
+        // IP アドレスだけは無いと netplan が成立しない。
+        fields.push(['ipv4', f(p.ipv4), 'IP アドレス'])
+        if (f(p.gateway)) fields.push(['gateway', f(p.gateway), 'ゲートウェイ'])
+        if (f(p.nameservers)) fields.push(['nameservers', f(p.nameservers).replace(/\s+/g, ''), 'DNS'])
+      }
+      if (rv.disk === 'kernel-arg') fields.push(['disk', f(p.disk), 'ディスク'])
+
+      // 書式まで見る。ここを通った値は起動メニューのカーネル引数になり、
+      // インストーラが netplan / curtin にそのまま渡す。
+      if (rv.hostname === 'kernel-arg' && f(p.hostname) && !HOSTNAME_RE.test(f(p.hostname))) {
+        add(
+          'error',
+          `${where}.hostname`,
+          `ホスト "${p.label}" のホスト名は英数字とハイフンで書いてください。`,
+          `Host "${p.label}" needs a hostname of letters, digits and hyphens.`,
+        )
+      }
+      if (rv.network === 'kernel-arg') {
+        if (f(p.gateway) && !isValidIPv4(f(p.gateway))) {
+          add(
+            'error',
+            `${where}.gateway`,
+            `ホスト "${p.label}" のゲートウェイは "192.168.1.1" のように書いてください。`,
+            `Host "${p.label}" needs a gateway like "192.168.1.1".`,
+          )
+        }
+        for (const ns of f(p.nameservers).split(',').map((x) => x.trim()).filter(Boolean)) {
+          if (!isValidIPv4(ns)) {
+            add(
+              'error',
+              `${where}.nameservers`,
+              `ホスト "${p.label}" の DNS "${ns}" は IP アドレスの形式ではありません。`,
+              `Host "${p.label}" has a nameserver "${ns}" that is not an IP address.`,
+            )
+          }
+        }
+      }
+      if (rv.disk === 'kernel-arg' && f(p.disk).startsWith('/dev/')) {
+        // storage.layout.match.serial に入るので、デバイスパスを書いても一致しない
+        add(
+          'error',
+          `${where}.disk`,
+          `ホスト "${p.label}" のディスクにはシリアル番号を書いてください（"/dev/sda" のようなパスは一致しません）。`,
+          `Host "${p.label}" needs a disk serial number; a path like "/dev/sda" will not match.`,
+        )
+      }
+
+      for (const [key, value, label] of fields) {
+        if (!value) {
+          add(
+            'error',
+            `${where}.${key}`,
+            `ホスト "${p.label}" の${label}が空です。`,
+            `Host "${p.label}" has no ${key}.`,
+          )
+        } else if (!isSafeRuntimeValue(value)) {
+          add(
+            'error',
+            `${where}.${key}`,
+            `ホスト "${p.label}" の${label}に使えない文字が含まれています（英数字と . _ : / , - のみ）。`,
+            `Host "${p.label}" has invalid characters in ${key} (only letters, digits and . _ : / , - are allowed).`,
+          )
+        }
+      }
+      if (rv.network === 'kernel-arg' && f(p.ipv4) && !isValidCidr(f(p.ipv4))) {
+        add(
+          'error',
+          `${where}.ipv4`,
+          `ホスト "${p.label}" の IP アドレスは "192.168.1.10/24" のように書いてください。`,
+          `Host "${p.label}" needs an address like "192.168.1.10/24".`,
+        )
+      }
+    }
+    add(
+      'info',
+      'runtimeValues',
+      '起動時に GRUB のメニューからホストを選ぶと、その値が使われます。一覧に無いホストは e キーで引数を編集してください。',
+      'Pick a host from the GRUB menu at boot to apply its values. For a host not listed, press e and edit the arguments.',
+    )
+  }
+  if (rv.disk === 'kernel-arg' && profile.storage.mode === 'raw') {
+    add(
+      'error',
+      'runtimeValues.disk',
+      'ディスクをカーネル引数で渡す設定は、curtin の生 YAML と併用できません。',
+      'Passing the disk as a kernel argument cannot be combined with a raw curtin config.',
+    )
+  }
+  if (rv.network === 'kernel-arg' && profile.network.mode === 'raw') {
+    add(
+      'error',
+      'runtimeValues.network',
+      'IP をカーネル引数で渡す設定は、netplan の生 YAML と併用できません。',
+      'Passing the IP as a kernel argument cannot be combined with raw netplan YAML.',
+    )
+  }
+  // 引数が渡されなかったときの既定値が空だと、netplan に空のアドレスが残って
+  // インストールが失敗する。GRUB の既定エントリで起動されると必ずこの経路に入る。
+  if (rv.network === 'kernel-arg' && profile.network.mode !== 'static' && profile.network.mode !== 'raw') {
+    add(
+      'error',
+      'runtimeValues.network',
+      'IP を起動メニューで決める場合は、ネットワークの設定を「固定 IP」にして既定値も入れてください。引数なしで起動されたときに使われます。',
+      'When the IP is chosen from the boot menu, set the network to a static address as well; it is used when no argument is passed.',
+    )
+  }
+  // 既定値（引数が渡されなかったときに使う値）も検証する。
+  // ここを素通りさせると、起動メニュー経由で作った USB が「引数なしで起動したときだけ壊れる」
+  // という追いにくい形になる。
+  if (rv.network === 'kernel-arg' && profile.network.mode === 'static') {
+    // 閉じたネットワーク（外に出ない検証環境など）ではゲートウェイも DNS も要らない。
+    // 必須にすると表現できなくなるので、注意として出すに留める。
+    if (!profile.network.gateway) {
+      add(
+        'warning',
+        'network.gateway',
+        'ゲートウェイが空です。引数なしで起動した機械は外部と通信できません（閉じたネットワークなら問題ありません）。',
+        'No gateway is set, so a machine booted without arguments cannot reach outside. Fine on a closed network.',
+      )
+    }
+    if (profile.network.nameservers.length === 0) {
+      add(
+        'warning',
+        'network.nameservers',
+        'DNS が空です。引数なしで起動した機械は名前解決ができません（閉じたネットワークなら問題ありません）。',
+        'No nameservers are set, so a machine booted without arguments cannot resolve names. Fine on a closed network.',
+      )
+    }
+  }
+  if (
+    rv.disk === 'kernel-arg' &&
+    profile.storage.mode !== 'raw' &&
+    profile.storage.match.kind !== 'serial'
+  ) {
+    add(
+      'error',
+      'runtimeValues.disk',
+      'ディスクを起動メニューで決める場合は、ディスクの指定方法を「シリアル番号」にして既定値も入れてください。引数なしで起動されたときに使われます。',
+      'When the disk is chosen from the boot menu, also match by serial number so there is a default for boots without an argument.',
+    )
+  }
+  if (profile.behavior.interactiveAll && usesKernelArgs(rv)) {
+    add(
+      'warning',
+      'behavior.interactiveAll',
+      'すべての画面を出す設定なので、カーネル引数で渡した値は「既定値」として表示されるだけになります。',
+      'Because every screen is shown, kernel-argument values only appear as defaults.',
+    )
+  }
+
+  // --- カーネル / APT / その他の追加キー ---
+  if (profile.software.kernel.mode === 'flavor' && !profile.software.kernel.flavor.trim()) {
+    add('error', 'software.kernel', 'カーネルの flavor を入力してください。', 'Enter a kernel flavor.')
+  }
+  if (profile.software.kernel.mode === 'package' && !profile.software.kernel.package.trim()) {
+    add('error', 'software.kernel', 'カーネルのパッケージ名を入力してください。', 'Enter a kernel package name.')
+  }
+  if (profile.software.kernel.mode !== 'default' && profile.software.oem === 'yes') {
+    add(
+      'warning',
+      'software.oem',
+      'OEM メタパッケージはカーネルを入れ替えることがあり、カーネル指定と競合してインストールが失敗する場合があります。',
+      'OEM meta-packages can pull in their own kernel and conflict with an explicit kernel choice.',
+    )
+  }
+  for (const [i, src] of profile.apt.sources.entries()) {
+    const where = `apt.sources[${i}]`
+    const value = src.source.trim()
+    if (!value) {
+      add('error', `${where}.source`, `追加リポジトリ #${i + 1} が空です。`, `APT source #${i + 1} is empty.`)
+    } else if (!isPpaSource(value) && !isDebLineSource(value)) {
+      add(
+        'error',
+        `${where}.source`,
+        `追加リポジトリ #${i + 1} は "ppa:user/name" か "deb https://... " の形式で書いてください。`,
+        `APT source #${i + 1} must be "ppa:user/name" or a "deb https://..." line.`,
+      )
+    }
+    if (isDebLineSource(value) && !src.key.trim() && !/signed-by=/.test(value)) {
+      add(
+        'warning',
+        `${where}.key`,
+        `追加リポジトリ #${i + 1} に GPG 公開鍵が設定されていません。署名検証ができず apt が失敗する可能性があります。`,
+        `APT source #${i + 1} has no GPG key, so apt may refuse it.`,
+      )
+    }
+  }
+  if (profile.apt.preserveSourcesList && profile.apt.mode !== 'default') {
+    add(
+      'warning',
+      'apt.preserveSourcesList',
+      'sources.list を書き換えない設定なので、指定したミラーは反映されません。',
+      'The mirror will not be applied because sources.list is preserved.',
+    )
+  }
+  if (profile.storage.mode !== 'raw') {
+    if (profile.storage.swap.mode === 'size' && !isValidSizeSpec(profile.storage.swap.size)) {
+      add(
+        'error',
+        'storage.swap',
+        'swap のサイズは 4G のように書いてください。',
+        'Swap size must be written like 4G.',
+      )
+    }
+    if (
+      profile.storage.resetPartition.enabled &&
+      profile.storage.resetPartition.size.trim() &&
+      !isValidSizeSpec(profile.storage.resetPartition.size)
+    ) {
+      add(
+        'error',
+        'storage.resetPartition',
+        'リセットパーティションのサイズは 12G のように書いてください。',
+        'Reset partition size must be written like 12G.',
+      )
+    }
+  }
+  if (profile.user.groups.mode !== 'default') {
+    if (!features.identityGroups) {
+      add(
+        'warning',
+        'user.groups',
+        `identity.groups は Ubuntu 26.04 で追加された項目です。${profile.series} では無視されます。`,
+        `identity.groups was added in Ubuntu 26.04 and is ignored on ${profile.series}.`,
+      )
+    } else if (profile.user.groups.mode === 'override' && !profile.user.groups.groups.includes('sudo')) {
+      add(
+        'warning',
+        'user.groups',
+        'グループを上書きする設定で sudo が含まれていません。管理者ユーザーが sudo を使えなくなります。',
+        'The group override does not include sudo, so the admin user will lose sudo access.',
+      )
+    }
+  }
+  if (profile.activeDirectory.enabled) {
+    if (!features.codecsOemAd) {
+      add(
+        'warning',
+        'activeDirectory',
+        `active-directory は Ubuntu ${profile.series} では使えません。無視されます。`,
+        `active-directory is not available on Ubuntu ${profile.series} and will be ignored.`,
+      )
+    } else {
+      if (!profile.activeDirectory.domainName.trim()) {
+        add('error', 'activeDirectory.domainName', 'ドメイン名を入力してください。', 'Enter a domain name.')
+      }
+      if (!profile.activeDirectory.adminName.trim()) {
+        // 空のまま出すとインストーラが画面で聞くだけになり、参加は成立しない
+        add(
+          'error',
+          'activeDirectory.adminName',
+          'ドメイン参加に使う管理者名を入力してください。',
+          'Enter the administrator account used to join the domain.',
+        )
+      }
+      add(
+        'warning',
+        'activeDirectory',
+        'AD 参加のパスワードは設定ファイルに書けず、インストール中に入力を求められます。完全無人にはなりません。',
+        'The AD password cannot be put in the config; the installer asks for it, so the install is not fully unattended.',
+      )
+    }
+  }
+  if (profile.behavior.reporting.kind === 'webhook' && !/^https?:\/\//.test(profile.behavior.reporting.endpoint)) {
+    add('error', 'behavior.reporting', 'Webhook の URL が正しくありません。', 'The webhook URL is invalid.')
+  }
+  if (profile.behavior.reporting.kind === 'rsyslog' && !profile.behavior.reporting.destination.trim()) {
+    add(
+      'error',
+      'behavior.reporting',
+      'rsyslog の送信先を入力してください（例: @192.168.0.1）。',
+      'Enter an rsyslog destination, e.g. @192.168.0.1.',
+    )
+  }
+  if (
+    profile.behavior.reporting.kind !== 'console' &&
+    (interactive.length > 0 || profile.behavior.interactiveAll)
+  ) {
+    add(
+      'info',
+      'behavior.reporting',
+      '対話セクションがある場合、インストーラは reporting の設定を無視します。',
+      'When any section is interactive, the installer ignores the reporting configuration.',
+    )
+  }
+
   // --- 上書き YAML ---
   if (profile.advanced.rawOverlayYaml.trim()) {
     const doc = parseDocument(profile.advanced.rawOverlayYaml)
@@ -538,6 +1086,16 @@ export function validateProfile(profile: AutoinstallProfile): ValidationResult {
       }
     }
   }
+  // grub.cfg の中で意味を持つ文字は全部弾く。; & | だけでは足りない
+  // （" はクォートを閉じ、# は行コメント、$ と { } は変数展開になる）。
+  if (/["#$'{}\\<>`\r\n]/.test(profile.advanced.extraKernelArgs)) {
+    add(
+      'error',
+      'advanced.extraKernelArgs',
+      'カーネル引数に grub.cfg で特別な意味を持つ文字 (" # $ \' { } \\ < > `) は使えません。',
+      'Kernel arguments cannot contain characters that are special in grub.cfg (" # $ \' { } \\ < > `).',
+    )
+  }
   if (/[;&|]/.test(profile.advanced.extraKernelArgs)) {
     add(
       'error',
@@ -548,7 +1106,7 @@ export function validateProfile(profile: AutoinstallProfile): ValidationResult {
   }
 
   // --- 完全無人になるか ---
-  if (profile.behavior.interactiveSections.length > 0) {
+  if (interactive.length > 0 || profile.behavior.interactiveAll) {
     add(
       'info',
       'behavior.interactiveSections',

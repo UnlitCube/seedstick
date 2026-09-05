@@ -366,6 +366,7 @@ function DoneView(): React.JSX.Element {
   const status = useStore((s) => s.writeStatus)
   const profile = useStore((s) => s.profile)
   const config = useStore((s) => s.config)
+  const resetWrite = useStore((s) => s.resetWrite)
   if (status.state !== 'done') return <></>
   const seconds = Math.round(status.elapsedMs / 1000)
 
@@ -385,6 +386,13 @@ function DoneView(): React.JSX.Element {
               <Badge tone="warning">読み戻し確認なし</Badge>
             )}
           </div>
+          {/*
+            同じ設定で続けて何本も作るのがこのツールの主な使われ方なので、
+            完了画面から戻れないと「アプリを再起動しないと 2 本目が作れない」ことになる。
+          */}
+          <Button variant="secondary" onClick={resetWrite}>
+            もう一本作る
+          </Button>
         </div>
       </Card>
 

@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { countPatchableKernelLines, nocloudSeedArg, patchGrubCfg } from './patch.js'
+import {
+  countPatchableKernelLines,
+  nocloudSeedArg,
+  patchGrubCfg,
+  remainingGrubBytes,
+} from './patch.js'
 
 // 実 ISO から取り出した本物の grub.cfg に対してテストする。
 // 22.04〜25.10 はタブ区切り、26.04 はスペース区切りなので、両方が通ることが重要。
@@ -130,5 +135,91 @@ describe('nocloudSeedArg', () => {
     // grub.cfg の中では ; がコマンド区切りとして解釈されるため \; が必要
     expect(nocloudSeedArg('/cdrom/')).toBe('ds=nocloud\\;s=/cdrom/')
     expect(nocloudSeedArg('http://10.0.0.1/seed/')).toBe('ds=nocloud\\;s=http://10.0.0.1/seed/')
+  })
+})
+
+describe('ホストごとの menuentry', () => {
+  const original = realGrubCfg('24.04.4')
+
+  it('元の項目の直後に追加され、それぞれ固有のカーネル引数を持つ', () => {
+    const r = patchGrubCfg(original, {
+      args: ['autoinstall'],
+      extraEntries: [
+        { title: 'web01 - 192.168.1.11/24', args: ['ai.hostname=web01', 'ai.ipv4=192.168.1.11/24'] },
+        { title: 'web02 - 192.168.1.12/24', args: ['ai.hostname=web02', 'ai.ipv4=192.168.1.12/24'] },
+      ],
+    })
+    expect(r.addedEntries).toBe(2)
+    const titles = r.text.split('\n').filter((l) => /^\s*menuentry\s/.test(l))
+    // **エントリ 0 は元の項目のまま**であること。
+    // 実 ISO の grub.cfg には 4 リリースとも `set default=` が無いので既定は
+    // エントリ 0 になる。ホストの項目を先頭に置くと、タイムアウトまで放置しただけで
+    // 全台が「ホスト #1」のホスト名と IP を掴む（落とし穴 27）。
+    expect(titles[0]).toContain('Try or Install Ubuntu Server')
+    expect(titles[0]).not.toContain('web01')
+    expect(titles[1]).toContain('web01')
+    expect(titles[2]).toContain('web02')
+    expect(r.text).toContain('ai.hostname=web01')
+    expect(r.text).toContain('ai.hostname=web02')
+  })
+
+  it('ホストの項目が既定にならない（放置しても元の設定で入る）', () => {
+    const r = patchGrubCfg(original, {
+      args: ['autoinstall'],
+      extraEntries: [{ title: 'web01', args: ['ai.hostname=web01'] }],
+    })
+    // 既定を明示していないなら、エントリ 0 にホストの引数が無いこと。
+    // 明示しているなら、それが 0 番以外を指していないこと。
+    const lines = r.text.split('\n')
+    const first = lines.findIndex((l) => /^\s*menuentry\s/.test(l))
+    const body = lines.slice(first, first + 6).join('\n')
+    expect(body).not.toContain('ai.hostname=')
+  })
+
+  it('追加したエントリのカーネル行が casper を指し、--- の前に引数が入る', () => {
+    const r = patchGrubCfg(original, {
+      args: ['autoinstall'],
+      extraEntries: [{ title: 'db01', args: ['ai.hostname=db01'] }],
+    })
+    const line = r.text.split('\n').find((l) => l.includes('ai.hostname=db01'))!
+    expect(line).toMatch(/linux\s+\/casper\/vmlinuz/)
+    expect(line.indexOf('ai.hostname=db01')).toBeLessThan(line.indexOf('---'))
+    expect(line).toContain('autoinstall')
+  })
+
+  it('initrd 行も一緒に複製される', () => {
+    const r = patchGrubCfg(original, {
+      args: ['autoinstall'],
+      extraEntries: [{ title: 'db01', args: [] }],
+    })
+    const initrdCount = r.text.split('\n').filter((l) => /^\s*initrd\s+\/casper\/initrd\s*$/.test(l)).length
+    const originalCount = original.split('\n').filter((l) => /^\s*initrd\s+\/casper\/initrd\s*$/.test(l)).length
+    expect(initrdCount).toBe(originalCount + 1)
+  })
+
+  it('タイトルの " をエスケープする', () => {
+    const r = patchGrubCfg(original, {
+      args: [],
+      extraEntries: [{ title: 'say "hi"', args: [] }],
+    })
+    expect(r.text).toContain('menuentry "say \\"hi\\"" {')
+  })
+
+  it('追加しない場合は addedEntries が 0', () => {
+    expect(patchGrubCfg(original, { args: ['autoinstall'] }).addedEntries).toBe(0)
+  })
+
+  it('残りバイト数から追加できる件数が分かる', () => {
+    const patched = patchGrubCfg(original, { args: ['autoinstall'] })
+    const free = remainingGrubBytes(patched.text)
+    expect(free).toBeGreaterThan(1000)
+
+    // 実際に入る件数まで追加してもセクタに収まる
+    const entries = Array.from({ length: 6 }, (_, i) => ({
+      title: `host${i} - 192.168.1.${10 + i}/24`,
+      args: [`ai.hostname=host${i}`, `ai.ipv4=192.168.1.${10 + i}/24`, 'ai.gw=192.168.1.1'],
+    }))
+    const withEntries = patchGrubCfg(original, { args: ['autoinstall'], extraEntries: entries })
+    expect(Buffer.byteLength(withEntries.text, 'utf8')).toBeLessThan(2048)
   })
 })
