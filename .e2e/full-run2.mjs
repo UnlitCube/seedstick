@@ -1,5 +1,7 @@
 // ネットワーク以降を仕上げ、実行時の値と上級者向けを UI から設定して確認まで進める。
 import { open } from './drive.mjs'
+// 画面の文言は辞書が正。ここに書き写すと訳文を変えたときに**テストだけが落ちる**。
+import { ja as DICT } from '../packages/shared/src/i18n/ja.ts'
 
 const d = await open()
 const ok = []
@@ -77,7 +79,12 @@ await d.shot('.e2e/34-runtime.png')
 const rt = await d.text()
 for (const h of ['web01', 'web02', 'db01']) check(`起動メニューに ${h}`, rt.includes(`ai.hostname=${h}`))
 check('手入力の項目も出る', rt.includes('ai.interactive=1'))
-const free = rt.match(/起動メニューの残り容量: (\d+) bytes/)
+// **単位の語を正規表現に入れない。** ここは長らく `(\d+) bytes` を探していたが、
+// 画面が `t('runtime.grubFreeBytes')` を通るようになり日本語では「610 バイト」に
+// なったため、**表示は出ているのにテストだけが落ちる**状態になっていた。
+// 訳文を変えるたびに壊れる形なので、見出しは辞書から引き、数字だけを取る。
+const freeLabel = DICT['runtime.grubFree']
+const free = (rt.split(freeLabel + ':')[1] ?? '').match(/^\s*(\d+)/)
 check('grub.cfg の残り容量が出る', free !== null, rt.match(/起動メニュー[^\n]*/g)?.join(' | ') ?? '')
 if (free) console.log('grub.cfg 残り:', free[1], 'bytes')
 

@@ -91,3 +91,41 @@ HEAD  : 5ab2e7819e13c400310d9f79384e1982b3930c9d (uncommitted changes: 3 files)
 デバイスは省略すると「選択できる USB の先頭」を自動で選ぶ。
 明示するなら 2 つ目の引数に `\\.\PhysicalDrive1` のように渡す
 （バックスラッシュは 2 個ずつ必要）。
+
+### 画面の文言をここに書き写さない
+
+`full-run2.mjs` は長らく `/起動メニューの残り容量: (\d+) bytes/` を探していた。
+i18n の作業で表示が `t('runtime.grubFreeBytes')` を通るようになり、
+日本語では「610 バイト」になったため、**画面には出ているのにテストだけが落ちた**。
+
+文言は辞書 (`packages/shared/src/i18n/ja.ts`) が正なので、
+`import { ja as DICT } from '../packages/shared/src/i18n/ja.ts'` で引く。
+書式や単位を訳文の周りに足した正規表現は、**訳文を変えた瞬間に静かに壊れる**。
+
+**この壊れ方は機械では見張っていない。** 番人 (`e2e-placeholder-drift.test.ts`) が
+見るのは placeholder の実在と `.catch(() => {})` の握り潰しだけで、
+「訳文を包み込んだ正規表現」は見ていない
+（ラベル用のリテラルと区別できず、誤検出だらけの番人になったので入れなかった）。
+**ここを守るのは、このスクリプトを実際に走らせること。**
+
+### 走らせ方（UAC は要らない）
+
+書き込み以外は昇格が不要なので、`full-run.mjs` / `full-run2.mjs` は誰でも通せる。
+
+```
+npm run build
+cd apps/desktop && npx electron out/main/index.js --remote-debugging-port=9333
+# 別のシェルから、リポジトリのルートで:
+node .e2e/full-run.mjs
+node .e2e/full-run2.mjs
+```
+
+**リポジトリのルートから実行する**（`.e2e/` の中から走らせるとスクリーンショットの
+保存先が `.e2e/.e2e/` になって落ちる）。
+
+折りたたみが閉じている状態から確かめたいときは、先にアプリの状態を消す:
+
+```
+rm -f "$APPDATA/@autoinstall/desktop/settings.json"
+rm -rf "$APPDATA/@autoinstall/desktop/profiles"
+```
