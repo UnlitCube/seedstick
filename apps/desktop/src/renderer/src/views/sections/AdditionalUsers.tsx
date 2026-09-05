@@ -31,6 +31,7 @@ export function AdditionalUsersSection(): React.JSX.Element {
   )
 
   const groupsDraft = useListDraft(editing?.user.groups ?? [], ',')
+  const keysDraft = useListDraft(editing?.user.sshAuthorizedKeys ?? [], '\n')
 
   const commit = async (): Promise<void> => {
     if (!editing) return
@@ -278,16 +279,13 @@ export function AdditionalUsersSection(): React.JSX.Element {
                   id={id}
                   rows={3}
                   spellCheck={false}
-                  value={editing.user.sshAuthorizedKeys.join('\n')}
+                  value={keysDraft.text}
                   onChange={(e) =>
                     setEditing({
                       ...editing,
                       user: {
                         ...editing.user,
-                        sshAuthorizedKeys: e.target.value
-                          .split('\n')
-                          .map((k) => k.trim())
-                          .filter(Boolean),
+                        sshAuthorizedKeys: keysDraft.change(e.target.value),
                       },
                     })
                   }

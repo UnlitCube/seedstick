@@ -25,28 +25,33 @@ function bool(v: unknown, fallback: boolean): boolean {
   return typeof v === 'boolean' ? v : fallback
 }
 
-function strList(v: unknown): string[] {
-  return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
+/**
+ * 列挙値。知らない値なら既定へ戻し、戻したことを伝える。
+ *
+ * 素通しにすると、手で編集された JSON や将来のバージョンで保存された
+ * プロファイルの値がそのまま autoinstall YAML に出る。
+ * subiquity 側で弾かれるので、気づくのは**実機でインストールを始めてから**になる。
+ * migrate も validate も何も言わないまま USB が焼き上がる。
+ */
+function oneOf<T extends string>(
+  value: unknown,
+  allowed: readonly T[],
+  fallback: T,
+  label: string,
+): T {
+  if (typeof value === 'string' && (allowed as readonly string[]).includes(value)) {
+    return value as T
+  }
+  if (value !== undefined) {
+    noteDropped(
+      `${label} の値 (${String(value)}) を認識できなかったため既定 (${fallback}) に戻しました。`,
+    )
+  }
+  return fallback
 }
 
-/** 保存値から「素の値だけ」を取り出す（関数・undefined・プロトタイプ汚染を落とす）。 */
-function sanitize(value: unknown): unknown {
-  if (value === null) return null
-  if (Array.isArray(value)) return value.map(sanitize)
-  if (isObject(value)) {
-    const out: Record<string, unknown> = {}
-    for (const [k, v] of Object.entries(value)) {
-      // __proto__ / constructor / prototype は JSON.parse でも来るので落とす
-      if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue
-      if (v === undefined || typeof v === 'function') continue
-      out[k] = sanitize(v)
-    }
-    return out
-  }
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-    return value
-  }
-  return undefined
+function strList(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
 }
 
 /**
@@ -71,9 +76,18 @@ function mergeSection<T extends Record<string, unknown>>(base: T, raw: unknown):
     if (value === undefined) continue
     const current = out[key]
     if (Array.isArray(current)) {
-      // 配列の中身は呼び出し側が型ごとに整える（mergeList / strList）。
-      // ここでは「配列であること」だけを条件に、素の値へ落として受け取る。
-      if (Array.isArray(value)) out[key] = sanitize(value)
+      // **要素の型まで見る。** レコードの配列（files / services など）は
+      // 呼び出し側が mergeList でひな型に重ねるが、**レコードの中の配列**
+      // （services[].environment、additionalUsers[].sshAuthorizedKeys、
+      //   behavior.interactiveSections …）はここを通る。
+      // 素通しにすると `environment: [42]` が型だけ合った状態で通り、
+      // validateProfile も buildAutoinstallObject も `e.trim is not a function` で
+      // 落ちる。GUI は理由の分からない空の確認画面になる（落とし穴 23）。
+      //
+      // この分岐を通る配列は、このリポジトリではすべて `readonly string[]`
+      // （オブジェクトの配列は呼び出し側が必ず上書きする）。文字列だけを採る。
+      // これでプロトタイプ汚染も同時に塞がる（オブジェクトが一切通らないため）。
+      if (Array.isArray(value)) out[key] = strList(value)
     } else if (isObject(current)) {
       // ネストしたオブジェクト。null や配列や文字列で置き換えさせない。
       if (isObject(value)) out[key] = mergeSection(current as Record<string, unknown>, value)
@@ -310,6 +324,12 @@ export function migrateProfile(raw: unknown): MigrationResult {
         isObject(raw['software']) ? raw['software']['kernel'] : undefined,
         base.software.kernel,
       ),
+      updates: oneOf(
+        isObject(raw['software']) ? raw['software']['updates'] : undefined,
+        ['security', 'all'] as const,
+        base.software.updates,
+        '更新の範囲 (software.updates)',
+      ),
       // snaps もレコードの配列。素通しにすると `[null]` が型だけ合った状態で通り、
       // SoftwareStep の描画と buildAutoinstallObject の両方が TypeError で落ちる
       // （renderer に Error Boundary は無いので画面が白くなる）。
@@ -321,6 +341,12 @@ export function migrateProfile(raw: unknown): MigrationResult {
     },
     apt: {
       ...mergeSection(base.apt, raw['apt']),
+      fallback: oneOf(
+        isObject(raw['apt']) ? raw['apt']['fallback'] : undefined,
+        ['abort', 'continue-anyway', 'offline-install'] as const,
+        base.apt.fallback,
+        'ミラーが使えないときの動作 (apt.fallback)',
+      ),
       sources: withIds(
         mergeList(APT_SOURCE_TEMPLATE, isObject(raw['apt']) ? raw['apt']['sources'] : undefined),
       ) as AutoinstallProfile['apt']['sources'],
@@ -347,6 +373,12 @@ export function migrateProfile(raw: unknown): MigrationResult {
     },
     behavior: {
       ...mergeSection(base.behavior, raw['behavior']),
+      shutdown: oneOf(
+        isObject(raw['behavior']) ? raw['behavior']['shutdown'] : undefined,
+        ['reboot', 'poweroff'] as const,
+        base.behavior.shutdown,
+        'インストール後の動作 (behavior.shutdown)',
+      ),
       reporting: readReporting(
         isObject(raw['behavior']) ? raw['behavior']['reporting'] : undefined,
         base.behavior.reporting,
@@ -491,6 +523,12 @@ function readStorage(
   return {
     ...(merged as unknown as Exclude<AutoinstallProfile['storage'], { mode: 'raw' }>),
     mode,
+    partitionTable: oneOf(
+      raw['partitionTable'],
+      ['default', 'gpt', 'msdos'] as const,
+      template.partitionTable,
+      'パーティションテーブル (storage.partitionTable)',
+    ),
     match: readDiskMatch(raw['match'], template.match) as Exclude<
       AutoinstallProfile['storage'],
       { mode: 'raw' }

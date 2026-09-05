@@ -27,6 +27,10 @@ cd apps/desktop && npx electron out/main/index.js --remote-debugging-port=9333
 
 ## 実 USB への書き込み
 
+> **USB メモリの中身は消えます。** 書き込み先は「選択できる USB の先頭」を
+> 自動で選ぶので、**消えて困る USB は先に抜いておくこと。**
+> システムディスクと内蔵ディスクは `classifyDevice` が候補から外すため選ばれない。
+
 管理者権限が必要。次のどちらかで実行する。
 
 - `.e2e\run-elevated.ps1` を右クリック →「PowerShell で実行」
@@ -36,6 +40,9 @@ cd apps/desktop && npx electron out/main/index.js --remote-debugging-port=9333
 MBR / GPT / ISO9660 / grub.cfg / CIDATA の中身まで検証する。
 
 **GUI と同じ経路（昇格ワーカー + NDJSON）を通したいときは worker モードを使う。**
+
+> worker モードは**ビルド成果物**（`apps/desktop/out/main/worker.js`）を使う。
+> 先に `npm run build` を通しておくこと（無ければその旨を出して止まる）。
 
 - `.e2e\run-elevated.ps1 worker` （右クリック実行なら引数を渡せないので、
   管理者の PowerShell から `powershell -File .e2e\run-elevated.ps1 worker`）

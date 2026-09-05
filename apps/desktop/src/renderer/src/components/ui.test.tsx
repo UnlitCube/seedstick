@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
-import { useListDraft } from './ui.js'
+import { useDraft, useListDraft } from './ui.js'
 
 // カンマ／改行区切りの欄は、正規化した配列から value を作ると
 // **区切り文字を打った瞬間に消える**（打つ前と同じ配列に戻るので value prop が変わらず、
@@ -87,5 +87,94 @@ describe('useListDraft', () => {
     const h = render(['1.1.1.1'], ',')
     expect(h.type('')).toEqual([])
     expect(h.text).toBe('')
+  })
+})
+
+// 構造を持つ値（snaps）や空白区切りも同じ形。useDraft はそれらを扱う。
+describe('useDraft', () => {
+  interface H {
+    text: string
+    type: (next: string) => unknown
+    setValue: (next: unknown) => void
+  }
+
+  function renderDraft(
+    initial: unknown,
+    toText: (v: never) => string,
+    parse: (t: string) => unknown,
+  ): H {
+    const host = document.createElement('div')
+    const root = createRoot(host)
+    const h = {} as H
+    let value = initial
+
+    function Probe(): null {
+      const d = useDraft(value as never, toText, parse as (t: string) => never)
+      h.text = d.text
+      h.type = (next) => {
+        let out: unknown
+        act(() => {
+          out = d.change(next)
+        })
+        return out
+      }
+      return null
+    }
+
+    act(() => root.render(<Probe />))
+    h.setValue = (next) => {
+      value = next
+      act(() => root.render(<Probe />))
+    }
+    return h
+  }
+
+  const snapText = (list: { name: string; channel?: string; classic?: boolean }[]): string =>
+    list
+      .map((sp) => [sp.name, sp.channel, sp.classic ? '--classic' : ''].filter(Boolean).join(' '))
+      .join('\n')
+
+  const snapParse = (text: string): { name: string; channel?: string; classic?: boolean }[] =>
+    text
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const parts = line.split(/\s+/)
+        const name = parts[0]!
+        const classic = parts.includes('--classic')
+        const channel = parts.slice(1).find((x) => !x.startsWith('--'))
+        return { name, ...(channel ? { channel } : {}), ...(classic ? { classic: true } : {}) }
+      })
+
+  it('snap の行を打ち切る途中でも消えない', () => {
+    const h = renderDraft([{ name: 'lxd' }], snapText as never, snapParse)
+    expect(h.text).toBe('lxd')
+    // 改行を打つ → 正規化すると同じ配列に戻るので、素朴な実装だと消える
+    h.type('lxd\n')
+    expect(h.text).toBe('lxd\n')
+    // 2 行目を打てる
+    expect(h.type('lxd\nmicrok8s --classic')).toEqual([
+      { name: 'lxd' },
+      { name: 'microk8s', classic: true },
+    ])
+  })
+
+  it('空白区切り（パッケージ名）でも区切りが打てる', () => {
+    const h = renderDraft(
+      ['nginx'],
+      ((list: string[]) => list.join(' ')) as never,
+      (t: string) => t.split(/[\s,]+/).filter(Boolean),
+    )
+    h.type('nginx ')
+    expect(h.text).toBe('nginx ')
+    expect(h.type('nginx jq')).toEqual(['nginx', 'jq'])
+  })
+
+  it('外から差し替わったら作り直す', () => {
+    const h = renderDraft([{ name: 'lxd' }], snapText as never, snapParse)
+    h.type('lxd\n')
+    h.setValue([{ name: 'core' }])
+    expect(h.text).toBe('core')
   })
 })

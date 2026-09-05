@@ -16,6 +16,7 @@
  */
 import { createServer, type Socket } from 'node:net'
 import { randomBytes } from 'node:crypto'
+import { existsSync } from 'node:fs'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
 import { tmpdir, homedir } from 'node:os'
@@ -159,6 +160,19 @@ async function main(): Promise<void> {
     process.exit(2)
   }
 
+  // ワーカーの実体はビルド成果物。`npm run build` を通していないと存在しない。
+  // **ISO を開く前に確かめる。** 後ろで気づくと、数十秒待たせたうえに
+  // "Cannot find module" だけが出て、原因が「ビルドしていない」ことだと分からない
+  // （UAC を挟んだ別窓なら尚更）。
+  const workerEntry = join(process.cwd(), 'apps/desktop/out/main/worker.js')
+  if (!existsSync(workerEntry)) {
+    console.error(
+      `ワーカーが見つかりません: ${workerEntry}\n` +
+        '先に `npm run build` を実行してください（このスクリプトはビルド成果物を使います）。',
+    )
+    process.exit(2)
+  }
+
   const devices = await ops.listDevices()
   const explicit = arg('device')
   const target = explicit
@@ -248,7 +262,6 @@ async function main(): Promise<void> {
     await writeFile(jobPath, JSON.stringify(job), { mode: 0o600 })
 
     // --- ワーカーを起動する（既に昇格しているので直接 spawn する） ---
-    const workerEntry = join(process.cwd(), 'apps/desktop/out/main/worker.js')
     console.log(`ワーカー: ${workerEntry}`)
     const exitCode = await new Promise<number>((resolve) => {
       const child = spawn(process.execPath, [workerEntry, jobPath], {

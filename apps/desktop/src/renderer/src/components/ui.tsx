@@ -23,21 +23,44 @@ export function useListDraft(
   separator: ',' | '\n',
 ): { text: string; change: (next: string) => string[] } {
   const joiner = separator === ',' ? ', ' : '\n'
-  const parse = (text: string): string[] =>
-    text
-      .split(separator)
-      .map((v) => v.trim())
-      .filter(Boolean)
-  const joined = values.join(joiner)
-  const [draft, setDraft] = useState(joined)
+  return useDraft<string[]>(
+    [...values],
+    (list) => list.join(joiner),
+    (text) =>
+      text
+        .split(separator)
+        .map((v) => v.trim())
+        .filter(Boolean),
+  )
+}
+
+/**
+ * 「正規化した値」を編集する制御コンポーネントのための下書き。
+ *
+ * `value` を state から毎回作り直すと、**まだ正規化を通らない途中の入力**が
+ * 打った瞬間に消える。区切り文字がその代表（`useListDraft` のコメント参照）だが、
+ * 空白区切りのパッケージ名、行ごとに構造へ解釈する snaps なども同じ。
+ * 貼り付け（一度に全体が変わる）は動くので、テストでも見落としやすい。
+ *
+ * 入力中の生テキストを保持し、値は下書きから導く。
+ * **外から値が変わったとき**（プロファイルを開く、リセット）だけ作り直す。
+ */
+export function useDraft<T>(
+  value: T,
+  toText: (value: T) => string,
+  parse: (text: string) => T,
+): { text: string; change: (next: string) => T } {
+  const canonical = toText(value)
+  const [draft, setDraft] = useState(canonical)
 
   useEffect(() => {
     // 下書きを正規化した結果が今の値と同じなら、入力中なので触らない。
     // 違うなら外から差し替わったので作り直す。
-    setDraft((cur) => (parse(cur).join(joiner) === joined ? cur : joined))
-    // parse / joiner は separator から決まるので、joined だけ見ればよい
+    setDraft((cur) => (toText(parse(cur)) === canonical ? cur : canonical))
+    // toText / parse は呼び出し側でインライン定義されるので依存に入れない
+    // （毎レンダリング別物になり、effect が回り続ける）。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [joined])
+  }, [canonical])
 
   return {
     text: draft,

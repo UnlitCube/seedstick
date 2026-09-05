@@ -154,6 +154,38 @@ describe('古いプロファイルに無いキーを補う', () => {
 // 回帰: 既定値の形だけを写すマージは、ネストした判別可能ユニオンの固有フィールドを落とす。
 // storage.match がシリアル指定から `{}`（＝任意のディスク）に化けると、
 // 複数ディスク機で別のディスクを消しかねない。このツールで最も破壊的な失敗。
+const SERVICE_SAMPLE = {
+  id: 's1',
+  name: 'app',
+  description: '',
+  execStart: '/usr/bin/true',
+  execStartPre: '',
+  workingDirectory: '',
+  user: '',
+  group: '',
+  environment: [] as unknown[],
+  environmentFile: '',
+  serviceType: 'simple',
+  restart: 'no',
+  restartSec: 5,
+  after: [] as unknown[],
+  wantedBy: 'multi-user.target',
+  enabled: true,
+}
+
+const USER_SAMPLE = {
+  id: 'u1',
+  username: 'deploy',
+  realname: '',
+  passwordHash: '',
+  sudo: 'none',
+  groups: [] as unknown[],
+  shell: '',
+  sshAuthorizedKeys: [] as unknown[],
+  createHome: true,
+  systemAccount: false,
+}
+
 describe('ネストしたユニオン（match / target）が保存 → 読み込みで壊れない', () => {
   it('storage.match.serial が残る（lvm / direct / zfs すべて）', () => {
     for (const mode of ['lvm', 'direct', 'zfs'] as const) {
@@ -229,26 +261,95 @@ describe('ネストしたユニオン（match / target）が保存 → 読み込
     expect(({} as Record<string, unknown>)['polluted']).toBeUndefined()
   })
 
-  it('配列の要素に混ざった __proto__ / constructor / prototype を落とす', () => {
-    // 上のテストは storage.match を通るが、そこは readDiskMatch が
-    // kind / serial だけを読むので sanitize() には**到達しない**。
-    // 実際に sanitize が効くのは mergeSection の配列分岐なので、そちらで確かめる。
+  it('文字列の配列に混ざった非文字列を落とす（例外にせず、汚染も通さない）', () => {
+    // レコードの中の配列（services[].environment、
+    // additionalUsers[].sshAuthorizedKeys、behavior.interactiveSections …）は
+    // mergeSection の配列分岐を通る。素通しにすると `[42]` が型だけ合った状態で
+    // 通り、validateProfile も buildAutoinstallObject も `e.trim is not a function`
+    // で落ちる（落とし穴 23：GUI が理由の分からない空の確認画面になる）。
     const base = createDefaultProfile('24.04')
     const saved = JSON.parse(
       JSON.stringify(base).replace(
         '"interactiveSections":[]',
-        '"interactiveSections":[{"name":"identity","__proto__":{"polluted":true},' +
-          '"constructor":"x","prototype":"y"}]',
+        '"interactiveSections":["identity",42,null,{"__proto__":{"polluted":true}}]',
       ),
     ) as unknown
 
     const r = migrateProfile(saved)
-    const first = (r.profile.behavior.interactiveSections as unknown[])[0] as Record<string, unknown>
-    expect(first).toBeDefined()
-    // 正当なキーは残り、危険なキーだけが落ちる
-    expect(first['name']).toBe('identity')
-    expect(Object.keys(first)).toEqual(['name'])
+    expect(r.profile.behavior.interactiveSections).toEqual(['identity'])
+    // オブジェクトが一切通らないので、プロトタイプ汚染も起きない
     expect(({} as Record<string, unknown>)['polluted']).toBeUndefined()
+  })
+
+  it('知らない列挙値は既定に戻し、戻したことを伝える', () => {
+    // 素通しにすると、その値がそのまま autoinstall YAML に出る。
+    // subiquity 側で弾かれるので、気づくのは**実機でインストールを始めてから**。
+    // migrate も validate も何も言わないまま USB が焼き上がっていた。
+    const base = createDefaultProfile('24.04')
+    const saved = {
+      ...base,
+      apt: { ...base.apt, fallback: 'NOT-A-REAL-VALUE' },
+      behavior: { ...base.behavior, shutdown: 'bogus-shutdown' },
+      software: { ...base.software, updates: 'bogus-updates' },
+      storage: { ...base.storage, partitionTable: 'bogus-table' },
+    } as unknown
+
+    const r = migrateProfile(saved)
+    expect(r.profile.apt.fallback).toBe(base.apt.fallback)
+    expect(r.profile.behavior.shutdown).toBe(base.behavior.shutdown)
+    expect(r.profile.software.updates).toBe(base.software.updates)
+    if (r.profile.storage.mode !== 'raw' && base.storage.mode !== 'raw') {
+      expect(r.profile.storage.partitionTable).toBe(base.storage.partitionTable)
+    }
+
+    // 黙って戻さない（落とし穴 50）
+    expect(r.notes.length).toBeGreaterThanOrEqual(4)
+    for (const key of ['apt.fallback', 'behavior.shutdown', 'software.updates', 'storage.partitionTable']) {
+      expect(r.notes.some((n) => n.includes(key)), key).toBe(true)
+    }
+
+    // 生成物にも漏れない
+    const built = JSON.stringify(buildAutoinstallObject(r.profile))
+    expect(built).not.toContain('NOT-A-REAL-VALUE')
+    expect(built).not.toContain('bogus-')
+  })
+
+  it('正しい列挙値はそのまま通す', () => {
+    const base = createDefaultProfile('24.04')
+    const saved = {
+      ...base,
+      apt: { ...base.apt, fallback: 'offline-install' },
+      behavior: { ...base.behavior, shutdown: 'poweroff' },
+      software: { ...base.software, updates: 'all' },
+    } as unknown
+    const r = migrateProfile(saved)
+    expect(r.profile.apt.fallback).toBe('offline-install')
+    expect(r.profile.behavior.shutdown).toBe('poweroff')
+    expect(r.profile.software.updates).toBe('all')
+    expect(r.notes).toEqual([])
+  })
+
+  it('レコードの中の文字列配列が壊れていても、検証と生成が例外を投げない', () => {
+    // 例外を投げると GUI は「理由の分からない空の確認画面」と
+    // 「反応しない書き込みボタン」になる（落とし穴 23）。
+    const base = createDefaultProfile('24.04')
+    const saved = {
+      ...base,
+      postInstall: {
+        ...base.postInstall,
+        services: [{ ...SERVICE_SAMPLE, environment: [42, { evil: 1 }, 'OK=1'] }],
+        additionalUsers: [{ ...USER_SAMPLE, sshAuthorizedKeys: [{ evil: 1 }, 'ssh-ed25519 AAAA a@b'] }],
+      },
+    } as unknown
+
+    const r = migrateProfile(saved)
+    expect(() => validateProfile(r.profile)).not.toThrow()
+    expect(() => buildAutoinstallObject(r.profile)).not.toThrow()
+    // 文字列だけが残る
+    expect(r.profile.postInstall.services[0]!.environment).toEqual(['OK=1'])
+    expect(r.profile.postInstall.additionalUsers[0]!.sshAuthorizedKeys).toEqual([
+      'ssh-ed25519 AAAA a@b',
+    ])
   })
 })
 

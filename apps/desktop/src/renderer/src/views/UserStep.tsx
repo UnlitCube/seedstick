@@ -14,6 +14,7 @@ import {
   Switch,
   TextArea,
   TextInput,
+  useDraft,
   useListDraft,
 } from '../components/ui.js'
 import { AdditionalUsersSection } from './sections/AdditionalUsers.js'
@@ -48,6 +49,12 @@ export function UserStep(): React.JSX.Element {
   // 改行区切りの欄も同じ。正規化した配列から value を作ると
   // 改行を打った瞬間に消え、2 個目の鍵をキーボードで足せない。
   const keysDraft = useListDraft(keys, '\n')
+  // 管理ユーザーのグループは空白／カンマ区切り。ここも同じ形なので下書きに寄せる。
+  const userGroupsDraft = useDraft<string[]>(
+    profile.user.groups.mode === 'default' ? [] : [...profile.user.groups.groups],
+    (list) => list.join(' '),
+    (text) => text.split(/[\s,]+/).filter(Boolean),
+  )
 
   const setKeys = (text: string): void => {
     const list = keysDraft.change(text)
@@ -235,9 +242,9 @@ export function UserStep(): React.JSX.Element {
                     spellCheck={false}
                     placeholder="docker libvirt"
                     disabled={!features.identityGroups}
-                    value={profile.user.groups.groups.join(' ')}
+                    value={userGroupsDraft.text}
                     onChange={(e) => {
-                      const list = e.target.value.split(/[\s,]+/).filter(Boolean)
+                      const list = userGroupsDraft.change(e.target.value)
                       update((p) => ({
                         ...p,
                         user: {

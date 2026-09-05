@@ -49,8 +49,11 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
 - **renderer から来た値は信用しない。** ISO パスは「ダイアログで選ばれた実績があるもの」、
   デバイス ID は「直近の列挙で selectable だったもの」だけを受け入れる（`ipc.ts` の
   `allowedIsoPaths` / `selectableDeviceIds`）。
-- **平文パスワードを永続化しない。** GUI のフォーム状態にだけ置き、ハッシュ化は main で行う。
-  プロファイル JSON・監査記録・ログには `$6$` ハッシュのみ。
+- **ログインパスワードを平文で永続化しない。** GUI のフォーム状態にだけ置き、
+  ハッシュ化は main で行う。プロファイル JSON・監査記録・ログには `$6$` ハッシュのみ。
+  **例外が 1 つある**: ディスク暗号化のパスフレーズ (`storage.encryptionPassphrase`) は
+  autoinstall YAML に平文で書く必要があるため、プロファイル JSON にも平文で入る。
+  `validate.ts` が「YAML に平文で書かれる」と警告する。増やさないこと。
 - **危険な操作は列挙側でブロックする。** `classifyDevice()` を通っていないデバイスは UI に出さない。
   システムディスク・内蔵ディスク・2 TB 超は必ず `selectable: false`。
 - **Switch には必ず明示的な boolean を渡す。** `undefined` を「既定」に使うと `JSON.stringify` が
@@ -156,7 +159,9 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
    `{kind:'largest'}` を土台に `{kind:'serial', serial:'X'}` を重ねると `serial` が消え、
    生成される YAML は `match: {}`（＝**任意のディスク**）になる。複数ディスク機で
    別のディスクを消しかねない、このツールで最も破壊的な失敗。
-   判別子 (`kind` / `mode`) が違うオブジェクトは丸ごと採る（`isOtherVariant`）。
+   汎用マージでは扱わず、**型ごとの読み取り関数**を書く
+   （`readDiskMatch` / `readInterfaceSelector` / `readStorage` / `readDeploymentSource`）。
+   詳しくは落とし穴 29。
    セクション直下だけでなく `storage.match` や `network.target` のような
    **ネストしたユニオン**にも同じ罠がある。
 23. **検証・生成は「手で編集された JSON」でも例外を投げないこと。**
@@ -413,11 +418,31 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
     後から繋ぐだけで cancel の送り先を奪えた。cancel にはトークンが乗るので、
     奪った側は以降なりすませ、本物のワーカーには停止要求が届かない。
 
+### 引き継ぎ資料も実装と突き合わせる
+
+71. **引き継ぎ資料そのものを敵対的に検証する。** このリポジトリは
+    「ドキュメントが実装より広いことを謳う」不具合を何度も出している。
+    引き継ぎを書いたあとに検証したところ、32 件中 28 件の食い違いが残り、
+    **実バグが 3 件**出た（列挙値の素通し、配列要素の型崩れ、
+    「直した」と書いた入力欄が未修正）。書いたら必ず突き合わせる。
+
+72. **「〜済み」と書く前に、数えるか実行する。**
+    「63 件すべて対応済み」は 5 件の取りこぼしがあった。
+    「実機で通した」は、そのあと書き込み経路を 5 コミット変更していた。
+    ログを残すなら `git rev-parse HEAD` も一緒に出す（乖離が見える）。
+
+73. **同じ壊れ方の箇所は、grep で全部数えてから直す。**
+    入力欄の修正は 5 か所で止まり、8 か所が残っていた。
+    直した箇所だけを見て「対応した」と書くと、CHANGELOG が嘘になる。
+
 ## 検証済みのこと
 
 - **実 ISO 2 種 (22.04.5 / 24.04.3) × 設定 10 パターン**を `scripts/e2e-matrix.mts` で網羅。
-  生成 → プロファイル検証 → subiquity 公式スキーマ検証 → ISO パッチ → レイアウト計画 →
-  `.img` への書き込み → 読み戻し（MBR / GPT / ISO9660 / md5sum.txt / CIDATA の FAT）まで通る。
+  10 パターンすべてが 生成 → プロファイル検証 → subiquity 公式スキーマ検証 →
+  ISO パッチ → レイアウト計画 まで通る。
+  **`.img` への書き込みと読み戻し（MBR / GPT / ISO9660 / md5sum.txt / CIDATA の FAT）は、
+  既定では代表 4 パターンだけ**（`heavy: true` のケース）。
+  全 10 パターンで書き込みまでやるには `npx tsx scripts/e2e-matrix.mts --full`。
 - **実機のデバイス列挙**。システムディスク (NVMe 2TB) が `selectable: false` で弾かれ、
   USB (KIOXIA 31GB) だけが候補になることを実機で確認。
 - **非対応 ISO の拒否**。Desktop 版 2 種は `not-server`、Proxmox と Windows Vista は
@@ -427,8 +452,15 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
 - **昇格を断ったときの挙動**。UAC を拒否すると
   「管理者権限が許可されませんでした」と次の操作を出す（生の OS エラーを見せない）。
 - **昇格ワーカー経路の実機確認** (`npm run e2e:usb-worker`)。GUI が実際に使う
-  ジョブ JSON + NDJSON 経路を実機で通した (18/18)。hello / progress / done の疎通、
-  ワーカー側のデバイス再検証、書き上がった USB の読み戻しまで確認済み。
+  ジョブ JSON + NDJSON 経路を実機で通した (18/18)。hello / progress / done の疎通と、
+  書き上がった USB の読み戻しまで確認済み。
+  ただし**確かめたのは正常系だけ**。ワーカー側のデバイス再検証が
+  「差し替えられたジョブを拒否する」ことは実機でも単体でも未検証。
+> **注意**: 下の 2 つの実機検証は、それを実行した時点のコードに対するもの。
+> 4 巡目の監査で書き込み経路（`writer/execute.ts` / `layout/plan.ts` / `grub/patch.ts` /
+> `write-supervisor.ts`）を変更したあと、実機では**再実行していない**。
+> ユニット・スモーク・E2E（`.img`）は現行コードで緑。
+
 - **実 USB メモリ (KIOXIA TransMemory 31GB) への書き込み**。管理者権限で
   `npm run e2e:usb` を実行し、3.37 GB を書いて読み戻し、MBR / GPT / ISO9660 /
   grub.cfg / CIDATA の中身まで照合した。ここで「OS がマウントして書いてくる」不具合を発見した。
@@ -471,7 +503,9 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
 `npm run e2e:usb` / `npm run e2e:usb-worker` は昇格が要るので `npm test` には入れていない。
 実行すると USB の中身は消える。前者は `executeWritePlan` を直接呼び、後者は GUI と同じく
 ジョブ JSON をワーカーに渡して進捗を 127.0.0.1 の TCP に NDJSON で受け取る。
-`.e2e/run-elevated.ps1 [write|worker]` を右クリック実行すると UAC 付きで起動できる。
+`.e2e/run-elevated.ps1` を右クリック実行すると UAC 付きで `write` が走る。
+**worker モードは右クリックでは選べない**（Explorer は引数を渡せない）。
+管理者の PowerShell から `powershell -File .e2e/run-elevated.ps1 worker` を使う。
 
 GUI を機械的に操作したいときは `--remote-debugging-port` を付けて起動し、`.e2e/` の
 ヘルパ（`drive.mjs`）を使う。React の state を直接いじらず、CDP の Input ドメインで

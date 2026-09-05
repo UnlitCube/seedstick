@@ -20,6 +20,7 @@ import {
   Switch,
   TextArea,
   TextInput,
+  useListDraft,
 } from '../components/ui.js'
 import { DeploymentsSection } from './sections/Deployments.js'
 import { ServicesSection } from './sections/Services.js'
@@ -145,6 +146,9 @@ function FilesTab(): React.JSX.Element {
   const t = useT()
   const profile = useStore((s) => s.profile)
   const update = useStore((s) => s.updateProfile)
+  // 正規化した配列から value を作ると、改行を打った瞬間に消える（落とし穴 58）
+  const lateCommandsDraft = useListDraft(profile.postInstall.lateCommands, '\n')
+  const firstBootCommandsDraft = useListDraft(profile.postInstall.firstBootCommands, '\n')
   const [editing, setEditing] = useState<{ index: number; file: ProvisionFile } | null>(null)
 
   const saveFile = (): void => {
@@ -223,7 +227,7 @@ function FilesTab(): React.JSX.Element {
           rows={5}
           spellCheck={false}
           placeholder={'curtin in-target -- apt-get install -y nginx\ncurtin in-target -- systemctl enable nginx'}
-          value={profile.postInstall.lateCommands.join('\n')}
+          value={lateCommandsDraft.text}
           onChange={(e) =>
             update((p) => ({
               ...p,
@@ -252,7 +256,7 @@ function FilesTab(): React.JSX.Element {
           rows={4}
           spellCheck={false}
           placeholder={'curl -fsSL https://example.com/setup.sh | bash'}
-          value={profile.postInstall.firstBootCommands.join('\n')}
+          value={firstBootCommandsDraft.text}
           onChange={(e) =>
             update((p) => ({
               ...p,
@@ -354,6 +358,7 @@ function AdvancedTab(): React.JSX.Element {
   const t = useT()
   const profile = useStore((s) => s.profile)
   const update = useStore((s) => s.updateProfile)
+  const errorCommandsDraft = useListDraft(profile.postInstall.errorCommands, '\n')
   const features = SERIES_FEATURES[profile.series]
   const reporting = profile.behavior.reporting
 
@@ -387,11 +392,11 @@ function AdvancedTab(): React.JSX.Element {
             rows={3}
             spellCheck={false}
             placeholder={'curl -X POST https://hooks.example.com/install-failed'}
-            value={profile.postInstall.errorCommands.join('\n')}
+            value={errorCommandsDraft.text}
             onChange={(e) =>
               update((p) => ({
                 ...p,
-                postInstall: { ...p.postInstall, errorCommands: lines(e.target.value) },
+                postInstall: { ...p.postInstall, errorCommands: errorCommandsDraft.change(e.target.value) },
               }))
             }
           />

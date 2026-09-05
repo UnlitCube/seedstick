@@ -56,6 +56,7 @@ export function ServicesSection(): React.JSX.Element {
   // カンマ区切りの欄は正規化した配列から value を作ると区切り文字が打てない
   // （useListDraft のコメント参照）。
   const afterDraft = useListDraft(editing?.item.after ?? [], ',')
+  const environmentDraft = useListDraft(editing?.item.environment ?? [], '\n')
 
   const save = (): void => {
     if (!editing) return
@@ -230,13 +231,13 @@ export function ServicesSection(): React.JSX.Element {
                   rows={3}
                   spellCheck={false}
                   placeholder={'NODE_ENV=production\nPORT=8080'}
-                  value={editing.item.environment.join('\n')}
+                  value={environmentDraft.text}
                   onChange={(e) =>
                     setEditing({
                       ...editing,
                       item: {
                         ...editing.item,
-                        environment: e.target.value.split('\n').map((x) => x.trim()).filter(Boolean),
+                        environment: environmentDraft.change(e.target.value),
                       },
                     })
                   }

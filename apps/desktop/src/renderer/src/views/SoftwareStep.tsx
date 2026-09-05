@@ -8,11 +8,23 @@ import {
   isPpaSource,
   type AptFallback,
   type AptSource,
+  type AutoinstallProfile,
   type KernelChoice,
 } from '@autoinstall/shared'
 import { useStore } from '../store.js'
 import { useT } from '../lib/i18n.js'
-import { Badge, Callout, Card, Field, RadioGroup, Select, Switch, TextArea, TextInput } from '../components/ui.js'
+import {
+  Badge,
+  Callout,
+  Card,
+  Field,
+  RadioGroup,
+  Select,
+  Switch,
+  TextArea,
+  TextInput,
+  useDraft,
+} from '../components/ui.js'
 import { Plus, Trash2 } from 'lucide-react'
 import { GpuSection } from './sections/Gpu.js'
 
@@ -52,6 +64,37 @@ export function SoftwareStep(): React.JSX.Element {
       ...p,
       apt: { ...p.apt, sources: p.apt.sources.map((s, i) => (i === index ? { ...s, ...patch } : s)) },
     }))
+
+  // 正規化した値から value を作ると、区切り（空白・改行）を打った瞬間に消える。
+  // snaps は行を構造へ解釈するので、その往復も下書きに寄せる（落とし穴 58）。
+  const customPackagesDraft = useDraft<string[]>(
+    [...customPackages],
+    (list) => list.join(' '),
+    (text) => text.split(/[\s,]+/).filter(Boolean),
+  )
+  const snapsDraft = useDraft<AutoinstallProfile['software']['snaps']>(
+    profile.software.snaps,
+    (list) =>
+      list
+        .map((sp) => [sp.name, sp.channel, sp.classic ? '--classic' : ''].filter(Boolean).join(' '))
+        .join('\n'),
+    (text) =>
+      text
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => {
+          const parts = line.split(/\s+/)
+          const name = parts[0]!
+          const classic = parts.includes('--classic')
+          const channel = parts.slice(1).find((x) => !x.startsWith('--'))
+          return {
+            name,
+            ...(channel ? { channel } : {}),
+            ...(classic ? { classic: true } : {}),
+          }
+        }),
+  )
 
   const setCustomPackages = (text: string): void => {
     const custom = text.split(/[\s,]+/).filter(Boolean)
@@ -111,10 +154,13 @@ export function SoftwareStep(): React.JSX.Element {
             {(id) => (
               <TextInput
                 id={id}
-                value={customPackages.join(' ')}
+                value={customPackagesDraft.text}
                 spellCheck={false}
                 placeholder="nginx postgresql-client jq"
-                onChange={(e) => setCustomPackages(e.target.value)}
+                onChange={(e) => {
+                  customPackagesDraft.change(e.target.value)
+                  setCustomPackages(e.target.value)
+                }}
               />
             )}
           </Field>
@@ -129,25 +175,9 @@ export function SoftwareStep(): React.JSX.Element {
               rows={3}
               spellCheck={false}
               placeholder={'microk8s --classic\nlxd 5.21/stable'}
-              value={profile.software.snaps
-                .map((s) => [s.name, s.channel, s.classic ? '--classic' : ''].filter(Boolean).join(' '))
-                .join('\n')}
+              value={snapsDraft.text}
               onChange={(e) => {
-                const snaps = e.target.value
-                  .split('\n')
-                  .map((line) => line.trim())
-                  .filter(Boolean)
-                  .map((line) => {
-                    const parts = line.split(/\s+/)
-                    const name = parts[0]!
-                    const classic = parts.includes('--classic')
-                    const channel = parts.slice(1).find((p) => !p.startsWith('--'))
-                    return {
-                      name,
-                      ...(channel ? { channel } : {}),
-                      ...(classic ? { classic: true } : {}),
-                    }
-                  })
+                const snaps = snapsDraft.change(e.target.value)
                 update((p) => ({ ...p, software: { ...p.software, snaps } }))
               }}
             />
