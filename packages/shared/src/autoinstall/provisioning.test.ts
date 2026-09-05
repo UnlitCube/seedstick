@@ -711,6 +711,107 @@ describe('URL 取得ペイロードの改ざん検知（実際に sh で実行�
 })
 
 // ---------------------------------------------------------------------------
+// 所有者とグループ（3 巡目で直した経路。回帰テストが無かった）
+// ---------------------------------------------------------------------------
+
+describe('展開の所有者とグループ', () => {
+  /** USB 同梱（late-commands）と URL 取得（runcmd）の両方を取り出す。 */
+  function commandsFor(d: Deployment): { late: string; firstBoot: string } {
+    const p = profile((x) => ({
+      ...x,
+      postInstall: { ...x.postInstall, deployments: [d] },
+    }))
+    return {
+      late: collectLateCommands(p).join('\n'),
+      firstBoot: collectFirstBootCommands(p).join('\n'),
+    }
+  }
+
+  it('USB 同梱の単一ファイルでも group が反映される', () => {
+    // 3 巡目までは URL 経路だけ chgrp していて、USB 同梱の file 経路は
+    // group を黙って捨てていた。UI は「owner:group」と表示するので気づけない。
+    const { late } = commandsFor(
+      deployment({
+        kind: 'file',
+        name: 'app.conf',
+        targetPath: '/etc/app.conf',
+        owner: 'root',
+        group: 'staff',
+        source: { kind: 'host-file', path: 'C:/app.conf', sizeBytes: 10 },
+      }),
+    )
+    expect(late).toContain("chgrp staff '/etc/app.conf'")
+  })
+
+  it('owner を指定したら owner:group で chown する', () => {
+    const { late } = commandsFor(
+      deployment({
+        kind: 'file',
+        name: 'app.conf',
+        targetPath: '/etc/app.conf',
+        owner: 'deploy',
+        group: 'staff',
+        source: { kind: 'host-file', path: 'C:/app.conf', sizeBytes: 10 },
+      }),
+    )
+    expect(late).toContain("chown deploy:staff '/etc/app.conf'")
+  })
+
+  it('group が空なら owner:owner にする', () => {
+    const { late } = commandsFor(
+      deployment({
+        kind: 'file',
+        name: 'app.conf',
+        targetPath: '/etc/app.conf',
+        owner: 'deploy',
+        group: '',
+        source: { kind: 'host-file', path: 'C:/app.conf', sizeBytes: 10 },
+      }),
+    )
+    expect(late).toContain("chown deploy:deploy '/etc/app.conf'")
+  })
+
+  it('所有者が root のままなら chown も chgrp も出さない', () => {
+    const { late } = commandsFor(
+      deployment({
+        kind: 'file',
+        name: 'app.conf',
+        targetPath: '/etc/app.conf',
+        owner: 'root',
+        group: '',
+        source: { kind: 'host-file', path: 'C:/app.conf', sizeBytes: 10 },
+      }),
+    )
+    expect(late).not.toContain('chown')
+    expect(late).not.toContain('chgrp')
+  })
+
+  it('アーカイブは chownRecursive が false なら owner を反映しない', () => {
+    // UI は「owner:group」を表示するのに、chownRecursive が false だと
+    // 何も出ない。表示と出力が食い違う（今は仕様として固定する）。
+    const off = commandsFor(deployment({ chownRecursive: false, owner: 'deploy', group: 'staff' }))
+    expect(off.late).not.toContain('chown')
+    const on = commandsFor(deployment({ chownRecursive: true, owner: 'deploy', group: 'staff' }))
+    expect(on.late).toContain("chown -R deploy:staff '/opt/myapp'")
+  })
+
+  it('URL 取得でも同じ扱いになる（late と runcmd で食い違わない）', () => {
+    const { firstBoot } = commandsFor(
+      deployment({
+        kind: 'file',
+        name: 'app.conf',
+        targetPath: '/etc/app.conf',
+        owner: 'root',
+        group: 'staff',
+        source: { kind: 'url', url: 'https://example.com/app.conf', sha256: 'a'.repeat(64) },
+      }),
+    )
+    // runcmd は 1 エントリの `sh -e -c` に包むので、内側の ' は '\\'' になる
+    expect(firstBoot).toContain(String.raw`chgrp staff '\''/etc/app.conf'\''`)
+  })
+})
+
+// ---------------------------------------------------------------------------
 // シェル注入（4 巡目の監査で実際に成立していたもの）
 // ---------------------------------------------------------------------------
 //

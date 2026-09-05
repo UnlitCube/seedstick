@@ -70,6 +70,8 @@ function emptyPreset(): HostPreset {
 export function RuntimeStep(): React.JSX.Element {
   const t = useT()
   const runtime = useStore((s) => s.profile.runtimeValues)
+  const network = useStore((s) => s.profile.network)
+  const storage = useStore((s) => s.profile.storage)
   const config = useStore((s) => s.config)
   const iso = useStore((s) => s.iso)
   const update = useStore((s) => s.updateProfile)
@@ -92,8 +94,33 @@ export function RuntimeStep(): React.JSX.Element {
   )
   const entries = buildHostMenuEntries(runtime)
 
+  // 「起動メニューから選ぶ」には前提がある。確認ステップまで進まないと
+  // 分からないのは遅いので、選んだその場で出す。
+  const prerequisites: string[] = []
+  if (runtime.network === 'kernel-arg' && network.mode !== 'static') {
+    prerequisites.push(
+      'ネットワークを起動メニューから選ぶには、「ネットワーク」で「固定 IP」にしておく必要があります'
+        + `（今は「${network.mode}」）。`,
+    )
+  }
+  if (runtime.disk === 'kernel-arg' && storage.mode !== 'raw' && storage.match.kind !== 'serial') {
+    prerequisites.push(
+      'ディスクを起動メニューから選ぶには、「ディスク」で「シリアル番号で指定」にしておく必要があります。',
+    )
+  }
+
   return (
     <div className="space-y-5">
+      {prerequisites.length > 0 && (
+        <Callout tone="warning" title="この設定にはもう少し必要です">
+          <ul className="list-disc space-y-1 pl-5">
+            {prerequisites.map((m) => (
+              <li key={m}>{m}</li>
+            ))}
+          </ul>
+        </Callout>
+      )}
+
       <Card title={t('runtime.title')} description={t('runtime.intro')}>
         <div className="space-y-5">
           {RUNTIME_FIELDS.map((field) => (

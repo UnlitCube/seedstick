@@ -108,6 +108,16 @@ function ProfileLibraryModal({
   const profiles = useStore((s) => s.profiles)
   const currentProfileId = useStore((s) => s.currentProfileId)
   const openProfile = useStore((s) => s.openProfile)
+  const dirty = useStore((s) => s.dirty)
+
+  /**
+   * 未保存の変更を捨ててよいか確かめる。
+   * dirty を追跡して画面にも出しているのに、profile を差し替える経路が
+   * どれもそれを見ていなかった（作りかけの設定が黙って消える）。
+   */
+  const confirmDiscard = (): boolean =>
+    !dirty ||
+    window.confirm('保存していない変更があります。破棄して続けますか？')
   const removeProfile = useStore((s) => s.removeProfile)
   const duplicateProfile = useStore((s) => s.duplicateProfile)
   const refreshProfiles = useStore((s) => s.refreshProfiles)
@@ -145,6 +155,7 @@ function ProfileLibraryModal({
         <div className="mb-4 flex flex-wrap gap-2">
           <Button
             onClick={() => {
+              if (!confirmDiscard()) return
               newProfile()
               onClose()
             }}
@@ -163,6 +174,7 @@ function ProfileLibraryModal({
           </Button>
           <Button
             onClick={() => {
+              if (!confirmDiscard()) return
               void loadProfileFromDisk()
               onClose()
             }}
@@ -193,6 +205,7 @@ function ProfileLibraryModal({
                   <button
                     className="min-w-0 flex-1 text-left"
                     onClick={() => {
+                      if (!confirmDiscard()) return
                       void openProfile(p.id)
                       onClose()
                     }}

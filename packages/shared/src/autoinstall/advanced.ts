@@ -89,7 +89,22 @@ export interface SwapConfig {
 
 /** curtin のサイズ表記（`4G`, `512M`, `1073741824`）として妥当か。 */
 export function isValidSizeSpec(value: string): boolean {
-  return /^\d+(\.\d+)?[KMGT]?B?$/i.test(value.trim())
+  const v = value.trim()
+  // 公式リファレンス「Partition/logical volume extensions」に載っている形だけを通す。
+  //   1G / 512M のような単位付き、50% のような割合。
+  // 以前は /^\d+(\.\d+)?[KMGT]?B?$/i だったので、
+  //   - `4gb` `4Kb`（小文字・大文字混在）… インストーラの UI が受けない形
+  //   - `0`                          … 0 バイトのパーティション
+  //   - `99999999T`                  … どのディスクにも収まらない
+  // まで通していた。どれも実機で初めて分かる失敗になる。
+  if (/^(100|[1-9]?[0-9])%$/.test(v)) return true
+  const m = /^(\d+(?:\.\d+)?)([KMGT])$/.exec(v)
+  if (!m) return false
+  const n = Number(m[1])
+  if (!Number.isFinite(n) || n <= 0) return false
+  // 単位ごとの上限。ディスクの容量を超える指定は書く前に気づけたほうがよい。
+  const maxByUnit: Record<string, number> = { K: 1e12, M: 1e9, G: 1e6, T: 1e3 }
+  return n <= (maxByUnit[m[2]!] ?? 0)
 }
 
 /**

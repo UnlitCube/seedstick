@@ -292,14 +292,21 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   async saveSettings(update) {
-    settingsChain = settingsChain.then(async () => {
+    // **チェーンに catch を付ける。**
+    // 付けないと、1 回でも失敗した時点で settingsChain は rejected のまま残り、
+    // 以後の .then(cb) は cb を実行せず reject を伝えるだけになる。
+    // 「それ以降どの設定も無言で保存されない」状態になり、
+    // 利用者は保存できていないことに気づけない。
+    const step = settingsChain.then(async () => {
       // 保存直前に最新を取り直す。古いスナップショットで上書きしないため。
       const fresh = await window.autoinstall.getSettings()
       const saved = await window.autoinstall.saveSettings(update(fresh))
       set({ settings: saved, locale: saved.locale })
       void get().regenerate()
     })
-    await settingsChain
+    // 次の保存が続けられるよう、チェーン自体は必ず解決させる
+    settingsChain = step.catch(() => undefined)
+    await step
   },
 
   /**

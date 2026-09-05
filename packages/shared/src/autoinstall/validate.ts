@@ -443,6 +443,36 @@ export function validateProfile(profile: AutoinstallProfile): ValidationResult {
     }
   }
 
+  // --- 追加リポジトリの名前 ---
+  // curtin の apt.sources はキーがそのままファイル名になりうる
+  // （`.list` で終わる場合）。重複すると片方が黙って消え、
+  // `__proto__` のようなキーはオブジェクトごと壊す。
+  {
+    const seen = new Set<string>()
+    for (const [i, src] of profile.apt.sources.entries()) {
+      const name = src.name.trim()
+      if (!name) continue // 空なら生成側が autoinstall-N.list を振る
+      if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name)) {
+        add(
+          'error',
+          `apt.sources[${i}].name`,
+          `追加リポジトリの名前 "${name}" が不正です（英数字と . _ - で書いてください）。`,
+          `Repository name "${name}" is invalid; use letters, digits, dots, underscores and hyphens.`,
+        )
+        continue
+      }
+      if (seen.has(name)) {
+        add(
+          'error',
+          `apt.sources[${i}].name`,
+          `追加リポジトリの名前 "${name}" が重複しています（後のものが前のものを消します）。`,
+          `Repository name "${name}" is duplicated; the later entry silently replaces the earlier one.`,
+        )
+      }
+      seen.add(name)
+    }
+  }
+
   // --- ミラーが使えないときの動作 ---
   // 22.04 のスキーマは apt.fallback を宣言していないので出力しない。
   // 既定と違う値を選んでいるなら、効かないことを伝える。

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type Dispatch, type SetStateAction } from 'react'
 import { FileArchive, FolderInput, Package, Trash2 } from 'lucide-react'
 import {
   detectArchiveFormat,
@@ -157,7 +157,9 @@ function DeploymentEditor({
   onSave,
 }: {
   state: { index: number; item: Deployment } | null
-  onChange: (s: { index: number; item: Deployment } | null) => void
+  // 更新関数も受け取れるようにする（非同期の結果を反映するとき、
+  // effect 実行時点の古い state で丸ごと上書きしないため）。
+  onChange: Dispatch<SetStateAction<{ index: number; item: Deployment } | null>>
   onClose: () => void
   onSave: () => void
 }): React.JSX.Element {
@@ -173,12 +175,18 @@ function DeploymentEditor({
       .checkPayloadFile(state.item.source.path)
       .then((info) => {
         if (cancelled || !info.exists) return
-        onChange({
-          ...state,
-          item: {
-            ...state.item,
-            source: { kind: 'host-file', path: (state.item.source as { path: string }).path, sizeBytes: info.sizeBytes },
-          },
+        // **effect 実行時点の state で丸ごと上書きしない。**
+        // IPC の往復中に利用者が入力していると、その編集が古い値で消える。
+        // 更新関数を使って、そのときの最新に対して sizeBytes だけを足す。
+        onChange((cur) => {
+          if (!cur || cur.item.source.kind !== 'host-file') return cur
+          return {
+            ...cur,
+            item: {
+              ...cur.item,
+              source: { ...cur.item.source, sizeBytes: info.sizeBytes },
+            },
+          }
         })
       })
       .finally(() => {
