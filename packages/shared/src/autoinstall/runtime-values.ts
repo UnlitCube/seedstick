@@ -295,6 +295,12 @@ function pythonSource(): string {
     '            cfg["interactive-sections"] = merged',
     '            changed = True',
     '    applied.add("ai.interactive")',
+    'elif "ai.interactive" in args:',
+    '    # `ai.interactive=0` は「追加の確認画面は要らない」。それが既定の状態なので',
+    '    # 何も変えないが、**反映できた**として数える。',
+    '    # ignored に落とすと exit 1 になり、起動メニューで e を押して',
+    '    # 打ち直しただけの機械でインストールが中止される。',
+    '    applied.add("ai.interactive")',
     '',
     '# 渡されたのに反映できなかった引数があれば止める。',
     '# 黙って続けると「起動メニューで選んだのに値が入っていない」機械ができ、',
@@ -404,9 +410,10 @@ export function buildHostMenuEntries(
       if (p.ipv4) args.push(`${KERNEL_ARG.ipv4}=${p.ipv4}`)
       // 空欄は「無し」を明示して渡す。省くとプロファイルの既定値が残る。
       args.push(`${KERNEL_ARG.gateway}=${p.gateway || NONE_VALUE}`)
-      args.push(
-        `${KERNEL_ARG.nameservers}=${p.nameservers.replace(/\s+/g, '') || NONE_VALUE}`,
-      )
+      // 手で編集された JSON では文字列とは限らない。触る前に型を確かめる
+      // （ここで落ちると GUI が理由の分からない空の確認画面になる・落とし穴 23）。
+      const dns = typeof p.nameservers === 'string' ? p.nameservers.replace(/\s+/g, '') : ''
+      args.push(`${KERNEL_ARG.nameservers}=${dns || NONE_VALUE}`)
     }
     if (useDisk && p.disk) args.push(`${KERNEL_ARG.disk}=${p.disk}`)
     // 詳細をタイトルに出しておくと、選ぶ前に確認できる。

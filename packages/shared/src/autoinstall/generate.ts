@@ -322,8 +322,18 @@ function buildApt(profile: AutoinstallProfile): Record<string, unknown> | undefi
     apt['disable_components'] = [...profile.apt.disableComponents]
   }
   if (profile.apt.preserveSourcesList) apt['preserve_sources_list'] = true
-  // 既定は abort。明示的に変えたときだけ出す。
-  if (profile.apt.fallback !== 'abort') apt['fallback'] = profile.apt.fallback
+  // **既定に頼らず必ず出す。**
+  // 公式リファレンスは同じ文書の中で食い違っている（`fallback` の節は
+  // 「default: offline-install」、既定の apt 設定の例は `fallback: abort`）。
+  // スキーマにも既定値の記載は無い。どちらが本当でも意図どおりに効くよう明示する。
+  // 「ミラーが使えないとき中止する」か「オフラインで続ける」かは、
+  // 取り違えるとインストール結果そのものが変わる。
+  //
+  // ただし 22.04 のスキーマは apt.fallback を宣言していないので出さない
+  // （そのリリースに無いキーを出しても黙って無視される）。検証で伝える。
+  if (SERIES_FEATURES[profile.series].aptFallback) {
+    apt['fallback'] = profile.apt.fallback
+  }
   const sources = buildAptSources(profile)
   if (sources) apt['sources'] = sources
   return Object.keys(apt).length > 0 ? apt : undefined

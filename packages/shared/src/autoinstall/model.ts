@@ -64,6 +64,12 @@ export interface SeriesFeatures {
    * 黙って効かないほうが危ないので GUI 側で出さない。
    */
   resetPartition: boolean
+  /**
+   * `apt.fallback`（ミラーが使えないときの動作）。
+   * 22.04 のスキーマは apt の中にこのキーを宣言していない。
+   * 出しても検証では落ちないが、黙って無視されるので出さない。
+   */
+  aptFallback: boolean
 }
 
 export const SERIES_FEATURES: Record<UbuntuSeries, SeriesFeatures> = {
@@ -77,6 +83,7 @@ export const SERIES_FEATURES: Record<UbuntuSeries, SeriesFeatures> = {
     zdevs: false,
     hweMenuEntry: true,
     identityGroups: false,
+    aptFallback: false,
     resetPartition: false,
   },
   '24.04': {
@@ -89,6 +96,7 @@ export const SERIES_FEATURES: Record<UbuntuSeries, SeriesFeatures> = {
     zdevs: false,
     hweMenuEntry: true,
     identityGroups: false,
+    aptFallback: true,
     resetPartition: true,
   },
   '25.10': {
@@ -101,6 +109,7 @@ export const SERIES_FEATURES: Record<UbuntuSeries, SeriesFeatures> = {
     zdevs: true,
     hweMenuEntry: false,
     identityGroups: false,
+    aptFallback: true,
     resetPartition: true,
   },
   '26.04': {
@@ -113,6 +122,7 @@ export const SERIES_FEATURES: Record<UbuntuSeries, SeriesFeatures> = {
     zdevs: true,
     hweMenuEntry: false,
     identityGroups: true,
+    aptFallback: true,
     resetPartition: true,
   },
 }

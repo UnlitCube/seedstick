@@ -84,7 +84,6 @@ const api: AutoinstallApi = {
     ipcRenderer.invoke('checkPayloadFile', path) as Promise<{ exists: boolean; sizeBytes: number }>,
 
   listDevices: () => ipcRenderer.invoke('listDevices') as Promise<DeviceInfo[]>,
-  onDevicesChanged: (cb) => subscribe('devices-changed', cb),
 
   startWrite: (req: WriteRequest) =>
     ipcRenderer.invoke('startWrite', req) as Promise<{ started: boolean; message?: string }>,

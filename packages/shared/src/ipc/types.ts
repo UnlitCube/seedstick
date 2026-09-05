@@ -172,7 +172,6 @@ export interface AutoinstallApi {
 
   // --- デバイス ---
   listDevices(): Promise<DeviceInfo[]>
-  onDevicesChanged(cb: (devices: DeviceInfo[]) => void): () => void
 
   // --- 書き込み ---
   startWrite(req: WriteRequest): Promise<{ started: boolean; message?: string }>

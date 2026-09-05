@@ -56,7 +56,16 @@ export function StorageStep(): React.JSX.Element {
         resetPartition: { enabled: false, size: '' },
       })
     } else {
-      setStorage({ ...storage, mode })
+      // 暗号化のパスフレーズは LVM レイアウトにしか無い設定なので、
+      // 他のモードへ移るときは一緒に消す。
+      // 残したままにすると「LVM でのみ使えます」という error が出るのに、
+      // スイッチもパスフレーズ欄も LVM のときしか描画されないので、
+      // 画面からは二度と解除できなくなる（書き込みボタンが沈黙する）。
+      setStorage({
+        ...storage,
+        mode,
+        encryptionPassphrase: mode === 'lvm' ? storage.encryptionPassphrase : '',
+      })
     }
   }
 

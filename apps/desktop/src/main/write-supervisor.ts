@@ -158,14 +158,26 @@ export class WriteSupervisor {
   private startReportServer(): Promise<number> {
     return new Promise((resolve, reject) => {
       const server = createServer((socket) => {
-        this.clientSocket = socket
         let buffer = ''
+        let authenticated = false
         socket.setEncoding('utf8')
         socket.on('data', (chunk: string) => {
           buffer += chunk
+          // decodeMessages はトークンが一致しない行を捨てる。
           const { messages, rest } = decodeMessages(buffer, this.token)
           buffer = rest
+          if (messages.length > 0 && !authenticated) {
+            // **トークン付きのメッセージを出せた相手だけを制御チャネルにする。**
+            // 接続してきた順に無条件で差し替えていたため、ローカルの一般プロセスが
+            // 後から繋ぐだけで cancel の送り先を奪えた（cancel にはトークンが乗るので、
+            // 盗んだ側は以降なりすませる。本物のワーカーには停止要求が届かない）。
+            authenticated = true
+            this.clientSocket = socket
+          }
           for (const m of messages) this.handleWorkerMessage(m as WorkerMessage)
+        })
+        socket.on('close', () => {
+          if (this.clientSocket === socket) this.clientSocket = null
         })
         socket.on('error', () => undefined)
       })

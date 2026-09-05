@@ -347,7 +347,14 @@ const CASES: Case[] = [
     expect: (r) => {
       eq('C6: kernel.flavor', at(r.autoinstall, 'kernel.flavor'), 'hwe')
       check('C6: apt.sources に PPA が入る', JSON.stringify(at(r.autoinstall, 'apt.sources')).includes('ppa:ondrej/php'))
-      eq('C6: apt.fallback', at(r.autoinstall, 'apt.fallback'), 'offline-install')
+      // apt.fallback は 22.04 のスキーマに無いので出さない（黙って無視されるため）。
+      // 24.04 以降は既定に頼らず必ず明示する（公式リファレンスが同じ文書の中で
+      // 「default: offline-install」と「既定は fallback: abort」で食い違っている）。
+      eq(
+        'C6: apt.fallback',
+        at(r.autoinstall, 'apt.fallback'),
+        r.profile.series === '22.04' ? undefined : 'offline-install',
+      )
       eq('C6: swap size', at(r.autoinstall, 'storage.swap.size'), '4G')
       check('C6: error-commands がある', Array.isArray(at(r.autoinstall, 'error-commands')))
       check('C6: 失敗時ログ収集が入る', JSON.stringify(at(r.autoinstall, 'error-commands')).includes('installer-logs.tar.gz'))

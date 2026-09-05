@@ -350,7 +350,23 @@ export function validateProfile(profile: AutoinstallProfile): ValidationResult {
       )
     }
 
-    // 実行時にディスクを決める設定なら、ここの match は使われないので助言しない
+    // 実行時にディスクを決める設定なら、ここの match は使われないので助言しない。
+    //
+    // `kind: 'any'` は `match: {}` を出力する。subiquity から見ると
+    // 「どのディスクでもよい」なので、複数ディスク機では**どれを消すか分からない**。
+    // 最も危険な指定なのに、より安全な largest / smallest にだけ注意書きがあり、
+    // ここだけ無言だった（落とし穴 22 と同じ形の事故になる）。
+    if (profile.runtimeValues.disk === 'fixed' && profile.storage.match.kind === 'any') {
+      add(
+        'warning',
+        'storage.match',
+        'インストール先を「どのディスクでもよい」にしています。'
+          + '複数のディスクがある機器では、どれが消えるか分かりません。'
+          + 'シリアル番号やパスで指定してください。',
+        'The install target is set to "any disk". On a machine with several disks '
+          + 'there is no way to tell which one will be erased. Match by serial number or path.',
+      )
+    }
     if (
       profile.runtimeValues.disk === 'fixed' &&
       (profile.storage.match.kind === 'largest' || profile.storage.match.kind === 'smallest')
@@ -377,6 +393,66 @@ export function validateProfile(profile: AutoinstallProfile): ValidationResult {
         `Deployment "${d.name}" uses an unsupported archive format "${String(d.archiveFormat)}".`,
       )
     }
+  }
+
+  // --- 追加ファイル / 展開の所有者が実在するか ---
+  // `chown` は存在しないユーザーだと非ゼロで終わる。late-commands の失敗は
+  // インストール全体の中断になるので、**全部書き終わった最後の段階で**倒れる。
+  // サービスの実行ユーザーには同じ検証があるのに、こちらには無かった。
+  {
+    const created = new Set<string>([profile.user.username])
+    for (const u of profile.postInstall.additionalUsers) if (u.username) created.add(u.username)
+    const known = (name: string): boolean =>
+      name === '' || name === 'root' || name === 'nobody' || created.has(name)
+
+    for (const f of profile.postInstall.files) {
+      const owner = (f.owner ?? '').split(':')[0] ?? ''
+      if (!known(owner)) {
+        add(
+          'warning',
+          'postInstall.files',
+          `ファイル "${f.name}" の所有者 "${owner}" はこの設定では作成されません（既存のユーザーでなければ、インストールが最後の段階で失敗します）。`,
+          `File "${f.name}" is owned by "${owner}", which this config does not create. Unless it already exists, the install fails at the very end.`,
+        )
+      }
+    }
+    for (const d of profile.postInstall.deployments) {
+      if (!known(d.owner ?? '')) {
+        add(
+          'warning',
+          'postInstall.deployments',
+          `展開 "${d.name}" の所有者 "${d.owner}" はこの設定では作成されません（既存のユーザーでなければ、インストールが最後の段階で失敗します）。`,
+          `Deployment "${d.name}" is owned by "${d.owner}", which this config does not create. Unless it already exists, the install fails at the very end.`,
+        )
+      }
+    }
+  }
+
+  // --- リセットパーティション ---
+  // 22.04 の subiquity には無い。storage セクションはスキーマ上中身を検証しないので
+  // 出しても落ちず、単に作られない。UI からも消えるため、有効のまま残った設定に
+  // 気づけない（「設定したのに効かない」の典型）。
+  if (!SERIES_FEATURES[profile.series].resetPartition && profile.storage.mode !== 'raw') {
+    if (profile.storage.resetPartition.enabled) {
+      add(
+        'warning',
+        'storage.resetPartition',
+        `Ubuntu ${profile.series} にはリセットパーティションがありません（設定は無視されます）。`,
+        `Ubuntu ${profile.series} has no reset partition; the setting is ignored.`,
+      )
+    }
+  }
+
+  // --- ミラーが使えないときの動作 ---
+  // 22.04 のスキーマは apt.fallback を宣言していないので出力しない。
+  // 既定と違う値を選んでいるなら、効かないことを伝える。
+  if (!SERIES_FEATURES[profile.series].aptFallback && profile.apt.fallback !== 'abort') {
+    add(
+      'warning',
+      'apt.fallback',
+      `Ubuntu ${profile.series} では「ミラーが使えないときの動作」を指定できません（無視されます）。`,
+      `Ubuntu ${profile.series} does not support the apt mirror fallback setting; it is ignored.`,
+    )
   }
 
   // --- GPU / CUDA のツールキット名 ---
@@ -701,6 +777,14 @@ export function validateProfile(profile: AutoinstallProfile): ValidationResult {
         `${where}.user`,
         `サービス "${svc.name}" が使うユーザー "${svc.user}" はこの設定では作成されません。`,
         `Service "${svc.name}" runs as "${svc.user}", which this config does not create.`,
+      )
+    }
+    if (svc.group && svc.group !== 'root' && !allUsernames.has(svc.group)) {
+      add(
+        'info',
+        `${where}.group`,
+        `サービス "${svc.name}" のグループ "${svc.group}" はこの設定では作成されません（既存のグループなら問題ありません）。`,
+        `Service "${svc.name}" uses the group "${svc.group}", which this config does not create. Fine if it already exists.`,
       )
     }
     for (const [k, e] of svc.environment.entries()) {

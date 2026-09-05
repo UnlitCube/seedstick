@@ -576,6 +576,23 @@ describe('起動メニューの「無し」指定', () => {
     expect(eth['nameservers']).toBeUndefined()
   })
 
+  it('ai.interactive=0 でインストールを中止しない', () => {
+    // 起動メニューが出すのは ai.interactive=1 だけだが、GRUB で e を押して
+    // 手で打つ人はいる。`=0` は「追加の確認画面は要らない」という自然な指定で、
+    // それが既定の状態なのだから、何も変えずに受け入れるのが正しい。
+    // ignored に落として exit 1 にすると、打ち直しただけでインストールが止まる。
+    const p = kernelArgProfile()
+    const out = runEarlyCommands(
+      p,
+      'autoinstall ai.hostname=web01 ai.ipv4=192.168.1.11/24 ai.gw=none ai.dns=none' +
+        ' ai.disk=SERIAL1 ai.interactive=0 ---\n',
+    ) as AppliedConfig
+    // 例外にならず（runEarlyCommands は非ゼロ終了で throw する）、
+    // 対話セクションは増えていないこと
+    expect(out['interactive-sections']).toBeUndefined()
+    expect(out.identity?.hostname).toBe('web01')
+  })
+
   it('ai.dns=none は DNS だけを消す（search ドメインは残す）', () => {
     // netplan の nameservers は addresses と search を同じ dict に持つ。
     // nameservers ごと pop すると、プロファイルで指定した検索ドメインまで

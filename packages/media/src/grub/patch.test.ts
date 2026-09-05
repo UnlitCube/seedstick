@@ -85,6 +85,20 @@ describe.each(VERSIONS)('実 grub.cfg ($v)', (c) => {
     expect(r.patchedTitles).toBeGreaterThan(0)
   })
 
+  it('自動インストールしない menuentry には印を付けない', () => {
+    const r = patchGrubCfg(original, { args: ['autoinstall'], markTitle: true })
+    // 「次のボリュームから起動」「UEFI 設定」「メモリテスト」は casper を起動しない。
+    // 印を付けると、起動メニューで自動インストールの項目に見えて取り違える。
+    for (const line of r.text.split('\n')) {
+      if (!/^\s*menuentry\s/.test(line)) continue
+      if (/Boot from next volume|UEFI Firmware Settings|Test memory|memtest/i.test(line)) {
+        expect(line, line.trim()).not.toContain('[Autoinstall]')
+      }
+    }
+    // 印が付くのは casper のカーネル行を持つ menuentry の数だけ
+    expect(r.patchedTitles).toBe(c.kernelLines)
+  })
+
   it('パッチしても行数と行以外の内容は変わらない', () => {
     const r = patchGrubCfg(original, { args: ['autoinstall'] })
     expect(r.text.split('\n')).toHaveLength(original.split('\n').length)

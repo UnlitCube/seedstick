@@ -226,7 +226,10 @@ export function registerIpc(): void {
         issues: [
           {
             severity: 'error' as const,
-            field: 'advanced.rawOverlayYaml',
+            // 生成のどこで落ちたかは分からないので、特定の設定項目のせいにしない。
+            // `advanced.rawOverlayYaml` と書くと、上書き YAML を使っていない人まで
+            // 無関係な画面へ探しに行くことになる。
+            field: 'generate',
             messageJa: `設定を生成できませんでした: ${(err as Error).message}`,
             messageEn: `Could not generate the configuration: ${(err as Error).message}`,
           },

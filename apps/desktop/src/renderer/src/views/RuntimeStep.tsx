@@ -227,9 +227,10 @@ export function RuntimeStep(): React.JSX.Element {
         <Card title={t('runtime.previewTitle')}>
           {entries.length > 0 ? (
             <ul className="space-y-1.5">
-              {entries.map((e) => (
+              {/* タイトルはラベルから作るので重複しうる。key には添字を使う。 */}
+              {entries.map((e, i) => (
                 <li
-                  key={e.title}
+                  key={`${i}-${e.title}`}
                   className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-900"
                 >
                   <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{e.title}</p>

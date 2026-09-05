@@ -148,11 +148,44 @@ function buildExtraMenuBlocks(
   })
 }
 
+/**
+ * casper のカーネルを起動する `menuentry` の行を集める。
+ *
+ * ブロックの中括弧を数え、その中に `/casper/` のカーネル行があるものだけを返す。
+ * 同じタイトルの行が複数あることは無いので、行そのものを鍵にする。
+ */
+function casperMenuEntryLines(lines: readonly string[]): Set<string> {
+  const found = new Set<string>()
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!
+    if (!MENUENTRY_RE.test(line)) continue
+    let depth = 0
+    let seenOpen = false
+    for (let j = i; j < lines.length; j++) {
+      const cur = lines[j]!
+      for (const ch of cur) {
+        if (ch === '{') {
+          depth++
+          seenOpen = true
+        } else if (ch === '}') depth--
+      }
+      const m = KERNEL_LINE_RE.exec(cur)
+      if (m !== null && m[4]!.includes('/casper/')) found.add(line)
+      if (seenOpen && depth <= 0) break
+    }
+  }
+  return found
+}
+
 /** grub.cfg にカーネル引数を挿入し、必要ならホストごとの menuentry を足す。 */
 export function patchGrubCfg(original: string, options: GrubPatchOptions): GrubPatchResult {
   const lines = original.split('\n')
   let patchedLines = 0
   let patchedTitles = 0
+  // [Autoinstall] と改名してよいのは、casper のカーネルを起動する menuentry だけ。
+  // 全部に付けると「次のボリュームから起動」「UEFI 設定」「メモリテスト」まで
+  // 自動インストールの項目に見え、起動メニューで取り違える。
+  const casperEntryLines = casperMenuEntryLines(lines)
   const out = lines.map((line) => {
     if (options.timeout !== null && options.timeout !== undefined) {
       const t = /^(\s*set\s+timeout=)(\d+)(\s*)$/.exec(line)
@@ -165,7 +198,7 @@ export function patchGrubCfg(original: string, options: GrubPatchOptions): GrubP
     }
     if (options.markTitle) {
       const t = MENUENTRY_RE.exec(line)
-      if (t && !t[3]!.includes('[Autoinstall]')) {
+      if (t && casperEntryLines.has(line) && !t[3]!.includes('[Autoinstall]')) {
         patchedTitles++
         return `${t[1]}${t[2]}${t[3]} [Autoinstall]${t[2]}${t[4]}`
       }
