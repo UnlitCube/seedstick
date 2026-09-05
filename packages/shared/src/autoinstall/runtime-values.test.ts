@@ -577,11 +577,26 @@ describe('起動メニューの「無し」指定', () => {
   })
 
   it('値があるホストはそのまま入る', () => {
-    const p = kernelArgProfile()
-    const entry = buildHostMenuEntries(p.runtimeValues)[0]
-    if (!entry) return
-    const out = runEarlyCommands(p, `autoinstall ${entry.args.join(' ')} ---\n`) as AppliedConfig
+    // **プリセットを実際に入れること。** presets が空だと buildHostMenuEntries が
+    // 返すのは「手入力」項目 (ai.interactive=1) だけになり、ホストの値を一度も
+    // 適用しないまま、プロファイル既定の routes を見て緑になっていた。
+    const base = kernelArgProfile()
+    const p = {
+      ...base,
+      runtimeValues: { ...base.runtimeValues, presets: [preset()] },
+    } as AutoinstallProfile
+    const entries = buildHostMenuEntries(p.runtimeValues)
+    const entry = entries.find((e) => e.args.some((a) => a.startsWith(`${KERNEL_ARG.hostname}=`)))
+    expect(entry).toBeDefined()
+
+    const out = runEarlyCommands(p, `autoinstall ${entry!.args.join(' ')} ---\n`) as AppliedConfig
+    // プロファイル既定 (fallback-host / 10.0.0.9 / FALLBACKSERIAL) ではなく
+    // プリセットの値になっていること
+    expect(out.identity?.hostname).toBe('web01')
     const eth = Object.values(out.network?.ethernets ?? {})[0]!
-    expect(eth['routes']).toBeDefined()
+    expect(eth['addresses']).toEqual(['192.168.1.11/24'])
+    expect(eth['nameservers']).toEqual({ addresses: ['1.1.1.1', '8.8.8.8'] })
+    expect(JSON.stringify(eth['routes'])).toContain('192.168.1.1')
+    expect(out.storage?.layout?.match?.serial).toBe('CT500MX500SSD1')
   })
 })

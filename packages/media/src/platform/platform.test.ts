@@ -34,12 +34,24 @@ describe('classifyDevice の安全判定', () => {
     expect(classifyDevice({ ...base, readOnly: true }).selectable).toBe(false)
   })
 
-  it('内蔵の NVMe / SATA / SCSI はブロックする', () => {
-    for (const bus of ['nvme', 'sata', 'scsi'] as const) {
+  it('取り外せる根拠が無いデバイスはすべてブロックする', () => {
+    // nvme / sata / scsi だけを弾いていた頃は、RAID コントローラ・iSCSI・
+    // ファイバチャネル・virtio のように bus が 'unknown' になるディスクが
+    // 候補に出ていた（Windows では removable も false になる）。
+    // 分からないものは危険側に倒す。
+    for (const bus of ['nvme', 'sata', 'scsi', 'unknown', 'virtual'] as const) {
       const d = classifyDevice({ ...base, bus, removable: false })
       expect(d.selectable, bus).toBe(false)
-      expect(d.blockedReason, bus).toMatch(/内蔵/)
+      expect(d.blockedReason, bus).not.toBeNull()
     }
+  })
+
+  it('USB / SD、または OS が removable と言うものだけ候補にする', () => {
+    for (const bus of ['usb', 'sd'] as const) {
+      expect(classifyDevice({ ...base, bus, removable: false }).selectable, bus).toBe(true)
+    }
+    // bus が分からなくても OS が removable と言っているなら通す
+    expect(classifyDevice({ ...base, bus: 'unknown', removable: true }).selectable).toBe(true)
   })
 
   it('容量が小さすぎるとブロックする', () => {

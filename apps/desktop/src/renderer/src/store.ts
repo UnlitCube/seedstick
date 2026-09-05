@@ -87,6 +87,11 @@ interface AppState {
   resetWrite(): void
   saveSettings(update: (s: AppSettings) => AppSettings): Promise<void>
   loadProfileFromDisk(): Promise<void>
+  /** 開いたプロファイルの series を、選択中の ISO に合わせる（内部用） */
+  _alignSeriesToIso(loaded: { profile: AutoinstallProfile; notes: string[] }): {
+    profile: AutoinstallProfile
+    notes: string[]
+  }
   setLocale(locale: Locale): Promise<void>
   refreshProfiles(): Promise<void>
   saveCurrentProfile(name?: string): Promise<void>
@@ -297,9 +302,36 @@ export const useStore = create<AppState>((set, get) => ({
     await settingsChain
   },
 
+  /**
+   * 開いたプロファイルを、選択中の ISO のバージョンに合わせる。
+   *
+   * プロファイルには保存時の `series` が入っている。24.04 の ISO を選んだまま
+   * 22.04 で保存したプロファイルを開くと、**ISO と無関係に 22.04 向けの YAML** が
+   * できあがる（対応キーの出し分けが変わる）。検証もプロファイルの series を
+   * 基準にするので「問題なし」と表示され、そのまま書き込めてしまう。
+   * ISO を選んでいるなら、そちらが正。合わせたことは画面で伝える。
+   */
+  _alignSeriesToIso(loaded: { profile: AutoinstallProfile; notes: string[] }): {
+    profile: AutoinstallProfile
+    notes: string[]
+  } {
+    const iso = get().iso
+    if (!iso || iso.identity.series === loaded.profile.series) return loaded
+    return {
+      profile: { ...loaded.profile, series: iso.identity.series },
+      notes: [
+        ...loaded.notes,
+        `このプロファイルは Ubuntu ${loaded.profile.series} 用に保存されていましたが、`
+          + `選択中の ISO (${iso.identity.series}) に合わせました。`
+          + 'バージョンによって使える設定が違うので、確認画面で内容を見てください。',
+      ],
+    }
+  },
+
   async loadProfileFromDisk() {
-    const loaded = await window.autoinstall.loadProfile()
-    if (!loaded) return
+    const raw = await window.autoinstall.loadProfile()
+    if (!raw) return
+    const loaded = get()._alignSeriesToIso({ profile: raw.profile, notes: [...raw.notes] })
     set({
       profile: loaded.profile,
       // ファイルから開いたものはライブラリの特定の項目には紐づかない
@@ -331,12 +363,14 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   async openProfile(id) {
-    const loaded = await window.autoinstall.loadNamedProfile(id)
-    if (!loaded) return
+    const raw = await window.autoinstall.loadNamedProfile(id)
+    if (!raw) return
+    const loaded = get()._alignSeriesToIso({ profile: raw.profile, notes: [...raw.notes] })
     set({
       profile: loaded.profile,
       currentProfileId: id,
-      dirty: false,
+      // series を合わせたなら保存済みの内容と違うので、未保存の変更として扱う
+      dirty: loaded.profile.series !== raw.profile.series,
       profileNotes: loaded.notes,
       passwordDraft: '',
       passwordConfirmDraft: '',

@@ -52,9 +52,21 @@ export function classifyDevice(
   if (d.isSystem) return block('OS が入っているシステムディスクです')
   if (d.readOnly) return block('書き込み禁止になっています')
   if (d.sizeBytes <= 0) return block('容量を取得できませんでした')
-  // 内蔵ディスクは既定で除外する。誤ってサーバーの内蔵 SSD を消す事故を防ぐ。
-  if (!d.removable && (d.bus === 'nvme' || d.bus === 'sata' || d.bus === 'scsi')) {
-    return block('内蔵ディスクのため対象外です')
+  // 仮想ディスク（.vhd などのファイル実体）は書き込み先として想定していない
+  if (d.bus === 'virtual') return block('仮想ディスクのため対象外です')
+  // **「内蔵らしいものを弾く」ではなく「取り外せる根拠があるものだけ通す」。**
+  //
+  // 以前は bus が nvme / sata / scsi のときだけ弾いていたので、
+  // RAID コントローラ・iSCSI・ファイバチャネル・virtio のように
+  // bus が 'unknown' になるディスクが候補に出ていた。
+  // Windows では removable が usb / sd のときしか true にならないので、
+  // サーバーの RAID アレイ（2 TB 以下なら容量の条件も抜ける）が
+  // 「書き込んでよいデバイス」として画面に並ぶ。消したら戻せない。
+  //
+  // 分からないものは危険側に倒す。USB か SD、または OS が明示的に
+  // removable と言っているものだけを候補にする。
+  if (!d.removable && d.bus !== 'usb' && d.bus !== 'sd') {
+    return block('取り外し可能なデバイスとして認識できませんでした')
   }
   // 4 GB 未満は Ubuntu Server の ISO が入らない
   if (d.sizeBytes < 4 * 1000 * 1000 * 1000) return block('容量が小さすぎます（4 GB 以上が必要）')

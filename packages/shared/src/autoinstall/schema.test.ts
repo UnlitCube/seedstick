@@ -273,6 +273,27 @@ describe.each(SERIES)('公式スキーマ検証 (%s)', (series) => {
     expect(describeErrors(validate(toPlain(buildAutoinstallObject(p, { comments: 'none' }))))).toBe('')
   })
 
+  // **スキーマ検証だけでは「そのリリースに無いキー」を検出できない。**
+  // 4 リリースとも トップレベルが additionalProperties: true なので、
+  // 22.04 に存在しないキーを出しても ajv は通してしまい、実機で黙って無視される。
+  // properties に宣言されているキーと突き合わせるのは、ここでしかできない。
+  it('そのリリースのスキーマが宣言していないキーを出さない', () => {
+    const schema = JSON.parse(
+      readFileSync(join(SCHEMA_DIR, SCHEMA_FILES[series]), 'utf8'),
+    ) as { properties?: Record<string, unknown> }
+    const declared = new Set(Object.keys(schema.properties ?? {}))
+    expect(declared.size).toBeGreaterThan(0)
+
+    for (const profile of [base(series), everything(series)]) {
+      const built = toPlain(buildAutoinstallObject(profile, { comments: 'none' })) as Record<
+        string,
+        unknown
+      >
+      const unknownKeys = Object.keys(built).filter((k) => !declared.has(k))
+      expect(unknownKeys).toEqual([])
+    }
+  })
+
   it('スキーマが実際に不正を弾くこと（検証が機能している証明）', () => {
     // version は 1 のみ。2 を入れれば必ず落ちるはず。
     const bad = { ...(toPlain(buildAutoinstallObject(base(series), { comments: 'none' })) as object), version: 2 }

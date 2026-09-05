@@ -19,7 +19,13 @@ await d.fillByPlaceholder('192.168.1.1', '192.168.1.1')
 await d.fillByPlaceholder('1.1.1.1, 8.8.8.8', '1.1.1.1, 8.8.8.8')
 await d.wait(400)
 await d.shot('.e2e/32-network.png')
-check('固定 IP を入力できる', (await d.text()).includes('192.168.1.50/24') || true)
+// `|| true` を付けると常に成功する。入力欄の値を直接読んで確かめる。
+check(
+  '固定 IP を入力できる',
+  await d.eval(
+    `return [...document.querySelectorAll('main input')].some((i) => i.value === '192.168.1.50/24')`,
+  ),
+)
 
 // ------------------------------------------------------------- 5. ディスク
 await step('ディスク')
@@ -97,7 +103,11 @@ check('実行時の値が集計される', /メニュー 3 件/.test(review), re
 await d.click('main button', 'autoinstall.yaml')
 await d.wait(600)
 const yaml = await d.eval(`return document.querySelector('main pre').innerText`)
-check('YAML にプレースホルダが入る', yaml.includes('@@AI_HOSTNAME@@') && yaml.includes('@@AI_IPV4@@'))
+// プレースホルダは廃止した（落とし穴 18・21）。subiquity が PyYAML で書き直すので
+// 引用形式は残らず、置換に失敗した YAML が残る設計自体が成立しない。
+// いまは既定値をそのまま書き、early-commands が python + PyYAML で上書きする。
+check('YAML にプレースホルダが残っていない', !/@@AI_[A-Z0-9_]+@@/.test(yaml))
+check('既定値がそのまま入っている（引数が来なくても有効な YAML）', /hostname:/.test(yaml))
 check('early-commands が入る', yaml.includes('early-commands'))
 check('swap 4G が入る', /size:\s*4G/.test(yaml))
 check('reporting webhook が入る', yaml.includes('hooks.example.local/e2e'))

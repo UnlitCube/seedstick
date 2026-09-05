@@ -228,6 +228,28 @@ describe('ネストしたユニオン（match / target）が保存 → 読み込
     expect((r.profile as unknown as Record<string, unknown>)['polluted']).toBeUndefined()
     expect(({} as Record<string, unknown>)['polluted']).toBeUndefined()
   })
+
+  it('配列の要素に混ざった __proto__ / constructor / prototype を落とす', () => {
+    // 上のテストは storage.match を通るが、そこは readDiskMatch が
+    // kind / serial だけを読むので sanitize() には**到達しない**。
+    // 実際に sanitize が効くのは mergeSection の配列分岐なので、そちらで確かめる。
+    const base = createDefaultProfile('24.04')
+    const saved = JSON.parse(
+      JSON.stringify(base).replace(
+        '"interactiveSections":[]',
+        '"interactiveSections":[{"name":"identity","__proto__":{"polluted":true},' +
+          '"constructor":"x","prototype":"y"}]',
+      ),
+    ) as unknown
+
+    const r = migrateProfile(saved)
+    const first = (r.profile.behavior.interactiveSections as unknown[])[0] as Record<string, unknown>
+    expect(first).toBeDefined()
+    // 正当なキーは残り、危険なキーだけが落ちる
+    expect(first['name']).toBe('identity')
+    expect(Object.keys(first)).toEqual(['name'])
+    expect(({} as Record<string, unknown>)['polluted']).toBeUndefined()
+  })
 })
 
 // 回帰: migrateProfile が返す値は AutoinstallProfile として使える形でなければならない。

@@ -49,9 +49,18 @@ function checkUserData(userData: string, where: string): void {
   check(`${where}: version: 1 がある`, /^\s+version:\s*1\s*$/m.test(userData))
   check(`${where}: パスワードが平文で入っていない`, !userData.includes('E2e-Passw0rd'))
   check(`${where}: パスワードハッシュが入っている`, /password:\s*["']?\$6\$/.test(userData))
-  // 起動メニューでホストを決める設定になっているか
-  check(`${where}: ホスト名のプレースホルダがある`, userData.includes('@@AI_HOSTNAME@@'))
+  // 起動メニューでホストを決める設定になっているか。
+  //
+  // `@@AI_HOSTNAME@@` のようなプレースホルダは**廃止した**（落とし穴 18・21）。
+  // subiquity は設定を PyYAML で書き直すのでこちらの引用形式は残らず、
+  // 置換に失敗した YAML が残る設計自体が成立しない。
+  // いまは既定値をそのまま書き、early-commands が python + PyYAML で上書きする。
+  check(`${where}: プレースホルダが残っていない`, !/@@AI_[A-Z0-9_]+@@/.test(userData))
   check(`${where}: early-commands で置換する`, userData.includes('ai.hostname='))
+  check(
+    `${where}: early-commands が python で YAML を読み書きする`,
+    userData.includes('yaml.safe_load'),
+  )
   check(`${where}: seed を /cdrom から読ませていない`, !userData.includes('/cdrom'))
 }
 
@@ -162,7 +171,17 @@ async function main(): Promise<void> {
       await verifyRaw(deviceId, sizeBytes)
       rawOk = true
     } catch (err) {
-      console.log(`  (raw 読み取りができません: ${(err as Error).message})`)
+      // **「権限が無くて開けない」と「読めたが中身が壊れている」は別物。**
+      // 何でも握り潰すと、本物の欠陥が「権限不足」に化けて緑になる。
+      // 権限まわりのエラーだけマウント経由の検証にフォールバックし、
+      // それ以外は失敗として数える。
+      const e = err as NodeJS.ErrnoException
+      const permission = e.code === 'EACCES' || e.code === 'EPERM' || e.code === 'EBUSY'
+      if (!permission) {
+        check(`raw デバイスの読み戻し (${deviceId})`, false, e.message)
+      } else {
+        console.log(`  (raw 読み取りができません: ${e.message})`)
+      }
     }
   }
   if (!rawOk) {
@@ -173,14 +192,33 @@ async function main(): Promise<void> {
     }
   }
 
+}
+
+/**
+ * 結果を出して終了コードを決める。**必ず main の外から呼ぶ。**
+ *
+ * 以前は main の末尾に置いていたが、途中の `if (!gpt) return` のような
+ * 早期 return がそこを飛ばしてしまい、**本物の失敗が exit 0 になっていた**。
+ * 早期 return が増えても壊れないよう、呼び出し側の then/catch から呼ぶ。
+ */
+function report(): void {
   console.log(`\n${checks} 件中 ${checks - failures} 件成功、${failures} 件失敗`)
   if (failures > 0) {
     console.error('失敗:\n' + failed.map((f) => `  - ${f}`).join('\n'))
     process.exit(1)
   }
+  if (checks === 0) {
+    // 1 件も検査していないのに成功扱いにしない
+    console.error('検査が 1 件も実行されませんでした。')
+    process.exit(1)
+  }
 }
 
-void main().catch((err: unknown) => {
-  console.error(err)
-  process.exit(1)
-})
+void main()
+  .then(report)
+  .catch((err: unknown) => {
+    console.error(err)
+    failures++
+    failed.push('スクリプトが例外で終了した')
+    report()
+  })

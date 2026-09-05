@@ -282,14 +282,33 @@ async function main(): Promise<void> {
     await iso.close()
   }
 
+}
+
+/**
+ * 結果を出して終了コードを決める。**必ず main の外から呼ぶ。**
+ *
+ * 以前は main の末尾に置いていたが、途中の `if (!gpt) return` のような
+ * 早期 return がそこを飛ばしてしまい、**本物の失敗が exit 0 になっていた**。
+ * 早期 return が増えても壊れないよう、呼び出し側の then/catch から呼ぶ。
+ */
+function report(): void {
   console.log(`\n${checks} 件中 ${checks - failures} 件成功、${failures} 件失敗`)
   if (failures > 0) {
     console.error('失敗:\n' + failed.map((f) => `  - ${f}`).join('\n'))
     process.exit(1)
   }
+  if (checks === 0) {
+    // 1 件も検査していないのに成功扱いにしない
+    console.error('検査が 1 件も実行されませんでした。')
+    process.exit(1)
+  }
 }
 
-void main().catch((err: unknown) => {
-  console.error(err)
-  process.exit(1)
-})
+void main()
+  .then(report)
+  .catch((err: unknown) => {
+    console.error(err)
+    failures++
+    failed.push('スクリプトが例外で終了した')
+    report()
+  })

@@ -66,6 +66,8 @@ const SCHEMA_FILES: Record<UbuntuSeries, string> = {
 
 let failures = 0
 let checks = 0
+/** 実際に処理できた ISO の本数。0 のまま終わったら成功にしない。 */
+let isosProcessed = 0
 const failed: string[] = []
 
 function check(label: string, condition: boolean, detail = ''): void {
@@ -806,6 +808,7 @@ async function main(): Promise<void> {
         console.log(`\n(見つからないので飛ばす) ${name}`)
         continue
       }
+      isosProcessed++
       console.log(`\n■ ${basename(path)} (${series})`)
       const device = await FileBlockDevice.open(path, 'r')
       try {
@@ -829,14 +832,35 @@ async function main(): Promise<void> {
     await rm(workDir, { recursive: true, force: true })
   }
 
+}
+
+/**
+ * 結果を出して終了コードを決める。**必ず main の外から呼ぶ。**
+ * 早期 return や例外がここを飛ばすと、失敗が exit 0 になる。
+ */
+function report(): void {
   console.log(`\n${checks} 件中 ${checks - failures} 件成功、${failures} 件失敗`)
   if (failures > 0) {
     console.error('失敗:\n' + failed.map((f) => `  - ${f}`).join('\n'))
     process.exit(1)
   }
+  // **ISO が 1 本も無いとループが 0 回まわって緑になる。**
+  // 「10 パターンを網羅した」と読める出力を出しておきながら
+  // 1 ケースも実行していない、という状態を成功にしない。
+  if (isosProcessed === 0) {
+    console.error(
+      `\n実 ISO が 1 本も見つかりませんでした（${SERVER_ISOS.map((i) => i.name).join(' / ')}）。\n` +
+        'ケースを 1 件も実行していないので、この結果は「通った」ことを意味しません。',
+    )
+    process.exit(1)
+  }
 }
 
-void main().catch((err: unknown) => {
-  console.error(err)
-  process.exit(1)
-})
+void main()
+  .then(report)
+  .catch((err: unknown) => {
+    console.error(err)
+    failures++
+    failed.push('スクリプトが例外で終了した')
+    report()
+  })
