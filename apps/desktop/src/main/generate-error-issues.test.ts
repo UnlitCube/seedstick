@@ -1,7 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
-import { mkdtempSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { afterAll, describe, expect, it, vi } from 'vitest'
+import { cleanupTempDirs, makeTempDir } from './test-support/temp-files.js'
 import {
   createDefaultProfile,
   formatLocalized,
@@ -48,7 +46,7 @@ vi.mock('electron', () => ({
     getName: () => 'Autoinstall USB Creator',
     getVersion: () => '0.1.0',
     getLocale: () => 'en-US',
-    getPath: () => mkdtempSync(join(tmpdir(), 'generate-error-test-')),
+    getPath: () => makeTempDir('generate-error-test-'),
   },
 }))
 
@@ -123,4 +121,8 @@ describe('generateConfig が生成に失敗したとき', () => {
     const overlay = issues.filter((i) => i.field === 'advanced.rawOverlayYaml')
     expect(overlay).toHaveLength(1)
   })
+})
+
+afterAll(() => {
+  cleanupTempDirs()
 })

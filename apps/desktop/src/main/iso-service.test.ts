@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest'
-import { mkdtempSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { afterAll, describe, expect, it } from 'vitest'
+import { cleanupTempDirs, makeTempDir } from './test-support/temp-files.js'
+import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { IsoValidationError } from '@autoinstall/media'
 import { en, formatLocalized, ja, recognizeIso, type LocalizedText } from '@autoinstall/shared'
@@ -12,7 +12,7 @@ import { invalidIsoText, openIso, unsupportedIsoText } from './iso-service.js'
 // 文面を `toContain` で固定すると、English に切り替えても日本語を返す実装を
 // テストが「正」として要求してしまう（落とし穴 56）。**キー**を確かめる。
 
-const dir = mkdtempSync(join(tmpdir(), 'iso-service-'))
+const dir = makeTempDir('iso-service-')
 
 /** 失敗した結果だけを取り出す（成功なら落とす）。 */
 async function reject(path: string): Promise<{
@@ -175,4 +175,8 @@ describe('ISO の構造を理由に拒否したときは、理由ごとに別の
     expect(formatLocalized('ja', invalidIsoText('grub-too-large'))).toMatch(/減らして/)
     expect(formatLocalized('en', invalidIsoText('grub-too-large'))).toMatch(/reduce/i)
   })
+})
+
+afterAll(() => {
+  cleanupTempDirs()
 })

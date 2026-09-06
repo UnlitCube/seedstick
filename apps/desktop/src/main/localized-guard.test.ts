@@ -1,6 +1,6 @@
-import { describe, expect, it, vi } from 'vitest'
-import { mkdtempSync, truncateSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { afterAll, describe, expect, it, vi } from 'vitest'
+import { writeFileSync } from 'node:fs'
+import { cleanupTempDirs, makeSparseFile, makeTempDir } from './test-support/temp-files.js'
 import { join } from 'node:path'
 import {
   createDefaultProfile,
@@ -111,12 +111,15 @@ function withDeployments(deployments: readonly Deployment[]): AutoinstallProfile
   return { ...p, postInstall: { ...p.postInstall, deployments } }
 }
 
-/** 2 GiB 超のペイロードを疎なファイルで作る（実際にバイトは書かない）。 */
+/**
+ * 2 GiB 超のペイロードを疎なファイルで作る（実際にバイトは書かない）。
+ *
+ * **`truncateSync` だけでは NTFS で疎にならない。** 作成と後始末は
+ * `test-support/temp-files.ts` に集約してある（以前ここに書き写した版が
+ * 後始末を持たず、%TEMP% に 526 GB を積み上げた）。
+ */
 function hugePayload(): DeploymentSource {
-  const dir = mkdtempSync(join(tmpdir(), 'seed-guard-'))
-  const path = join(dir, 'huge.tar.gz')
-  writeFileSync(path, '')
-  truncateSync(path, MAX_PAYLOAD_BYTES + 1)
+  const path = makeSparseFile('seed-guard-', 'huge.tar.gz', MAX_PAYLOAD_BYTES + 1)
   return { kind: 'host-file', path, sizeBytes: MAX_PAYLOAD_BYTES + 1 }
 }
 
@@ -185,7 +188,7 @@ describe('SeedBuildError の文言', () => {
 // キーが辞書にあり両言語で読めることだけを確かめる（ソース走査のほうが
 // 「そのキーが実在するか」を別途見ている）。
 
-const ISO_DIR = mkdtempSync(join(tmpdir(), 'iso-guard-'))
+const ISO_DIR = makeTempDir('iso-guard-')
 
 describe('ISO の拒否理由の文言', () => {
   it('実際に踏める拒否がすべて訳せる形で、辞書に実在するキーを運ぶ', async () => {
@@ -264,4 +267,9 @@ describe('ISO の拒否理由の文言', () => {
       expectRenders(localized(key satisfies MsgKey), `openIso ${key}`)
     }
   })
+})
+
+// 疎ファイルでも作ったディレクトリは残る。**必ず消す。**
+afterAll(() => {
+  cleanupTempDirs()
 })

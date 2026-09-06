@@ -1,7 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
-import { mkdtempSync, writeFileSync, truncateSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { afterAll, describe, expect, it, vi } from 'vitest'
+import { cleanupTempDirs, makeSparseFile } from './test-support/temp-files.js'
 import {
   createDefaultProfile,
   formatLocalized,
@@ -101,11 +99,11 @@ describe('SeedBuildError は訳せる文言を運ぶ', () => {
   })
 
   it('大きすぎるペイロードは整形済みのサイズを差し込みで運ぶ', async () => {
-    // 実際に 2 GiB のデータを書くわけにはいかないので、疎なファイルで大きさだけ作る
-    const dir = mkdtempSync(join(tmpdir(), 'seed-payload-'))
-    const path = join(dir, 'huge.tar.gz')
-    writeFileSync(path, '')
-    truncateSync(path, MAX_PAYLOAD_BYTES + 1)
+    // 2 GiB を実際に書くわけにはいかないので、大きさだけの疎ファイルを作る。
+    // **`truncateSync` だけでは NTFS で疎にならず、本当に 2 GB 確保される。**
+    // しかも以前は後始末が無く、実行のたびに残って 526 GB を食い潰した。
+    // 作成も後始末も `test-support/temp-files.ts` に集約してある。
+    const path = makeSparseFile('seed-payload-', 'huge.tar.gz', MAX_PAYLOAD_BYTES + 1)
 
     const err = await catchSeedError(
       withDeployments([
@@ -133,4 +131,9 @@ describe('運ばれた LocalizedText は両方の言語で読める', () => {
     expect(round).toEqual(err.text)
     expect(formatLocalized('en', round)).toBe(formatLocalized('en', err.text))
   })
+})
+
+// 疎ファイルでも作ったディレクトリは残る。**必ず消す。**
+afterAll(() => {
+  cleanupTempDirs()
 })

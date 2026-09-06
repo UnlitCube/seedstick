@@ -19,11 +19,11 @@
 | 検証 | コマンド | 結果 | いつ測ったか |
 |---|---|---|---|
 | 型検査 | `npm run typecheck` | 通過（**5 つ**の tsconfig） | 今回（作業ツリー） |
-| ユニットテスト | `npm run test:unit` | **990 / 990**（53 ファイル） | 今回（作業ツリー） |
+| ユニットテスト | `npm run test:unit` | **993 / 993**（54 ファイル） | 今回（作業ツリー） |
 | スモーク（実 ISO → `.img`） | `npm run smoke` | **98 / 98** | 今回（作業ツリー） |
 | E2E マトリクス（実 ISO × 設定 10 パターン） | `npm run e2e` | **402 / 402** | 今回（作業ツリー） |
 | 実 USB への書き込み | `npm run e2e:usb`（管理者権限） | 19/19 | **過去のログ。SHA 不明** |
-| 昇格ワーカー経路（実 USB） | `npm run e2e:usb-worker`（管理者権限） | 18/18 | **過去のログ。SHA 不明** |
+| **昇格ワーカー経路（実 USB）** | `npm run e2e:usb-worker`（管理者権限） | **18/18** ✅ | **今回（2026-09-06）。SHA 記録あり** |
 
 - **型検査は 4 つから 5 つに増えた。** `scripts/tsconfig.json` を足したため
   （`scripts/` は長らく対象外で、`ValidationIssue` から消えた `messageJa` を
@@ -391,25 +391,23 @@ main / media のソース走査（`message:` / `label:` / `blockedReason:` に
 
 ### 3.2 実機でしか確かめられないこと
 
-- **書き込み経路の実機再検証（新しく増えた）。**
-  実機ログ（`e2e:usb` = 19/19、`e2e:usb-worker` = 18/18）を取ったあとに、
-  4 巡目の監査で `writer/execute.ts` / `layout/plan.ts` / `grub/patch.ts` /
-  `write-supervisor.ts` を変更している。**現行コードでは実機を通していない。**
-  **今回の i18n でこの 4 つはさらに変わった**（`WriteOp.label` と
-  `LayoutError` に `LocalizedText` が乗り、`DeviceWriteStalledError` が増え、
-  `write-supervisor` の `error` 分岐から `as WriteStatus` を外した）。
-  書き込むバイト列・順序・条件は変えていないつもりだが、
-  **それを実機で確かめてはいない。**
-  `.e2e\run-elevated.ps1 worker` を一度流し直すのが望ましい。
-  **以後の乖離は見えるようにした**（この乖離そのものは残っている）:
-  `e2e:usb` と `e2e:usb-worker` の両方が、実行開始時に HEAD と作業ツリーの
-  汚れをログの先頭へ出す（`scripts/lib/git-revision.mts` の
-  `printRevisionBanner`）。汚れていれば `(uncommitted changes: N files)` と付き、
-  git が使えなければ `unknown` と出して続行する。
-  出すのはスクリプト側の 1 か所だけで、`run-elevated.ps1` はそれをログへ流すだけ。
-  **既存の 2 つのログ（`.e2e\usb-write.log` / `.e2e\usb-worker.log`）は
-  この仕組みより前に取ったものなので、SHA が入っていない。**
-  どのコードに対する 19/19・18/18 なのかは、いま見ても分からない
+- ~~**書き込み経路の実機再検証。**~~ **→ 通した（2026-09-06）。**
+  `.e2e\run-elevated.ps1 worker`（＝`npm run e2e:usb-worker`。GUI が実際に使う
+  昇格ワーカー + NDJSON 経路）を実機で流し、**18/18 成功**。
+  KIOXIA TransMemory 31 GB に **3.37 GB を 256.9 秒**で書き、読み戻して
+  protective MBR / GRUB ブートコード / GPT / grub.cfg（menuentry 2 件を含む）/
+  CIDATA の `user-data` `meta-data` をバイト単位で照合した。
+  - **ログの先頭に HEAD が入るようになった**ので、以後どのコードに対する結果か分かる。
+    今回のログは `47104853…(uncommitted changes: 9 files)` ——
+    **作業ツリーが汚れていたことも正直に出ている**（一時ファイルの後始末を直している最中だった）。
+  - **`npm run e2e:usb`（ワーカーを介さず `executeWritePlan` を直接呼ぶ経路）は
+    まだ通していない。** 2 回目の昇格が自動モードの分類器にブロックされたため。
+    worker 経路のほうが広い（GUI と同じ経路 + NDJSON）ので優先度は低いが、
+    やるなら管理者 PowerShell から `powershell -File .e2e\run-elevated.ps1 write`。
+    `.e2e\usb-write.log` の 19/19 は**この仕組みより前のログで、SHA が入っていない**。
+  - デバイス列挙も実機で確認した: システムディスク（Samsung 970 EVO Plus 2TB）が
+    `selectable: false` で弾かれ、理由が `LocalizedText` 経由で
+    「OS が入っているシステムディスクです」と出る。USB だけが候補になる。
 - **ワーカー側のデバイス再検証が「差し替えられたジョブを拒否する」こと。**
   **単体では検証済み・実機では未検証。**
   `assertDeviceIsWritable` と `DeviceRejectedError` を `@autoinstall/media` から

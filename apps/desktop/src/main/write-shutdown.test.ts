@@ -1,8 +1,7 @@
-import { describe, expect, it, vi, afterEach } from 'vitest'
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest'
+import { cleanupTempDirs, makeTempDir } from './test-support/temp-files.js'
 import { EventEmitter } from 'node:events'
-import { mkdtempSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+
 
 // electron の app.getPath('userData') だけを差し替える
 const state = vi.hoisted(() => ({ userData: '' }))
@@ -59,7 +58,7 @@ vi.mock('@autoinstall/media', async (orig) => {
 })
 
 const { WriteSupervisor } = await import('./write-supervisor.js')
-state.userData = mkdtempSync(join(tmpdir(), 'zzq-'))
+state.userData = makeTempDir('zzq-')
 
 const job = {
   isoPath: 'C:/nowhere.iso',
@@ -212,4 +211,8 @@ describe('終了時に shutdownWrite が二重に走るか（index.ts:98 / index
     expect(t.totalMs).toBeGreaterThan(29000)
     await sup.dispose()
   })
+})
+
+afterAll(() => {
+  cleanupTempDirs()
 })

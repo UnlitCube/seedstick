@@ -1,6 +1,6 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { mkdtempSync, readFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { cleanupTempDirs, makeTempDir } from './test-support/temp-files.js'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   createDefaultProfile,
@@ -50,7 +50,7 @@ vi.mock('electron', () => ({
     getName: () => 'Autoinstall USB Creator',
     getVersion: () => '0.1.0',
     getLocale: () => 'ja-JP',
-    getPath: () => mkdtempSync(join(tmpdir(), 'ipc-test-')),
+    getPath: () => makeTempDir('ipc-test-'),
   },
 }))
 
@@ -248,7 +248,7 @@ describe('OS ネイティブのダイアログは main が訳す', () => {
 
 describe('書き出す README は生成物のコメント言語に従う', () => {
   it('commentLanguage=en なら英語で書き出される', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'bundle-en-'))
+    const dir = makeTempDir('bundle-en-')
     h.settings = defaultSettings({ locale: 'ja', commentLanguage: 'en' })
     h.openDialogResult = { canceled: false, filePaths: [dir] }
     await call('exportBundle', createDefaultProfile())
@@ -258,10 +258,14 @@ describe('書き出す README は生成物のコメント言語に従う', () =>
   })
 
   it("commentLanguage='none' のときは UI の言語に落とす（README は誰かが読む）", async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'bundle-none-'))
+    const dir = makeTempDir('bundle-none-')
     h.settings = defaultSettings({ locale: 'en', commentLanguage: 'none' })
     h.openDialogResult = { canceled: false, filePaths: [dir] }
     await call('exportBundle', createDefaultProfile())
     expect(readFileSync(join(dir, 'README.txt'), 'utf8')).not.toMatch(/[ぁ-んァ-ヶ一-龠]/u)
   })
+})
+
+afterAll(() => {
+  cleanupTempDirs()
 })

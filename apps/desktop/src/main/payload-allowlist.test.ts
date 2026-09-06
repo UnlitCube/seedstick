@@ -1,11 +1,9 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { mkdtempSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { cleanupTempDirs, makeTempDir } from './test-support/temp-files.js'
 
 // electron の app.getPath を差し替える。main のモジュールは electron に依存するので、
 // テストからは import する前にモックを置く必要がある。
-const userData = mkdtempSync(join(tmpdir(), 'payload-allow-'))
+const userData = makeTempDir('payload-allow-')
 vi.mock('electron', () => ({
   app: { getPath: (): string => userData },
 }))
@@ -49,4 +47,8 @@ describe('ペイロードの許可記録', () => {
     await rememberChosenPayload('C:/payloads/app.tar.gz')
     expect(await wasChosenByUser('C:/payloads/app.tar.gz')).toBe(true)
   })
+})
+
+afterAll(() => {
+  cleanupTempDirs()
 })
