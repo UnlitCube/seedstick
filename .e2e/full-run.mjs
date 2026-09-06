@@ -49,11 +49,16 @@ await d.fill('main input[type="password"]', 'E2e-Passw0rd!-long', 0)
 await d.fill('main input[type="password"]', 'E2e-Passw0rd!-long', 1)
 // **文言を書き写さない。** 以前は「ハッシュ化して保存されました」など 3 つの
 // 文字列を並べていたが、どれも辞書に無い（訳文を変えると静かに待ちが空振りする）。
-// 辞書にある `user.passwordStrength` だけを見る。
+//
+// 待つのは `user.passwordStored`。これは `profile.user.passwordHash` が
+// 入ったときだけ出る（`UserStep.tsx`）＝**main でハッシュ化が済んだ**しるし。
+// `user.passwordStrength` は `passwordDraft.length > 0` で出るので、
+// 待っても「入力欄に 1 文字入った」以上のことは分からない
+// （300ms のデバウンス + IPC を待たずに次のステップへ進んでしまう）。
 await d.until(
-  `document.querySelector('main').innerText.includes(${JSON.stringify(d.t('user.passwordStrength'))})`,
+  `document.querySelector('main').innerText.includes(${JSON.stringify(d.t('user.passwordStored'))})`,
   20000,
-  'パスワード',
+  'パスワードのハッシュ化',
 )
 await d.wait(2500)
 await d.shot('.e2e/31-user.png')

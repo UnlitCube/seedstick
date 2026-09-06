@@ -15,6 +15,25 @@ import { Disclosure } from './ui.js'
 // ——「`[data-disclosure]` で見出しが引ける」「`aria-expanded` で開閉が分かる」
 // 「閉じている間は中身が DOM に無い」——は固定できる。
 // この 3 つのどれが崩れても `openDisclosure` は動かない。
+//
+// ---------------------------------------------------------------------------
+// **正直に書いておく: このファイルの `openDisclosure` は `.e2e/drive.mjs` の
+// 「写し」であって、`drive.mjs` そのものを検査していない。**
+//
+// つまり **`drive.mjs` の `openDisclosure` を壊しても、このテストは緑のまま**。
+// import できないのは、`drive.mjs` が CDP のセッションを握った `.mjs` で、
+// renderer の tsconfig（`types: ["vite/client"]`、`allowJs` 無し）からは
+// 型が付かないため。写しを置くほうを選んだ。
+//
+// ここが本当に固定しているのは **`<Disclosure>` コンポーネント側の契約**で、
+// それはこのファイルの価値として成立している（上の 3 つ）。
+// 写しと実物の食い違いのうち、**目印の名前がずれた場合だけ**は
+// `apps/desktop/src/main/e2e-placeholder-drift.test.ts` の
+// 「drive.mjs の折りたたみの目印は実物と一致する」が
+// 両方のソースをテキストとして読んで見張る。
+// **手順のずれ**（閉じているものだけ押す・開けなかったら例外にする）は
+// どちらも見ていない。そこは `node .e2e/full-run.mjs` を実際に走らせて守る。
+// ---------------------------------------------------------------------------
 
 const mounted: { host: HTMLElement; root: Root }[] = []
 afterEach(() => {
@@ -34,8 +53,11 @@ function mount(node: React.ReactNode): HTMLElement {
 }
 
 /**
- * `.e2e/drive.mjs` の `openDisclosure` と同じ手順。
+ * `.e2e/drive.mjs` の `openDisclosure` と同じ手順の**写し**。
  * 「閉じているものだけクリックする」ところまで写す（開いているものを押すと閉じる）。
+ *
+ * **これは `drive.mjs` を呼んでいない。** ここを直しても `drive.mjs` は直らないし、
+ * `drive.mjs` が壊れてもここは落ちない（ファイル冒頭の断り書きを読むこと）。
  * @returns 実際に開いた数
  */
 function openDisclosure(root: ParentNode, nth: number | null = null): number {

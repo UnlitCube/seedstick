@@ -276,6 +276,17 @@ export function validateProfile(profile: AutoinstallProfile): ValidationResult {
     if (profile.storage.encryptionPassphrase && profile.storage.encryptionPassphrase.length < 8) {
       add('error', 'storage.encryptionPassphrase', 'validate.encryptionPassphraseTooShort')
     }
+    // `sizing-policy` は lvm レイアウトにしか出ない（`generate.ts`）。
+    // スイッチも LVM のときしか描画されないので、`{mode:'direct', useWholeDisk:true}`
+    // の JSON（手で編集したもの・古いプロファイル）は
+    // **件数にも要約にも出ないまま値だけが残る**。
+    // 6 巡目に「モードを変えるときに消す」を入れたが、それは画面から操作したときだけ。
+    // 黙って無かったことにしない（落とし穴 50 / 67）。
+    if (profile.storage.useWholeDisk && profile.storage.mode !== 'lvm') {
+      add('warning', 'storage.useWholeDisk', 'validate.wholeDiskRequiresLvm', {
+        mode: profile.storage.mode,
+      })
+    }
     if (profile.storage.encryptionPassphrase) {
       add('warning', 'storage.encryptionPassphrase', 'validate.encryptionPassphrasePlainInYaml')
       if (profile.storage.mode !== 'lvm') {
@@ -498,6 +509,25 @@ export function validateProfile(profile: AutoinstallProfile): ValidationResult {
   if (!features.source && profile.software.sourceId === 'ubuntu-server-minimal') {
     add('warning', 'software.sourceId', 'validate.sourceKeyUnsupported', { series: profile.series })
   }
+  // `search_drivers` は `source` の**中**にあるので、`source` キーごと無い
+  // リリースでは一緒に落ちる。UI (`SoftwareStep`) も `features.source` で隠すため、
+  // 何も言わないと「設定は残る・生成物には出ない・誰も何も言わない」になる（落とし穴 67）。
+  if (!features.source && profile.software.searchDrivers !== null) {
+    add(
+      'warning',
+      'software.searchDrivers',
+      'validate.searchDriversUnsupported',
+      { series: profile.series },
+    )
+  }
+  // `codecs` / `oem` は `active-directory` と同じ `features.codecsOemAd` の中。
+  // AD にだけ警告があり、この 2 つは無言だった。
+  if (!features.codecsOemAd && profile.software.codecs) {
+    add('warning', 'software.codecs', 'validate.codecsUnsupported', { series: profile.series })
+  }
+  if (!features.codecsOemAd && profile.software.oem !== 'auto') {
+    add('warning', 'software.oem', 'validate.oemUnsupported', { series: profile.series })
+  }
   if (!features.kernelCrashDumps && profile.software.kernelCrashDumps !== null) {
     add(
       'warning',
@@ -631,6 +661,14 @@ export function validateProfile(profile: AutoinstallProfile): ValidationResult {
       add('warning', 'software.gpu.containerToolkit', 'validate.containerToolkitWithoutDocker')
     }
     add('info', 'software.gpu', 'validate.cudaDownloadsOnFirstBoot')
+  }
+
+  // channel の欄は `refreshInstaller` が true のときしか描画されない。
+  // 無効なのに残っていると、件数にも要約にも出ないのに
+  // `refresh-installer: {update: false, channel: ...}` として YAML には出る
+  // （`generate.ts`）。画面から直す先が無いので、ここで伝える（落とし穴 50 / 67）。
+  if (!profile.behavior.refreshInstaller && profile.behavior.refreshInstallerChannel.trim()) {
+    add('warning', 'behavior.refreshInstallerChannel', 'validate.refreshChannelIgnored')
   }
 
   if (profile.behavior.interactiveAll && !features.interactiveAll) {

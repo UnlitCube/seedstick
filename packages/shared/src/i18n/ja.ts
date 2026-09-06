@@ -1116,6 +1116,7 @@ export const ja = {
   'validate.encryptionPassphrasePlainInYaml':
     'ディスク暗号化のパスフレーズは autoinstall の YAML に平文で書かれます。USB の取り扱いに注意してください。',
   'validate.encryptionRequiresLvm': 'ディスク暗号化は LVM レイアウトでのみ使えます（{mode} では無視されます）。',
+  'validate.wholeDiskRequiresLvm': 'ディスク全体を使う指定は LVM レイアウトでのみ使えます（{mode} では無視されます）。設定は残っていますが、この構成方法では画面に出ません。',
   'validate.diskMatchEmpty': 'ディスクの指定方法を選んだので、その値も入れてください（空だと一致するディスクがありません）。',
   'validate.diskMatchAny':
     'インストール先を「どのディスクでもよい」にしています。複数のディスクがある機器では、どれが消えるか分かりません。シリアル番号やパスで指定してください。',
@@ -1143,6 +1144,10 @@ export const ja = {
   'validate.sourceKeyUnsupported':
     'Ubuntu {series} の autoinstall には source キーがありません。最小構成の指定は無視されます。',
   'validate.kernelCrashDumpsUnsupported': 'kernel-crash-dumps は Ubuntu {series} では未対応です。無視されます。',
+  'validate.searchDriversUnsupported':
+    'Ubuntu {series} の autoinstall には source キーがありません。ドライバの検索 (search_drivers) の指定は無視されます。',
+  'validate.codecsUnsupported': 'codecs は Ubuntu {series} では使えません。無視されます。',
+  'validate.oemUnsupported': 'oem は Ubuntu {series} では使えません。無視されます。',
   'validate.fileTargetPathNotAbsolute': '追加ファイル #{n} の配置先は絶対パスにしてください。',
   'validate.fileModeInvalid': '追加ファイル #{n} のパーミッションは 0644 のような 8 進数で指定してください。',
   'validate.fileNameInvalid': '追加ファイル #{n} のファイル名に使えない文字があります。',
@@ -1179,6 +1184,8 @@ export const ja = {
   'validate.cudaDownloadsOnFirstBoot': 'CUDA は初回起動時にインターネットから数 GB をダウンロードします。完了後に自動で再起動します。',
   'validate.interactiveAllUnverified':
     'Ubuntu {series} では interactive-sections: ["*"] の展開が確認できていないため、この指定は出力しません。個別の項目を「インストーラの画面で入力する」に設定してください。',
+  'validate.refreshChannelIgnored':
+    'インストーラの更新が無効なので、チャンネルの指定は効きません（YAML には残ります）。更新を有効にしないと、この欄は画面に出ません。',
   'validate.rsyslogNotImplemented':
     'rsyslog への送信は subiquity にまだ実装がありません（公式リファレンスに明記）。進捗は届かない可能性があります。',
   'validate.interactiveSectionsUnsupported':
@@ -1259,9 +1266,30 @@ export const ja = {
   'nav.summaryJoin4': '{a}・{b}・{c}・{d}',
   'nav.summaryMore': 'ほか {n} 件',
   'nav.summaryOther': 'その他 {n} 件',
+  // このリリースの subiquity が知らないキーは `generate.ts` が出力しない。
+  // 断片を黙って消すと「設定したのに効かない」に気づけないので、件数だけ必ず言う。
+  'nav.summaryIneffective': 'このリリースでは効かない設定が {n} 件',
+
+  // 管理ユーザー（`user` ステップ）。**平文パスワードもハッシュも出さない。**
+  // 出すのは「誰でログインするか」「どうやって入るか」だけ。
+  'nav.summaryUserName': 'ユーザー {name}',
+  'nav.summaryUserNameMissing': 'ユーザー名 未設定',
+  'nav.summarySshOn': 'SSH 有効',
+  'nav.summarySshOff': 'SSH 無効',
+  'nav.summarySshKeyOnly': '公開鍵のみ',
+  'nav.summarySshKeys': '公開鍵 {n} 件',
+  'nav.summaryGroupsAppend': 'グループを追加',
+  'nav.summaryGroupsOverride': 'グループを置き換え',
+  'nav.summarySudoNoPassword': 'sudo にパスワード不要',
 
   'nav.summaryNetworkInstallerDefault': 'DHCP（自動）',
-  'nav.summaryNetworkDhcp': 'DHCP（NIC を指定）',
+  // 以前は「DHCP（NIC を指定）」と**断定**していたが、要約は `network.target` を
+  // 読んでいなかった。既定の `{kind:'any'}`（すべての NIC）でも「指定」と出る嘘になる。
+  // 対象は入れ子で差し込む。読み取れない指定もそこに入れる（黙って既定に見せない）。
+  'nav.summaryNetworkDhcp': 'DHCP（{target}）',
+  'nav.summaryTargetAny': 'すべての NIC',
+  'nav.summaryTargetName': 'NIC {name}',
+  'nav.summaryTargetMac': 'MAC {mac}',
   'nav.summaryNetworkStatic': '静的 IP {address}',
   'nav.summaryNetworkRaw': 'netplan を直接指定',
 
@@ -1307,6 +1335,7 @@ export const ja = {
   'nav.summaryActiveDirectory': 'AD 参加',
   'nav.summaryReporting': '進捗の送信先を指定',
   'nav.summaryRefreshInstaller': 'インストーラを更新',
+  'nav.summaryRefreshChannel': 'インストーラを更新（チャンネル指定）',
   'nav.summaryInteractiveAll': '全画面で入力を待つ',
   'nav.summaryRawOverlay': 'YAML で上書き',
   'nav.summaryExtraKernelArgs': 'カーネル引数を追加',

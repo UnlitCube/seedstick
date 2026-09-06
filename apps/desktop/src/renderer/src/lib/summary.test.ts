@@ -42,21 +42,38 @@ function patch(over: Record<string, unknown>): AutoinstallProfile {
 }
 
 describe('summarizeStep — 要約を出さないステップ', () => {
-  it('iso / basics / user / review / write は null', () => {
-    for (const step of ['iso', 'basics', 'user', 'review', 'write'] as const) {
+  // **`user` はここに含めない。** 折りたたみ（管理ユーザーの追加グループ）を持つのに
+  // 要約が `null` で、このステップだけ「たたんでも中身が分かる」が効いていなかった。
+  // 中身は `summary-placement.test.ts` が固定している。
+  it('iso / basics / review / write は null', () => {
+    for (const step of ['iso', 'basics', 'review', 'write'] as const) {
       expect(summarizeStep(step, base()), step).toBeNull()
     }
   })
 
-  it('要約を出すステップは 5 つで、STEP_ORDER に実在する', () => {
+  it('要約を出すステップは 6 つで、STEP_ORDER に実在する', () => {
     const withSummary = STEP_ORDER.filter((s) => summarizeStep(s, base()) !== null)
-    expect(withSummary).toEqual(['network', 'storage', 'software', 'postinstall', 'runtime'])
+    expect(withSummary).toEqual([
+      'user',
+      'network',
+      'storage',
+      'software',
+      'postinstall',
+      'runtime',
+    ])
   })
 })
 
 describe('summarizeStep — 既定のプロファイル', () => {
   it('要約を出すステップはすべて「既定のまま」と分かる形になる', () => {
-    for (const step of ['network', 'storage', 'software', 'postinstall', 'runtime'] as const) {
+    for (const step of [
+      'user',
+      'network',
+      'storage',
+      'software',
+      'postinstall',
+      'runtime',
+    ] as const) {
       const s = both(step, base())
       expect(looksTranslated(s.ja), `${step} ja: ${s.ja}`).toBe(true)
       expect(looksTranslated(s.en), `${step} en: ${s.en}`).toBe(true)
@@ -187,7 +204,11 @@ describe('summarizeStep — 設定を変えたプロファイル', () => {
     expect(s.en).toContain(en['nav.summaryPostInstallNone'])
   })
 
-  it('インストール後: 5 種類を超えたら「ほか N 件」でまとめる（1 行に収める）', () => {
+  it('インストール後: 4 枠を超えたら「ほか N 件」でまとめる（1 行に収める）', () => {
+    // **`additionalUsers` はここには出ない**（編集できるのは `user` ステップだけ）。
+    // 断片は presets / files / deployments / services / commands の 5 つになり、
+    // 3 つ + 「ほか 2 件」に畳まれる。件数の内訳は
+    // `summary-placement.test.ts`（並び順）が別に固定している。
     const s = both(
       'postinstall',
       patch({
@@ -202,8 +223,8 @@ describe('summarizeStep — 設定を変えたプロファイル', () => {
         } as never,
       }),
     )
-    expect(s.ja).toContain(ja['nav.summaryMore'].replace('{n}', '3'))
-    expect(s.en).toContain(en['nav.summaryMore'].replace('{n}', '3'))
+    expect(s.ja).toContain(ja['nav.summaryMore'].replace('{n}', '2'))
+    expect(s.en).toContain(en['nav.summaryMore'].replace('{n}', '2'))
     // 打ち切っても差し込みは残らない（入れ子の深さは 1 で収まっている）
     expect(looksTranslated(s.ja)).toBe(true)
     expect(looksTranslated(s.en)).toBe(true)
@@ -473,7 +494,7 @@ describe('件数の助数詞', () => {
     expect(offenders).toEqual([])
     // 数え忘れ防止（キーを消して「揃った」ことにしない）。
     // 増やしたときはここも増やし、その助数詞も「件」に揃える。
-    expect(counters.length, `件数キーが増減した: ${counters.join(', ')}`).toBe(13)
+    expect(counters.length, `件数キーが増減した: ${counters.join(', ')}`).toBe(15)
   })
 })
 

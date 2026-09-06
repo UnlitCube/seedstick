@@ -187,12 +187,27 @@ const MUTATIONS: Record<string, () => AutoinstallProfile> = {
     }),
   '暗号化を LVM 以外で': () =>
     broken({ ...base(), storage: { ...base().storage, mode: 'direct', encryptionPassphrase: 'longenough' } }),
+  // ディスク全体を使う指定も `sizing-policy`（lvm 専用）にしかならない。
+  // スイッチが LVM のときしか描画されないので、件数にも要約にも出ない。
+  // ここで踏ませておかないと、検証だけが黙る形に戻っても誰も気づかない。
+  'ディスク全体を LVM 以外で': () =>
+    broken({ ...base(), storage: { ...base().storage, mode: 'zfs', useWholeDisk: true } }),
   'リセットパーティション (22.04)': () =>
     broken({
       ...base('22.04'),
       storage: { ...base('22.04').storage, resetPartition: { enabled: true, size: 'nope' } },
       apt: { ...base('22.04').apt, fallback: 'continue-anyway' },
-      software: { ...base('22.04').software, sourceId: 'ubuntu-server-minimal', kernelCrashDumps: true, ubuntuProToken: 'nope' },
+      software: {
+        ...base('22.04').software,
+        sourceId: 'ubuntu-server-minimal',
+        kernelCrashDumps: true,
+        ubuntuProToken: 'nope',
+        // 22.04 は features.source / features.codecsOemAd が false。
+        // 例外表に足すのではなく踏ませる（落とし穴 81）。
+        searchDrivers: false,
+        codecs: true,
+        oem: 'yes',
+      },
       user: { ...base('22.04').user, groups: { mode: 'override', groups: ['users'] } },
       activeDirectory: { enabled: true, adminName: '', domainName: '' },
     }),
@@ -348,6 +363,14 @@ const MUTATIONS: Record<string, () => AutoinstallProfile> = {
       network: { mode: 'static', target: { kind: 'any' }, address: '10.0.0.2/24', gateway: '', nameservers: ['10.0.0.1'], optional: true },
       software: { ...base().software, packages: ['htop'] },
     }),
+  // 更新が無効なのに channel が残っている（手で編集した JSON / 古いプロファイル）。
+  // 入力欄は `refreshInstaller` が true のときしか描画されないので、
+  // 画面から直す先が無い。それでも YAML には出る。
+  'インストーラ更新が無効なのにチャンネルが残っている': () =>
+    broken({
+      ...base(),
+      behavior: { ...base().behavior, refreshInstaller: false, refreshInstallerChannel: 'stable/ubuntu-24.04' },
+    }),
   'reporting が壊れている': () =>
     broken({ ...base(), behavior: { ...base().behavior, reporting: { kind: 'webhook', endpoint: 'nope' } } }),
   'rsyslog の送信先が空': () =>
@@ -477,6 +500,9 @@ const IGNORED_KEYS = [
   'validate.identityGroupsUnsupported',
   'validate.activeDirectoryUnsupported',
   'validate.interactiveAllUnverified',
+  'validate.searchDriversUnsupported',
+  'validate.codecsUnsupported',
+  'validate.oemUnsupported',
 ] as const satisfies readonly MsgKey[]
 
 describe('危険な指摘の文言を薄めない', () => {

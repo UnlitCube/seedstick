@@ -1127,6 +1127,8 @@ Date: {date}`,
     'The disk encryption passphrase is written in plain text into the autoinstall YAML. Handle the USB stick accordingly.',
   'validate.encryptionRequiresLvm':
     'Disk encryption only works with the LVM layout; it is ignored for {mode}.',
+  'validate.wholeDiskRequiresLvm':
+    'Using the whole disk only works with the LVM layout; it is ignored for {mode}. The setting is still stored but is not shown for this layout.',
   'validate.diskMatchEmpty': 'A disk match kind was chosen but left empty, so no disk will match.',
   'validate.diskMatchAny':
     'The install target is set to "any disk". On a machine with several disks there is no way to tell which one will be erased. Match by serial number or path.',
@@ -1167,6 +1169,11 @@ Date: {date}`,
     'Ubuntu {series} autoinstall has no source key; the minimal selection will be ignored.',
   'validate.kernelCrashDumpsUnsupported':
     'kernel-crash-dumps is not supported on Ubuntu {series} and will be ignored.',
+  'validate.searchDriversUnsupported':
+    'Ubuntu {series} autoinstall has no source key, so search_drivers will be ignored.',
+  'validate.codecsUnsupported':
+    'codecs is not available on Ubuntu {series} and will be ignored.',
+  'validate.oemUnsupported': 'oem is not available on Ubuntu {series} and will be ignored.',
   'validate.fileTargetPathNotAbsolute': 'File #{n} needs an absolute target path.',
   'validate.fileModeInvalid': 'File #{n} permission must be octal such as 0644.',
   'validate.fileNameInvalid': 'File #{n} has an invalid file name.',
@@ -1210,6 +1217,8 @@ Date: {date}`,
     'CUDA downloads several GB from the internet on first boot, then reboots automatically.',
   'validate.interactiveAllUnverified':
     'The ["*"] form is unverified on Ubuntu {series}, so it is omitted. Set individual items to "type it in the installer" instead.',
+  'validate.refreshChannelIgnored':
+    'The installer refresh is off, so the channel has no effect (it is still written to the YAML). The field is only shown once refresh is enabled.',
   'validate.rsyslogNotImplemented':
     'The rsyslog reporter is documented as not yet implemented in subiquity, so progress may never arrive.',
   'validate.interactiveSectionsUnsupported':
@@ -1301,9 +1310,23 @@ Date: {date}`,
   'nav.summaryJoin4': '{a} / {b} / {c} / {d}',
   'nav.summaryMore': 'And {n} more',
   'nav.summaryOther': 'Other {n}',
+  'nav.summaryIneffective': '{n} ignored on this release',
+
+  'nav.summaryUserName': 'User {name}',
+  'nav.summaryUserNameMissing': 'No user name',
+  'nav.summarySshOn': 'SSH on',
+  'nav.summarySshOff': 'SSH off',
+  'nav.summarySshKeyOnly': 'Keys only',
+  'nav.summarySshKeys': 'SSH keys {n}',
+  'nav.summaryGroupsAppend': 'Extra groups',
+  'nav.summaryGroupsOverride': 'Groups replaced',
+  'nav.summarySudoNoPassword': 'Passwordless sudo',
 
   'nav.summaryNetworkInstallerDefault': 'DHCP (automatic)',
-  'nav.summaryNetworkDhcp': 'DHCP (chosen NIC)',
+  'nav.summaryNetworkDhcp': 'DHCP ({target})',
+  'nav.summaryTargetAny': 'all NICs',
+  'nav.summaryTargetName': 'NIC {name}',
+  'nav.summaryTargetMac': 'MAC {mac}',
   'nav.summaryNetworkStatic': 'Static IP {address}',
   'nav.summaryNetworkRaw': 'Raw netplan',
 
@@ -1351,6 +1374,7 @@ Date: {date}`,
   'nav.summaryDebconf': 'debconf selections',
   'nav.summaryActiveDirectory': 'Join Active Directory',
   'nav.summaryRefreshInstaller': 'Installer updated',
+  'nav.summaryRefreshChannel': 'Installer updated (custom channel)',
   'nav.summaryInteractiveAll': 'Every screen waits for input',
   'nav.summaryRawOverlay': 'Overridden with YAML',
   'nav.summaryExtraKernelArgs': 'Extra kernel arguments',

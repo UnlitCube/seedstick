@@ -98,15 +98,40 @@ HEAD  : 5ab2e7819e13c400310d9f79384e1982b3930c9d (uncommitted changes: 3 files)
 i18n の作業で表示が `t('runtime.grubFreeBytes')` を通るようになり、
 日本語では「610 バイト」になったため、**画面には出ているのにテストだけが落ちた**。
 
-文言は辞書 (`packages/shared/src/i18n/ja.ts`) が正なので、
-`import { ja as DICT } from '../packages/shared/src/i18n/ja.ts'` で引く。
-書式や単位を訳文の周りに足した正規表現は、**訳文を変えた瞬間に静かに壊れる**。
+文言は辞書が正なので、**`d.t('キー')` で引く**（`drive.mjs`）。
 
-**この壊れ方は機械では見張っていない。** 番人 (`e2e-placeholder-drift.test.ts`) が
-見るのは placeholder の実在と `.catch(() => {})` の握り潰しだけで、
-「訳文を包み込んだ正規表現」は見ていない
-（ラベル用のリテラルと区別できず、誤検出だらけの番人になったので入れなかった）。
-**ここを守るのは、このスクリプトを実際に走らせること。**
+```js
+await d.click('nav button', d.t('step.write'))
+await d.until(
+  `document.querySelector('main').innerText.includes(${JSON.stringify(d.t('user.passwordStored'))})`,
+  20000,
+  'パスワードのハッシュ化',
+)
+```
+
+> **`import { ja as DICT } from '../packages/shared/src/i18n/ja.ts'` は使わない。**
+> それは `d.t()` を入れる前の書き方で、`ja` を直に引くと**英語表示のときに
+> 必ず空振りする**（しかも画面には出ているので、原因が分かりにくい）。
+> `drive.mjs` は `ja` と `en` の両方を持ち、`d.locale`（言語切り替えボタンの
+> ラベルから判定）に合わせて引く。
+
+書式や単位を訳文の周りに足した正規表現も**訳文を変えた瞬間に静かに壊れる**ので、
+**見出しだけを辞書から引き、数字は別に取る**（`full-run2.mjs` の `grubFree`）。
+
+**失敗したときの診断も辞書から引く。** `check()` の第 3 引数を
+日本語の正規表現で作ると、英語表示では診断が空になり
+「落ちたのは分かるが画面に何が出ていたかは分からない」という一番困る失敗になる。
+
+**この壊れ方は番人が見張っている**（`apps/desktop/src/main/e2e-placeholder-drift.test.ts`）。
+`.e2e/*.mjs` のうち**画面の文言が来る位置**——`click()` の第 2 引数、
+`fillByPlaceholder()` の第 1 引数、`eval()` / `until()` の第 1 引数、
+および正規表現リテラル——に日本語を直に書くと落ちる。
+`console.log()` のラベルや `check()` の第 1 引数、`throw` の文言は対象外
+（画面と照合しないので書き写しではない）。
+**見張れるのは日本語の書き写しだけ**で、英語の文言を直に書いた場合は見つけられない。
+`drive.mjs` は対象外（`d.t()` と言語判定そのものを実装している側なので、
+言語切り替えボタンのラベル `English` / `日本語` を直に持つしかない）。
+番人は「そのキーが ja / en の両方に実在するか」も見る。
 
 ### 走らせ方（UAC は要らない）
 

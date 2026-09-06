@@ -159,3 +159,64 @@ describe('正しい設定を誤って弾かない', () => {
     expect(errorsFor(p)).toEqual([])
   })
 })
+
+// ---------------------------------------------------------------------------
+// **無効化した設定を「どこからも見えない」状態にしない**（落とし穴 50 / 67）。
+//
+// 6 巡目に `changeMode` で `useWholeDisk` を消すようにしたが、それは画面から
+// 構成方法を変えたときだけ。手で編集された JSON と古いプロファイルには
+// `{mode:'direct', useWholeDisk:true}` が入りうる。そのとき
+//
+//   - 件数は数えない（`countStorageDetailChanges` に `isLvm &&` がある）
+//   - 要約も出さない（同上）
+//   - 検証も何も言わない            ← ここが空いていた
+//
+// で、値は JSON に残り続けるのに**どこからも見えない**。
+// `encryptionRequiresLvm` と同じ形の指摘を出す。
+// ---------------------------------------------------------------------------
+describe('LVM でしか効かない設定が非 LVM に残っている', () => {
+  const structured = (): Exclude<AutoinstallProfile['storage'], { mode: 'raw' }> =>
+    base().storage as Exclude<AutoinstallProfile['storage'], { mode: 'raw' }>
+
+  const wholeDiskIssues = (
+    p: AutoinstallProfile,
+  ): readonly { severity: string; field: string }[] =>
+    validateProfile(p).issues.filter((i) => i.text.key === 'validate.wholeDiskRequiresLvm')
+
+  for (const mode of ['direct', 'zfs'] as const) {
+    it(`${mode} に残った useWholeDisk を「効きません」と伝える`, () => {
+      const p: AutoinstallProfile = {
+        ...base(),
+        storage: { ...structured(), mode, useWholeDisk: true },
+      }
+      const issues = wholeDiskIssues(p)
+      expect(issues, `${mode} で何も言っていない`).toHaveLength(1)
+      expect(issues[0]!.severity).toBe('warning')
+      expect(issues[0]!.field).toBe('storage.useWholeDisk')
+    })
+  }
+
+  it('LVM なら何も言わない（効いている設定に警告を出さない）', () => {
+    const p: AutoinstallProfile = {
+      ...base(),
+      storage: { ...structured(), mode: 'lvm', useWholeDisk: true },
+    }
+    expect(wholeDiskIssues(p)).toHaveLength(0)
+  })
+
+  it('false のままなら何も言わない', () => {
+    const p: AutoinstallProfile = {
+      ...base(),
+      storage: { ...structured(), mode: 'direct', useWholeDisk: false },
+    }
+    expect(wholeDiskIssues(p)).toHaveLength(0)
+  })
+
+  it('警告であってエラーではない（値が残っているだけで書き込めなくならない）', () => {
+    const p: AutoinstallProfile = {
+      ...base(),
+      storage: { ...structured(), mode: 'direct', useWholeDisk: true },
+    }
+    expect(errorsFor(p)).toEqual([])
+  })
+})

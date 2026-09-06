@@ -139,7 +139,12 @@ export function countAdvancedChanges(profile: AutoinstallProfile): number {
     ad['enabled'] === true && ad['domainName'] !== base.activeDirectory.domainName,
     ad['enabled'] === true && ad['adminName'] !== base.activeDirectory.adminName,
     behavior['refreshInstaller'] !== base.behavior.refreshInstaller,
-    behavior['refreshInstallerChannel'] !== base.behavior.refreshInstallerChannel,
+    // channel の欄は `refreshInstaller` が true のときしか描画されない。
+    // 無効のときも数えると「開いても入力欄が無いのに 1 件変更」になる
+    // （手で編集された JSON と古いプロファイルで起きる）。
+    // 数えないぶんは `validate.refreshChannelIgnored` が伝える（落とし穴 50 / 67）。
+    behavior['refreshInstaller'] === true &&
+      behavior['refreshInstallerChannel'] !== base.behavior.refreshInstallerChannel,
     behavior['interactiveAll'] !== base.behavior.interactiveAll,
     advanced['rawOverlayYaml'] !== base.advanced.rawOverlayYaml,
     advanced['extraKernelArgs'] !== base.advanced.extraKernelArgs,
@@ -614,7 +619,18 @@ function AdvancedTab(): React.JSX.Element {
           <Switch
             checked={profile.behavior.refreshInstaller}
             onChange={(refreshInstaller) =>
-              update((p) => ({ ...p, behavior: { ...p.behavior, refreshInstaller } }))
+              // 無効に戻すときは channel も消す（落とし穴 66。Active Directory と
+              // 暗号化パスフレーズと同じ扱い）。channel の欄は `refreshInstaller`
+              // が true のときしか描画されないので、残すと「1 件変更」の Badge が
+              // 消えないのに、開いても直す先が画面に無い。しかも channel は
+              // `update: false` でも YAML に出る（`generate.ts`）ので、
+              // 保存した JSON にも生成物にも残り続ける。
+              update((p) => ({
+                ...p,
+                behavior: refreshInstaller
+                  ? { ...p.behavior, refreshInstaller }
+                  : { ...p.behavior, refreshInstaller, refreshInstallerChannel: '' },
+              }))
             }
             label={t('adv.refreshInstaller')}
             description={t('adv.refreshInstallerHint')}

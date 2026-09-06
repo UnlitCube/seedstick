@@ -83,7 +83,15 @@ check('手入力の項目も出る', rt.includes('ai.interactive=1'))
 // 訳文を変えるたびに壊れる形なので、見出しは辞書から引き、数字だけを取る。
 const freeLabel = d.t('runtime.grubFree')
 const free = (rt.split(freeLabel + ':')[1] ?? '').match(/^\s*(\d+)/)
-check('grub.cfg の残り容量が出る', free !== null, rt.match(/起動メニュー[^\n]*/g)?.join(' | ') ?? '')
+// 失敗したときの診断も辞書から引く。**日本語で拾うと英語表示では診断が空になり、
+// 「落ちたのは分かるが画面に何が出ていたか分からない」**という一番困る失敗になる。
+// 見出しの行が 1 つも無ければ、その画面の末尾を出して手掛かりを残す。
+const freeLines = rt.split('\n').filter((l) => l.includes(freeLabel))
+check(
+  'grub.cfg の残り容量が出る',
+  free !== null,
+  (freeLines.length ? freeLines : rt.split('\n').filter(Boolean).slice(-6)).join(' | '),
+)
 if (free) console.log('grub.cfg 残り:', free[1], 'bytes')
 
 // ------------------------------------------------------------- 8. 上級者向け
