@@ -129,3 +129,23 @@ node .e2e/full-run2.mjs
 rm -f "$APPDATA/@autoinstall/desktop/settings.json"
 rm -rf "$APPDATA/@autoinstall/desktop/profiles"
 ```
+
+### 英語表示でも通す
+
+画面の文言は `drive.mjs` の `d.t('キー')` で**辞書から引く**ので、
+言語を切り替えてもそのまま通せる。
+
+```
+node .e2e/set-locale.mjs en
+node .e2e/full-run.mjs
+node .e2e/full-run2.mjs
+node .e2e/set-locale.mjs ja
+```
+
+`d.locale` が今の言語、`d.setLocale('en')` が切り替え。
+言語の判定は**言語切り替えボタンのラベル**から行う
+（`App.tsx` の規約で、そのボタンは「切り替え*先*」の言語をその言語自身の
+表記で出す。`English` と出ていれば今は日本語）。
+
+**新しい操作を足すときは `d.t()` を使う。** 文言を直接書くと日本語でしか通らず、
+しかも訳文を変えた瞬間に静かに壊れる。

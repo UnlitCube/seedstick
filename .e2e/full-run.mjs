@@ -12,10 +12,11 @@ const step = async (label) => {
 }
 
 // ------------------------------------------------------------------ 1. ISO
-await step('ISO を選ぶ')
-const already = await d.eval(`return document.querySelector('main').innerText.includes('認識しました')`)
+await step(d.t('step.iso'))
+const detected = JSON.stringify(d.t('iso.detected'))
+const already = await d.eval(`return document.querySelector('main').innerText.includes(${detected})`)
 if (!already) {
-await d.click('button', 'ISO ファイルを選ぶ')
+await d.click('button', d.t('iso.choose'))
 await d.wait(1200)
 // ネイティブのファイルダイアログはパスを打ち込む
 const { execFileSync } = await import('node:child_process')
@@ -28,12 +29,12 @@ execFileSync('powershell.exe', [
     "[System.Windows.Forms.SendKeys]::SendWait('{ENTER}')",
 ])
 }
-await d.until(`document.querySelector('main').innerText.includes('認識しました')`, 40000, 'ISO 認識')
+await d.until(`document.querySelector('main').innerText.includes(${detected})`, 40000, 'ISO 認識')
 check('ISO を認識する', (await d.text()).includes('24.04.3'))
 await d.shot('.e2e/30-iso.png')
 
 // ------------------------------------------------------------------ 2. 基本設定
-await step('基本設定')
+await step(d.t('step.basics'))
 await d.select('main select', 'ja_JP.UTF-8', 0)
 await d.select('main select', 'jp:', 1)
 await d.select('main select', 'Asia/Tokyo', 2)
@@ -41,20 +42,25 @@ await d.fillByPlaceholder('ubuntu-server', 'e2e-gui')
 check('ホスト名を入力できる', (await d.eval(`return document.querySelector('[placeholder="ubuntu-server"]').value`)) === 'e2e-gui')
 
 // ------------------------------------------------------------------ 3. ユーザー
-await step('ユーザー')
+await step(d.t('step.user'))
 await d.fillByPlaceholder('Ubuntu User', 'E2E Admin')
 await d.fillByPlaceholder('ubuntu', 'e2eadmin')
 await d.fill('main input[type="password"]', 'E2e-Passw0rd!-long', 0)
 await d.fill('main input[type="password"]', 'E2e-Passw0rd!-long', 1)
-await d.until(`document.querySelector('main').innerText.includes('ハッシュ化して保存されました')
-  || document.querySelector('main').innerText.includes('保存されました')
-  || document.querySelector('main').innerText.includes('パスワードの強度')`, 20000, 'パスワード')
+// **文言を書き写さない。** 以前は「ハッシュ化して保存されました」など 3 つの
+// 文字列を並べていたが、どれも辞書に無い（訳文を変えると静かに待ちが空振りする）。
+// 辞書にある `user.passwordStrength` だけを見る。
+await d.until(
+  `document.querySelector('main').innerText.includes(${JSON.stringify(d.t('user.passwordStrength'))})`,
+  20000,
+  'パスワード',
+)
 await d.wait(2500)
 await d.shot('.e2e/31-user.png')
 
 // ------------------------------------------------------------------ 4. ネットワーク（既定値として固定 IP）
-await step('ネットワーク')
-await d.click('main label', '固定 IP アドレスを使う')
+await step(d.t('step.network'))
+await d.click('main label', d.t('network.modeStatic'))
 await d.wait(600)
 const netDom = await d.eval(`return [...document.querySelectorAll('main input')].map(e => e.placeholder).filter(Boolean)`)
 console.log('ネットワーク入力欄:', JSON.stringify(netDom))
@@ -66,7 +72,7 @@ await d.wait(400)
 await d.shot('.e2e/32-network.png')
 
 // ------------------------------------------------------------------ 5. ディスク
-await step('ディスク')
+await step(d.t('step.storage'))
 await d.select('main select', 'serial', 0)
 await d.wait(500)
 const diskDom = await d.eval(`return [...document.querySelectorAll('main input')].map(e => e.placeholder).filter(Boolean)`)

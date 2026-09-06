@@ -1,7 +1,5 @@
 // ネットワーク以降を仕上げ、実行時の値と上級者向けを UI から設定して確認まで進める。
 import { open } from './drive.mjs'
-// 画面の文言は辞書が正。ここに書き写すと訳文を変えたときに**テストだけが落ちる**。
-import { ja as DICT } from '../packages/shared/src/i18n/ja.ts'
 
 const d = await open()
 const ok = []
@@ -13,8 +11,8 @@ const step = async (l) => {
 }
 
 // ------------------------------------------------------------- 4. ネットワーク
-await step('ネットワーク')
-await d.click('main label', '固定 IP アドレスを使う')
+await step(d.t('step.network'))
+await d.click('main label', d.t('network.modeStatic'))
 await d.wait(600)
 await d.fillByPlaceholder('192.168.1.10/24', '192.168.1.50/24')
 await d.fillByPlaceholder('192.168.1.1', '192.168.1.1')
@@ -30,7 +28,7 @@ check(
 )
 
 // ------------------------------------------------------------- 5. ディスク
-await step('ディスク')
+await step(d.t('step.storage'))
 await d.select('main select', 'serial', 0)
 await d.wait(500)
 await d.fillByPlaceholder('CT500MX*', 'FALLBACKSERIAL01')
@@ -48,7 +46,7 @@ check('シリアル指定と swap サイズを設定できる',
   (await d.eval(`return document.querySelector('[placeholder="CT500MX*"]').value`)) === 'FALLBACKSERIAL01')
 
 // ------------------------------------------------------------- 6. 実行時に決める
-await step('実行時に決める')
+await step(d.t('step.runtime'))
 await d.wait(400)
 for (const i of [1, 4, 7]) {
   const p = await d.eval(`
@@ -63,7 +61,7 @@ for (const i of [1, 4, 7]) {
 await d.wait(500)
 const rows = await d.eval(`return document.querySelectorAll('main table tbody tr').length`)
 for (let i = rows; i < 3; i++) {
-  await d.click('main button', 'ホストを追加')
+  await d.click('main button', d.t('runtime.addPreset'))
   await d.wait(300)
 }
 const hosts = [
@@ -83,13 +81,13 @@ check('手入力の項目も出る', rt.includes('ai.interactive=1'))
 // 画面が `t('runtime.grubFreeBytes')` を通るようになり日本語では「610 バイト」に
 // なったため、**表示は出ているのにテストだけが落ちる**状態になっていた。
 // 訳文を変えるたびに壊れる形なので、見出しは辞書から引き、数字だけを取る。
-const freeLabel = DICT['runtime.grubFree']
+const freeLabel = d.t('runtime.grubFree')
 const free = (rt.split(freeLabel + ':')[1] ?? '').match(/^\s*(\d+)/)
 check('grub.cfg の残り容量が出る', free !== null, rt.match(/起動メニュー[^\n]*/g)?.join(' | ') ?? '')
 if (free) console.log('grub.cfg 残り:', free[1], 'bytes')
 
 // ------------------------------------------------------------- 8. 上級者向け
-await step('インストール後')
+await step(d.t('step.postinstall'))
 // 「上級者向け」はタブではなく折りたたみになった。文言でボタンを探すと
 // 訳文を変えた瞬間に壊れるうえ、既に開いていると**閉じてしまう**ので目印で開く。
 await d.openDisclosure()
@@ -104,13 +102,16 @@ check('通知先を webhook にできる',
   (await d.eval(`return document.querySelector('[placeholder="https://hooks.example.com/install"]').value`)) === 'https://hooks.example.local/e2e')
 
 // ------------------------------------------------------------- 9. 確認
-await step('確認')
+await step(d.t('step.review'))
 await d.until(`document.querySelectorAll('main pre').length > 0`, 20000, '設定生成')
 await d.wait(1500)
 await d.shot('.e2e/36-review.png')
 const review = await d.text()
-check('エラーが残っていない', !review.includes('エラーがあります'), review.split('\n').slice(0, 6).join(' / '))
-check('実行時の値が集計される', /メニュー 3 件/.test(review), review.match(/実行時に決める値[\s\S]{0,120}/)?.[0] ?? '')
+check('エラーが残っていない', !review.includes(d.t('review.errorsFound')), review.split('\n').slice(0, 6).join(' / '))
+// 訳文に `{n}` の差し込みがあるので、辞書の枠に値を入れてから探す。
+// 文言を書き写すと、日本語の「メニュー 3 件」が英語では別の語順になる。
+const menuCount = d.t('review.runtimeMenuCount').replace('{n}', '3')
+check('実行時の値が集計される', review.includes(menuCount), menuCount)
 
 // autoinstall.yaml / grub.cfg のタブを見る
 await d.click('main button', 'autoinstall.yaml')

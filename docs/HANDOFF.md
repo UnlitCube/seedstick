@@ -439,9 +439,17 @@ main / media のソース走査（`message:` / `label:` / `blockedReason:` に
     ラベル用のリテラル（`console.log` や `check()` の第 1 引数）と区別できず
     誤検出が 3〜7 件出た。**例外表で黙らせる番人は無いほうがまし**（落とし穴 81）と
     判断して入れていない。守るのは「実際に走らせること」。手順は `.e2e/README.md`。
-  - **まだ通していないもの**: `start-write.mjs` から先（UAC が出る）と、
-    英語表示での通し。ロケールを切り替えると `.e2e` の日本語のステップ名
-    （`d.click('nav button', 'ディスク')`）が一致しないので、そのままでは通らない。
+  - **英語表示でも通した（同日）。** `.e2e` が画面の文言を書き写していたのを
+    やめ、`drive.mjs` に `d.t('キー')` と `d.setLocale('en')` を足して
+    **辞書から引く**ようにした。`node .e2e/set-locale.mjs en` のあと
+    そのまま両方を通し、**日本語 20/20・英語 20/20**。
+    画面（`.e2e/40-storage-en.png`）に日本語は 1 文字も残っていない
+    ——グループ見出し（`Must configure` / `Change if needed` /
+    `Added by this tool` / `Finish`）も 1 行要約
+    （`Static IP 192.168.1.50/24` / `Defaults (No extras)` /
+    `debconf selections / Custom pr…`）も英語で出る。
+    **これが「English に切り替えても日本語が残らない」の実機での確認**にあたる。
+  - **まだ通していないもの**: `start-write.mjs` から先（UAC が出る）。
 - 実機／VM からの起動と、完全無人インストールの完走
 - 起動メニューから選んだホストの値が subiquity 上で反映されるか
 - 追加ユーザー・アプリ展開・サービス登録・CUDA が実機で意図どおり動くか

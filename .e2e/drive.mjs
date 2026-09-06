@@ -2,6 +2,13 @@
 // Runtime.evaluate で React の状態を直接いじると本番と違う経路になるので、
 // クリックとキー入力は Input.dispatchMouseEvent / dispatchKeyEvent を使う。
 import { connect } from './cdp.mjs'
+// **画面の文言をここに書き写さない。** 辞書が正。
+// 書き写すと訳文を変えた瞬間に「画面には出ているのにテストだけが落ちる」になり、
+// GUI を起こすまで気づけない（実際に `起動メニューの残り容量: … bytes` でそうなった）。
+import { ja } from '../packages/shared/src/i18n/ja.ts'
+import { en } from '../packages/shared/src/i18n/en.ts'
+
+const DICTS = { ja, en }
 
 export async function open() {
   const c = await connect()
@@ -39,10 +46,50 @@ export async function open() {
     await new Promise((r) => setTimeout(r, 160))
   }
 
+  /**
+   * いま画面が出している言語を読む。
+   *
+   * ストアは外から見えないので、**言語切り替えボタンのラベル**から判定する。
+   * このボタンは「切り替え*先*」の言語をその言語自身の表記で出す規約なので
+   * （`App.tsx`。英語表示のときに "Japanese" にすると切り替え先が伝わらない）、
+   * `English` と出ていれば今は日本語。
+   */
+  const detectLocale = async () =>
+    c.eval(`
+      const labels = [...document.querySelectorAll('header button')].map((b) => (b.innerText ?? '').trim())
+      if (labels.includes('English')) return 'ja'
+      if (labels.includes('日本語')) return 'en'
+      return 'ja'
+    `)
+
+  let locale = await detectLocale()
+
   return {
     ...c,
     centerOf,
     clickAt,
+    /** いま画面が出している言語（`ja` / `en`）。 */
+    get locale() {
+      return locale
+    },
+    /** 辞書から訳文を引く。**画面の文言はこれで取る。** */
+    t(key) {
+      const v = DICTS[locale][key]
+      if (v === undefined) throw new Error(`辞書に無いキー: ${key}（locale=${locale}）`)
+      return v
+    },
+    /** 表示言語を切り替える。既にその言語なら何もしない。 */
+    async setLocale(want) {
+      locale = await detectLocale()
+      if (locale === want) return locale
+      // 切り替えボタンは「切り替え先の言語」を出しているので、
+      // いま ja なら 'English' が、en なら '日本語' が押すべきラベル。
+      await this.click('header button', locale === 'ja' ? 'English' : '日本語')
+      await new Promise((r) => setTimeout(r, 600))
+      locale = await detectLocale()
+      if (locale !== want) throw new Error(`言語を ${want} に切り替えられませんでした（いま ${locale}）`)
+      return locale
+    },
     /** 文字列を含む要素をクリックする。見つからなければ例外。 */
     async click(selector, text = null, nth = 0) {
       // scrollIntoView 後に座標が確定するので 2 段階で取る
