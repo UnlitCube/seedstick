@@ -17,7 +17,12 @@
  *
  * 使い方:
  *   npm run e2e:vm                     既定（単一ディスク・LVM）
+ *   npm run e2e:vm:raid                利用者の実機構成（ディスク 2 台 + NVMe 2 台の RAID1）
  *   VM_DISKS="sda:450G sdb:450G" ...   ディスク構成を変える
+ *
+ * **`VM_MODE=raid` は既定を一切変えない。** 既定 (`single`) の経路は
+ * 「単一ディスク・LVM で完走する」ことを実機相当で確かめた実績があるので、
+ * 分岐は足すだけにしてある。
  */
 import { execFileSync, spawn } from 'node:child_process'
 import { mkdir, readdir, rm, stat } from 'node:fs/promises'
@@ -26,12 +31,16 @@ import { basename, join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import {
   createDefaultProfile,
+  createDefaultRaidStorage,
+  createRaidArray,
+  createRaidDisk,
   generateMetaData,
   generateUserData,
   validateProfile,
   formatLocalized,
   recognizeIso,
 } from '../packages/shared/src/index.js'
+import type { AutoinstallProfile, UbuntuSeries } from '../packages/shared/src/index.js'
 import {
   FileBlockDevice,
   buildIsoPatches,
@@ -45,6 +54,92 @@ import { printRevisionBanner } from './lib/git-revision.mts'
 const DISTRO = 'Ubuntu-24.04'
 const LAB = '/root/vmlab'
 const REPO_WSL = '/mnt/c/dev/autoinstall-ui'
+
+/**
+ * どの構成を組むか。**既定は今までどおり単一ディスク・LVM**。
+ *
+ * npm script から渡すので **引数**を正とする（Windows の `npm run` は
+ * `VM_MODE=raid tsx ...` の形を cmd.exe に渡すので env の前置きが効かない）。
+ * 環境変数も受けるが、それは手で叩くときの都合。
+ */
+type VmMode = 'single' | 'raid'
+const MODE: VmMode =
+  process.argv.slice(2).includes('--raid') || process.env['VM_MODE'] === 'raid' ? 'raid' : 'single'
+
+/**
+ * **利用者の実機構成を、容量だけ縮めて組む。**
+ *
+ * 実機:  SATA SSD 447.1GB x 2 (sda/sdb) + NVMe 3.5TB x 2 (nvme0n1/nvme1n1)
+ * VM  :  60G x 2 + 20G x 2
+ *
+ * **縮めているのは容量だけで、構成（何が何台で、どの配列に入るか）は同じ。**
+ * 3.5TB を実際に作ると qemu-img convert の時間が現実的でなくなる。
+ * 容量に依存する挙動（`size: -1` の残り全部、LVM の伸び）は比率が保たれていれば同じに動くが、
+ * **3.5TB そのものは試していない**（→ `docs/HANDOFF.md` §3.2）。
+ */
+const RAID_DISKS = 'sda:60G sdb:60G nvme0n1:20G nvme1n1:20G'
+
+/**
+ * ディスクの指定。
+ *
+ * `run-vm.sh` は disk-spec の名前をそのまま QEMU の `serial=` に渡すので、
+ * ゲストから見える ID_SERIAL は `sda` / `nvme0n1` になる。
+ * ただし **NVMe の ID_SERIAL は `<model>_<serial>` に組み立てられる**ので
+ * （udev の 60-persistent-storage.rules）、完全一致では引けない。
+ * autoinstall の `match` は glob を受ける（リファレンスの例が `serial: CT*`）ので、
+ * **前後にワイルドカードを付けた形**にしてどちらでも当たるようにする。
+ */
+function serialGlob(name: string): { readonly kind: 'serial'; readonly serial: string } {
+  return { kind: 'serial', serial: `*${name}*` }
+}
+
+/**
+ * 利用者の構成そのもの:
+ *
+ *   sda      パーティション: ESP 1G（**sda だけ**）/ boot 2G / 残り
+ *   sdb      パーティション: boot 2G / 残り（ESP は作らない）
+ *   nvme0n1  **ディスク丸ごと** md2 のメンバー
+ *   nvme1n1  **ディスク丸ごと** md2 のメンバー
+ *
+ *   md0 = RAID1 /boot        (sda, sdb)
+ *   md1 = RAID1 LVM PV       (sda, sdb) → vg0/lv-0 → ext4 → /
+ *   md2 = RAID1 **作るだけ**  (nvme0n1, nvme1n1)  format も mount も出さない
+ */
+function raidProfile(base: AutoinstallProfile): AutoinstallProfile {
+  const storage = base.storage
+  if (storage.mode === 'raw') throw new Error('既定のプロファイルが raw になっている（想定外）')
+  const disks = [
+    { ...createRaidDisk('d-sda', serialGlob('sda')), usage: 'partitions' as const, esp: true },
+    { ...createRaidDisk('d-sdb', serialGlob('sdb')), usage: 'partitions' as const, esp: false },
+    { ...createRaidDisk('d-nvme0', serialGlob('nvme0n1')), usage: 'whole' as const, esp: false },
+    { ...createRaidDisk('d-nvme1', serialGlob('nvme1n1')), usage: 'whole' as const, esp: false },
+  ]
+  const arrays = [
+    { ...createRaidArray('a-boot', 'md0', 'boot' as const), level: 'raid1' as const, diskIds: ['d-sda', 'd-sdb'] },
+    { ...createRaidArray('a-root', 'md1', 'lvm-pv' as const), level: 'raid1' as const, diskIds: ['d-sda', 'd-sdb'] },
+    { ...createRaidArray('a-data', 'md2', 'data' as const), level: 'raid1' as const, diskIds: ['d-nvme0', 'd-nvme1'] },
+  ]
+  return {
+    ...base,
+    basics: { ...base.basics, hostname: 'vm-raid' },
+    storage: {
+      ...storage,
+      mode: 'raid',
+      raid: {
+        ...createDefaultRaidStorage(),
+        disks,
+        arrays,
+        volumeGroup: 'vg0',
+        rootName: 'lv-0',
+        rootSize: '',
+        rootFstype: 'ext4',
+        espSize: '1G',
+        bootSize: '2G',
+        mirrorBootloader: true,
+      },
+    },
+  }
+}
 
 let pass = 0
 let fail = 0
@@ -94,11 +189,23 @@ function toWslPath(winPath: string): string {
   return winPath.replace(/\\/g, '/').replace(/^([A-Za-z]):/, (_m, d: string) => `/mnt/${d.toLowerCase()}`)
 }
 
-/** 対応している ISO を 1 本探す。 */
-async function findIso(): Promise<string | null> {
+/**
+ * 対応している ISO を 1 本選ぶ。
+ *
+ * **見つけた順ではなく、リリースの新しい順に選ぶ。**
+ * `~/images` を上から見るだけだと `ubuntu-22.04.5-live-server` が先に当たるが、
+ * この構成 (`storage.config` の `disk` アクションに `match:` を書く形) は
+ * **22.04 の subiquity では動かない**ことを実測した
+ * （15 分待ってディスクに 1 バイトも書かれず、シリアルにも何も出ない）。
+ * 選んだ ISO のリリースは**そのままプロファイルの `series` にする**
+ * （ISO と設定のリリースが食い違うと、そのリリースに無いキーを出しうる）。
+ */
+async function findIso(): Promise<{ readonly path: string; readonly series: UbuntuSeries } | null> {
+  const found: { path: string; series: UbuntuSeries }[] = []
   const explicit = process.argv.slice(2).find((a) => a.toLowerCase().endsWith('.iso'))
-  if (explicit !== undefined) return explicit
-  for (const dir of [join(homedir(), 'images'), join(homedir(), 'Downloads'), 'C:/iso']) {
+  const dirs = explicit !== undefined ? [] : [join(homedir(), 'images'), join(homedir(), 'Downloads'), 'C:/iso']
+  const candidates: string[] = explicit !== undefined ? [explicit] : []
+  for (const dir of dirs) {
     let names: string[]
     try {
       names = await readdir(dir)
@@ -106,37 +213,44 @@ async function findIso(): Promise<string | null> {
       continue
     }
     for (const name of names) {
-      if (!name.toLowerCase().endsWith('.iso')) continue
-      const path = join(dir, name)
-      let dev: FileBlockDevice | null = null
-      try {
-        dev = await FileBlockDevice.open(path, 'r')
-        const info = await inspectIso(dev)
-        if (recognizeIso(info.volumeId, info.diskInfo ?? undefined).kind === 'supported') return path
-      } catch {
-        // 対応していない ISO は飛ばす
-      } finally {
-        await dev?.close().catch(() => undefined)
-      }
+      if (name.toLowerCase().endsWith('.iso')) candidates.push(join(dir, name))
     }
   }
-  return null
+  for (const path of candidates) {
+    let dev: FileBlockDevice | null = null
+    try {
+      dev = await FileBlockDevice.open(path, 'r')
+      const info = await inspectIso(dev)
+      const rec = recognizeIso(info.volumeId, info.diskInfo ?? undefined)
+      if (rec.kind === 'supported') found.push({ path, series: rec.identity.series })
+    } catch {
+      // 対応していない ISO は飛ばす
+    } finally {
+      await dev?.close().catch(() => undefined)
+    }
+  }
+  if (found.length === 0) return null
+  // 新しいリリースを優先する（`series` は "22.04" のような文字列なので単純な比較でよい）。
+  found.sort((a, b) => b.series.localeCompare(a.series))
+  return found[0] ?? null
 }
 
 async function main(): Promise<void> {
   printRevisionBanner('scripts/e2e-vm.mts')
 
-  const isoPath = await findIso()
-  if (isoPath === null) {
+  const iso0 = await findIso()
+  if (iso0 === null) {
     console.log('対応する ISO が見つからないのでスキップします（異常ではありません）。')
     return
   }
-  console.log(`ISO   : ${basename(isoPath)}`)
+  const isoPath = iso0.path
+  console.log(`ISO   : ${basename(isoPath)}（${iso0.series}）`)
 
   // --- 1. 設定 -----------------------------------------------------------
   // インストール後に見分けられる値にする。
-  const base = createDefaultProfile('24.04')
-  const profile = {
+  // **ISO と設定のリリースを揃える。** 食い違うと、そのリリースに無いキーを出しうる。
+  const base = createDefaultProfile(iso0.series)
+  const common: AutoinstallProfile = {
     ...base,
     basics: { ...base.basics, hostname: 'vm-e2e' },
     user: {
@@ -147,12 +261,28 @@ async function main(): Promise<void> {
       passwordHash: '$6$vme2e$Qv1sKq4bWbG3hQeYwZ7YyQ0cQ9hQb1s2Y3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S9t0U1v2W3x4Y5z6.',
     },
   }
+  const profile: AutoinstallProfile = MODE === 'raid' ? raidProfile(common) : common
+  if (MODE === 'raid') {
+    console.log('構成  : 利用者の実機構成（sda/sdb = ESP は sda のみ + /boot md0 + LVM md1 / nvme x2 = 丸ごと md2）')
+    console.log('        **容量だけ縮めてある**（実機 447.1GB x2 + 3.5TB x2 → 60G x2 + 20G x2）')
+  } else {
+    console.log('構成  : 既定（単一ディスク・LVM）')
+  }
   const validation = validateProfile(profile)
   check(
     '設定が検証を通る',
     validation.ok,
     validation.issues.map((i) => formatLocalized('ja', i.text)).join(' / '),
   )
+  if (MODE === 'raid') {
+    // 出した YAML をそのまま残す。**通らなかったときに最初に見る物**。
+    console.log('\n--- 生成した user-data（storage 部分の抜粋）---')
+    const yaml = generateUserData(profile, { comments: 'none' })
+    const from = yaml.indexOf('  storage:')
+    const to = yaml.indexOf('\n  identity:')
+    console.log(yaml.slice(from, to > from ? to : from + 4000))
+    console.log('--- ここまで ---\n')
+  }
 
   // --- 2. イメージを作る --------------------------------------------------
   const workDir = join(process.env['TEMP'] ?? '/tmp', `vm-e2e-${randomBytes(4).toString('hex')}`)
@@ -161,7 +291,16 @@ async function main(): Promise<void> {
   const iso = await FileBlockDevice.open(isoPath, 'r')
   try {
     const inspection = await inspectIso(iso)
-    const patchPlan = buildIsoPatches(inspection, { args: ['autoinstall'], markTitle: true })
+    // **`console=ttyS0` は VM の都合であって、製品の既定ではない。**
+    // Ubuntu の ISO の grub.cfg は console= を付けないので、カーネルが起きた瞬間に
+    // シリアルへの出力が止まる。GRUB のエラーだけが見えて、そのあとは
+    // 「ディスクが 1 バイトも増えないまま無音」になり、
+    // **失敗しているのか時間がかかっているのかが区別できない**。
+    // 実機の USB に焼くときは付けない（`e2e-vm.mts` だけが足す）。
+    const patchPlan = buildIsoPatches(inspection, {
+      args: ['autoinstall', 'console=tty0', 'console=ttyS0,115200n8'],
+      markTitle: true,
+    })
     const isoSize = (await stat(isoPath)).size
     const plan = await planUsbLayout({
       isoDevice: iso,
@@ -172,7 +311,7 @@ async function main(): Promise<void> {
           name: 'user-data',
           content: Buffer.from(generateUserData(profile, { comments: 'ja' }), 'utf8'),
         },
-        { name: 'meta-data', content: Buffer.from(generateMetaData('vm-e2e'), 'utf8') },
+        { name: 'meta-data', content: Buffer.from(generateMetaData(profile.basics.hostname), 'utf8') },
       ],
       random: () => randomBytes(16),
       timestamp: new Date('2026-09-07T00:00:00Z'),
@@ -203,7 +342,7 @@ async function main(): Promise<void> {
   check('WSL 側にイメージがある', wsl(`test -f ${wslImg} && echo yes`).trim() === 'yes')
 
   // --- 4. 無人インストール ------------------------------------------------
-  const disks = process.env['VM_DISKS'] ?? 'sda:20G'
+  const disks = process.env['VM_DISKS'] ?? (MODE === 'raid' ? RAID_DISKS : 'sda:20G')
   console.log(`\n■ 無人インストールを開始します（ディスク: ${disks}）`)
   console.log('  シリアルの出力で進行を追います。数分〜十数分かかります。\n')
 
@@ -275,6 +414,110 @@ async function main(): Promise<void> {
   check('autoinstall の user-data が読まれた', field('AUTOINSTALL_USER_DATA') === 'yes')
   check('ESP と /boot が fstab に載っている', /\/boot\/efi/.test(report))
 
+  // --- 5b. RAID 構成のときだけ見ること ------------------------------------
+  // **「Ubuntu が入った」ではなく「この構成が組まれた」を見る。**
+  // md の番号と名前はホストが変わると当てにならない
+  // （別ホストで組み立て直すと `/dev/md127` になる）ので、
+  // **レベル・台数・その md の上に何が載っているか**で見分ける。
+  if (MODE === 'raid') {
+    interface Md {
+      readonly name: string
+      readonly level: string
+      readonly devices: number
+      readonly fstype: string
+      readonly dev: string
+      /** メンバーのデバイス（`/dev/loop2` = ディスク丸ごと / `/dev/loop4p3` = パーティション） */
+      readonly members: readonly string[]
+    }
+    const lines = report.split('\n')
+    const mds: Md[] = lines
+      .filter((l) => l.startsWith('MD='))
+      .map((l) => l.slice(3).split('|'))
+      .map((c) => ({
+        name: c[0] ?? '',
+        level: c[1] ?? '',
+        devices: Number(c[2] ?? '0'),
+        fstype: c[3] ?? '',
+        dev: c[4] ?? '',
+        members: (c[5] ?? '').split(',').filter(Boolean),
+      }))
+    const show = mds.map((m) => `${m.dev}(${m.name} ${m.level} ${m.devices}台 fs="${m.fstype}")`).join(' ')
+    check('md の配列が 3 つできている', mds.length === 3, show)
+
+    const bootMd = mds.find((m) => m.fstype === 'ext4')
+    const pvMd = mds.find((m) => m.fstype === 'LVM2_member')
+    // **「何も載っていない」ことが仕様**の配列。`role: 'data'` がそのとおりに出たか。
+    const dataMd = mds.find((m) => m.fstype === '')
+    check('/boot 用の md が RAID1 2 台で ext4', bootMd?.level === 'raid1' && bootMd.devices === 2, show)
+    check('LVM PV 用の md が RAID1 2 台', pvMd?.level === 'raid1' && pvMd.devices === 2, show)
+    check(
+      'md2 は組み立てられているが、フォーマットもマウントもされていない',
+      dataMd !== undefined && dataMd.level === 'raid1' && dataMd.devices === 2,
+      show,
+    )
+    // **`raid.name` がそのまま残るのは `/etc/mdadm/mdadm.conf` の ARRAY 行**。
+    // md のメタデータの `Name:` は `<homehost>:0` のように**数字になる**
+    // （mdadm は `/dev/mdN` から名前を N と決めるので、`md0` と付けても metadata は `0`）。
+    // ここを取り違えると「名前が消えた」という嘘の失敗を出す（実際に出した）。
+    const confDevs = field('MDADM_CONF_DEVS').split(/\s+/).filter(Boolean)
+    check(
+      'mdadm.conf の ARRAY が /dev/md0 /dev/md1 /dev/md2',
+      ['/dev/md0', '/dev/md1', '/dev/md2'].every((d) => confDevs.includes(d)),
+      confDevs.join(' '),
+    )
+    // メタデータ側は `<homehost>:0` `:1` `:2` になる（上の理由）。
+    const names = mds.map((m) => m.name).join(' ')
+    check(
+      'md のメタデータ名が 0 / 1 / 2（mdadm が /dev/mdN から決める形）',
+      ['0', '1', '2'].every((n) => names.split(/\s+/).some((v) => v.endsWith(`:${n}`))),
+      names,
+    )
+
+    const pvs = lines.filter((l) => l.startsWith('LVM_PV=')).map((l) => l.slice(7).trim())
+    const lvs = lines.filter((l) => l.startsWith('LVM_LV=')).map((l) => l.slice(7).trim())
+    check('vg0 の PV が md（RAID）である', pvs.some((v) => /^\/dev\/md\d+\|vg0$/.test(v)), pvs.join(' / '))
+    check('vg0/lv-0 がある', lvs.includes('lv-0|vg0'), lvs.join(' / '))
+    const rootLine = lines.find((l) => l.startsWith('ルート: ')) ?? '(見つからない)'
+    check('ルートが vg0/lv-0 の LV', rootLine.includes('vg0-lv--0'), rootLine)
+
+    // **丸ごとメンバー (`usage: 'whole'`) が意図どおり出たか。**
+    // これは「md2 の上に何も無い」とは別の性質で、ここでしか機械で言えない。
+    // メンバー名が `/dev/loopN`（末尾に `pN` が無い）ならディスク丸ごと。
+    const isWholeDisk = (d: string): boolean => /^\/dev\/loop\d+$/.test(d)
+    check(
+      'md2 のメンバーはディスク丸ごと（パーティションを 1 つも切っていない）',
+      dataMd !== undefined && dataMd.members.length === 2 && dataMd.members.every(isWholeDisk),
+      dataMd?.members.join(' ') ?? '(md2 が無い)',
+    )
+    // 逆に、パーティションを切るディスクの配列は**パーティション**をメンバーにする。
+    check(
+      '/boot と LVM PV の md はパーティションをメンバーにしている',
+      [bootMd, pvMd].every(
+        (m) => m !== undefined && m.members.length === 2 && m.members.every((d) => !isWholeDisk(d)),
+      ),
+      `${bootMd?.members.join(' ') ?? '?'} / ${pvMd?.members.join(' ') ?? '?'}`,
+    )
+
+    // ESP は RAID に置けないので、**作った台数がそのまま「起動を支える台数」**（落とし穴 97）。
+    check('ESP は 1 つだけ', field('ESP_PARTS') === '1', `実際 "${field('ESP_PARTS')}"`)
+    check('ESP があるのは sda だけ', field('ESP_DISKS') === 'sda', `実際 "${field('ESP_DISKS')}"`)
+
+    const mounts = field('FSTAB_MOUNTS').split(/\s+/).filter(Boolean)
+    check(
+      'fstab に / と /boot と /boot/efi がある',
+      ['/', '/boot', '/boot/efi'].every((m) => mounts.includes(m)),
+      mounts.join(' '),
+    )
+    // **無いことの確認**。md2 用のマウントが紛れ込んでいたら「作るだけ」になっていない。
+    // `FSTAB_MOUNTS` は `/` で始まる列だけを出す（swap の行は 2 列目が `none`）。
+    check('fstab に余分なマウントが無い（md2 はマウントされない）', mounts.length === 3, mounts.join(' '))
+    check(
+      '/etc/mdadm/mdadm.conf に ARRAY 行が 3 本',
+      field('MDADM_CONF_ARRAYS') === '3',
+      `実際 "${field('MDADM_CONF_ARRAYS')}"`,
+    )
+  }
+
   // --- 6. **インストールしたシステムを実際に起動する** --------------------
   // ここまでは「インストールが終わった」ことしか見ていない。
   // **起動するか**は別の話で、引き継ぎ資料が最初から残している項目そのもの。
@@ -287,7 +530,10 @@ async function main(): Promise<void> {
     `VM_TIMEOUT=420 bash ${REPO_WSL}/scripts/vm/run-vm.sh boot ${LAB} ${disks}`,
     (line) => {
       if (/Linux version|systemd\[1\]/i.test(line)) sawKernel = true
-      if (new RegExp(`${profile.basics.hostname}\s+login:`, 'i').test(line)) sawLogin = true
+      // **テンプレートリテラルの中の `\s` は正規表現の `\s` にならない**（`s` 1 文字になる）。
+      // この形だと「vm-raid s+login:」を探すことになり、**永久に一致しない**。
+      // `RegExp` に渡す文字列では二重にエスケープする。
+      if (new RegExp(`${profile.basics.hostname}\\s+login:`, 'i').test(line)) sawLogin = true
       if (/error|fail|panic|login:/i.test(line)) console.log(`  | ${line.trim().slice(0, 160)}`)
     },
   )

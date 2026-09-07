@@ -60,6 +60,7 @@ for old in _probe-*.raw; do [ -e "$old" ] && rm -f "$old"; done
 
 # --- qcow2 を raw に変換して loop で開く
 I=0
+NAMES=()
 for f in *.qcow2; do
   [ -e "$f" ] || continue
   raw="_probe-$I.raw"
@@ -67,6 +68,8 @@ for f in *.qcow2; do
   RAWS+=("$raw")
   if lo=$(losetup -P -f --show -r "$raw" 2>/dev/null); then
     LOOPS+=("$lo")
+    # **どの loop がどのディスクか**を覚える。「ESP は sda だけ」を言うのに要る。
+    NAMES+=("${f%.qcow2}")
     echo "接続: $f → $lo"
   fi
   I=$((I + 1))
@@ -93,12 +96,56 @@ for md in /dev/md*; do
   mdadm --detail "$md" 2>/dev/null | grep -E '/dev/(loop|md)' || true
 done
 
+# --- 機械で読む形（`e2e-vm.mts` の RAID 用の判定がこれを読む）-----------------
+# 名前 (`md0`) はホスト名つきで記録されるうえ、別のホストで組み立て直すと
+# `/dev/md127` のように番号が変わる。**番号や名前だけに頼らない**ように、
+# 「レベル・台数・その md の上に何があるか」も一緒に出す。
+#   MD=<metadata の名前>|<レベル>|<台数>|<md 上の FSTYPE>|<デバイス名>
+# md の上が
+#   ext4        → /boot   (role: boot)
+#   LVM2_member → LVM PV  (role: lvm-pv)
+#   （空）       → **何も載っていない** (role: data。作るだけ)
+for md in /dev/md[0-9]*; do
+  [ -b "$md" ] || continue
+  # `--export` は KEY=VALUE を並べるだけ。**eval しない**（値が何であれ壊れない）。
+  det=$(mdadm --detail --export "$md" 2>/dev/null || true)
+  nm=$(echo "$det" | sed -n 's/^MD_NAME=//p' | head -1)
+  lv=$(echo "$det" | sed -n 's/^MD_LEVEL=//p' | head -1)
+  nd=$(echo "$det" | sed -n 's/^MD_DEVICES=//p' | head -1)
+  fs=$(lsblk -ndo FSTYPE "$md" 2>/dev/null | head -1)
+  # **メンバーがディスク丸ごとか、パーティションか。**
+  # 丸ごとメンバー (`usage: 'whole'`) が意図どおり出たかは、ここでしか機械で言えない
+  # （`/dev/loop4p3` のように末尾に `pN` が付いていればパーティション）。
+  mem=$(mdadm --detail "$md" 2>/dev/null | awk '/\/dev\/loop/ {printf "%s,", $NF}')
+  echo "MD=${nm}|${lv}|${nd}|${fs}|$(basename "$md")|${mem%,}"
+done
+
 echo
 echo "=== LVM ==="
 # **必ず自分で有効化する。** udev の自動有効化に頼ると環境で結果が変わる。
 vgchange -ay >/dev/null 2>&1 || true
 pvs --noheadings -o pv_name,vg_name,pv_size 2>/dev/null || true
 lvs --noheadings -o lv_name,vg_name,lv_size 2>/dev/null || true
+pvs --noheadings -o pv_name,vg_name 2>/dev/null |
+  while read -r pv vg; do echo "LVM_PV=${pv}|${vg}"; done
+lvs --noheadings -o lv_name,vg_name 2>/dev/null |
+  while read -r lv vg; do echo "LVM_LV=${lv}|${vg}"; done
+
+# --- ESP はどのディスクに、いくつあるか ------------------------------------
+# 「ESP は sda1 だけ」が守られたかを見る。**RAID に置けないので台数がそのまま
+# 「1 台落ちたら起動しない」の台数**になる（落とし穴 97）。
+ESP_TOTAL=0
+ESP_DISKS=""
+i=0
+for lo in "${LOOPS[@]:-}"; do
+  [ -n "$lo" ] || continue
+  n=$(lsblk -lno FSTYPE "$lo" 2>/dev/null | grep -c '^vfat$' || true)
+  if [ "$n" -gt 0 ]; then ESP_DISKS="$ESP_DISKS ${NAMES[$i]:-?}"; fi
+  ESP_TOTAL=$((ESP_TOTAL + n))
+  i=$((i + 1))
+done
+echo "ESP_PARTS=$ESP_TOTAL"
+echo "ESP_DISKS=${ESP_DISKS# }"
 
 # --- ここからが本題: **私たちの設定が効いたか** ------------------------------
 echo
@@ -132,9 +179,22 @@ echo "SSHD=$([ -f "$MNT/etc/ssh/sshd_config" ] && echo yes || echo no)"
 echo "AUTHORIZED_KEYS=$(find "$MNT/home" -name authorized_keys 2>/dev/null | wc -l)"
 echo "--- /etc/fstab ---"
 grep -vE '^\s*#|^\s*$' "$MNT/etc/fstab" 2>/dev/null || true
+# マウントポイントだけを 1 行に並べる。「md2 はどこにもマウントされていない」を
+# 機械で言うため（**無いことの確認**は目視では抜けやすい）。
+# **`/` で始まる列だけ**を取る。swap の行は 2 列目が `none` なので落とす
+# （`/swap.img none swap sw 0 0`。これを数えると「余分なマウントがある」に見える）。
+echo "FSTAB_MOUNTS=$(awk '!/^[[:space:]]*#/ && NF>=2 && $2 ~ /^\// {printf "%s ", $2}' "$MNT/etc/fstab" 2>/dev/null)"
 if [ -f "$MNT/etc/mdadm/mdadm.conf" ]; then
   echo "--- /etc/mdadm/mdadm.conf ---"
   grep -E '^ARRAY' "$MNT/etc/mdadm/mdadm.conf" 2>/dev/null || echo "(ARRAY 行なし)"
+  echo "MDADM_CONF_ARRAYS=$(grep -cE '^ARRAY' "$MNT/etc/mdadm/mdadm.conf" 2>/dev/null || echo 0)"
+  # **`raid.name` がそのまま残るのはここ**（mdadm.conf の ARRAY 行のデバイス名）。
+  # md のメタデータの `Name:` は `<homehost>:0` のように**数字になる**
+  # （mdadm は `/dev/mdN` から名前を N と決める）ので、
+  # 「md0 と名付けたものが md0 になったか」はこちらで見る。
+  echo "MDADM_CONF_DEVS=$(awk '/^ARRAY/ {printf "%s ", $2}' "$MNT/etc/mdadm/mdadm.conf" 2>/dev/null)"
+else
+  echo "MDADM_CONF_ARRAYS=0"
 fi
 # **ユーザーはインストール時点では存在しない。**
 # subiquity は cloud-init の設定に書くだけで、実際に作るのは初回起動時。

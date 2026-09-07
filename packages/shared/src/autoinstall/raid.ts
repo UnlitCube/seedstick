@@ -54,15 +54,41 @@ export const RAID_LEVEL_CHOICES: readonly (Choice & { readonly value: RaidLevel 
  *
  * - `boot`   … `/boot` にする（GRUB が読む。ESP は**別**で、RAID には置けない）
  * - `lvm-pv` … LVM のボリュームグループの PV にする（この上に root を切る）
+ * - `data`   … **作るだけ**。`format` も `mount` も出さない。
+ *              インストール後に利用者が好きなファイルシステムを載せる想定。
+ *              黙って作ると「作ったのに使えない」に見えるので、検証が info で伝える
+ *              （落とし穴 67）。意図的な構成なので error にはしない。
  */
-export type RaidArrayRole = 'boot' | 'lvm-pv'
+export type RaidArrayRole = 'boot' | 'lvm-pv' | 'data'
 
-export const RAID_ROLES: readonly RaidArrayRole[] = ['boot', 'lvm-pv']
+export const RAID_ROLES: readonly RaidArrayRole[] = ['boot', 'lvm-pv', 'data']
 
 export const RAID_ROLE_CHOICES: readonly (Choice & { readonly value: RaidArrayRole })[] = [
   { value: 'lvm-pv', label: 'storage.raidRoleLvmPv' },
   { value: 'boot', label: 'storage.raidRoleBoot' },
+  { value: 'data', label: 'storage.raidRoleData' },
 ]
+
+/**
+ * その配列がファイルシステムを載せてマウントされるか。
+ *
+ * 生成側と検証側で同じ判定を使う（食い違うと「検証は通るのに生成だけ違う」が戻る）。
+ */
+export function raidRoleIsMounted(role: unknown): boolean {
+  return role === 'boot' || role === 'lvm-pv'
+}
+
+/**
+ * `/boot` 用のパーティションと、データ用のパーティションのどちらを使うか。
+ *
+ * `lvm-pv` と `data` は**同じ「データ用パーティション」を取り合う**。
+ * 1 台のディスクにデータ用パーティションは 1 つしか作らない（`size: -1` で
+ * そのディスクの残り全部）ので、同じディスクを PV 用とデータ用の 2 本に
+ * 入れることはできない。検証が error にする。
+ */
+export function raidRolePartClass(role: unknown): 'boot' | 'data' {
+  return role === 'boot' ? 'boot' : 'data'
+}
 
 export type RaidRootFstype = 'ext4' | 'xfs'
 
@@ -71,6 +97,26 @@ export const RAID_ROOT_FSTYPES: readonly RaidRootFstype[] = ['ext4', 'xfs']
 export const RAID_ROOT_FSTYPE_CHOICES: readonly (Choice & { readonly value: RaidRootFstype })[] = [
   { value: 'ext4', label: 'storage.raidFstypeExt4' },
   { value: 'xfs', label: 'storage.raidFstypeXfs' },
+]
+
+/**
+ * ディスクの使い方。
+ *
+ * - `partitions` … パーティションを切って使う（ESP / `/boot` / データに分ける）。
+ * - `whole`      … **ディスク丸ごと 1 つを md のメンバーにする**。
+ *                   パーティションを 1 つも切らない。curtin の `raid.devices` は
+ *                   disk の id を直接参照できる（R8 の表・curtin の
+ *                   `devices: [sdb, sdc]` の例）。
+ *
+ * `whole` のディスクには ESP も `/boot` も置けない（切る場所が無い）。検証が error にする。
+ */
+export type RaidDiskUsage = 'partitions' | 'whole'
+
+export const RAID_DISK_USAGES: readonly RaidDiskUsage[] = ['partitions', 'whole']
+
+export const RAID_DISK_USAGE_CHOICES: readonly (Choice & { readonly value: RaidDiskUsage })[] = [
+  { value: 'partitions', label: 'storage.raidDiskUsagePartitions' },
+  { value: 'whole', label: 'storage.raidDiskUsageWhole' },
 ]
 
 /**
@@ -93,10 +139,44 @@ export interface RaidDisk {
    */
   readonly match: DiskMatch
   /**
-   * このディスクから起動できるようにするか。
-   * true なら ESP（素の FAT。**RAID には置けない**）を作る。
+   * パーティションを切って使うか、丸ごと 1 メンバーにするか。
+   *
+   * 旧形式（`usage` が無い保存済みプロファイル）は `partitions` として読む。
    */
-  readonly boot: boolean
+  readonly usage: RaidDiskUsage
+  /**
+   * **このディスクに ESP（EFI システムパーティション）を作るか。**
+   *
+   * 旧形式の `boot`（真偽）を引き継ぐフィールド。`migrate.ts` が `boot` → `esp` に移す。
+   *
+   * `/boot` を置くかどうかは**別の軸**で、「`/boot` 用の配列 (`role: 'boot'`) の
+   * メンバーかどうか」で決まる。だから
+   * 「ESP は 1 台目だけ・`/boot` は 2 台のミラー」という構成が作れる
+   * （ESP は素の FAT なので RAID に置けず、`/boot` は RAID1 に置ける）。
+   */
+  readonly esp: boolean
+}
+
+/**
+ * ディスクの使い方（手で編集された JSON でも落ちない読み方）。
+ *
+ * 生成側と検証側で同じ判定を使う。
+ */
+export function raidDiskUsageOf(disk: unknown): RaidDiskUsage {
+  const usage = (disk as { usage?: unknown } | null | undefined)?.usage
+  return usage === 'whole' ? 'whole' : 'partitions'
+}
+
+/**
+ * このディスクに ESP を作るか。
+ *
+ * **丸ごとメンバーのディスクには作れない**（切る場所が無い）。
+ * 生成側は黙って作らず、検証側が「矛盾しています」と error にする
+ * （設定は残るので、ESP を外すか使い方を戻せば解除できる・落とし穴 66）。
+ */
+export function raidDiskMakesEsp(disk: unknown): boolean {
+  if (raidDiskUsageOf(disk) === 'whole') return false
+  return (disk as { esp?: unknown } | null | undefined)?.esp === true
 }
 
 /** RAID 配列 1 つ。 */
@@ -128,7 +208,7 @@ export interface RaidStorageConfig {
   /** root の大きさ。**空なら残り全部**（curtin の `size: -1`）。 */
   readonly rootSize: string
   readonly rootFstype: RaidRootFstype
-  /** 各 boot ディスクに作る ESP の大きさ */
+  /** ESP を作るディスク（`esp: true`）1 台ごとに作る ESP の大きさ */
   readonly espSize: string
   /** `/boot` 用パーティションの大きさ（`/boot` 配列があるときだけ使う） */
   readonly bootSize: string
@@ -159,7 +239,9 @@ export function createDefaultRaidStorage(): RaidStorageConfig {
 
 /** 新しいディスク行。UI が「追加」で使う。 */
 export function createRaidDisk(id: string, match: DiskMatch = { kind: 'serial', serial: '' }): RaidDisk {
-  return { id, match, boot: true }
+  // 既定は「パーティションを切って ESP も作る」。ESP が 1 つも無いと
+  // UEFI で起動できないので、既定は作る側に倒す（外すのは 1 クリック）。
+  return { id, match, usage: 'partitions', esp: true }
 }
 
 /** 新しい配列。UI が「追加」で使う。 */

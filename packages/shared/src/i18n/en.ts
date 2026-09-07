@@ -341,6 +341,7 @@ export const en = {
   'storage.raidLevelRaid10': 'RAID10 (mirrored and striped, 4 disks or more)',
   'storage.raidRoleBoot': 'Hold /boot',
   'storage.raidRoleLvmPv': 'Be an LVM physical volume (root is carved out of it)',
+  'storage.raidRoleData': 'Just assemble it (no filesystem, not mounted)',
   'storage.raidFstypeExt4': 'ext4',
   'storage.raidFstypeXfs': 'XFS',
   'storage.layoutRaid': 'RAID + LVM (combine several disks)',
@@ -357,6 +358,18 @@ export const en = {
   'storage.raidDiskBootHint':
     'Creates an EFI system partition (ESP). An ESP cannot live on RAID, so one is created on each bootable disk.',
   'storage.raidDiskBootBadge': 'Boot',
+  'storage.raidDiskUsage': 'How this disk is used',
+  'storage.raidDiskUsagePartitions': 'Partition it',
+  'storage.raidDiskUsageWhole': 'Use the whole disk as one member',
+  'storage.raidDiskUsageHint':
+    'Using the whole disk makes the disk itself a RAID member without creating a single partition. No partition table is written, so this disk can hold neither an EFI system partition nor /boot.',
+  'storage.raidDiskWholeBadge': 'Whole disk',
+  'storage.raidDiskEspOnWhole':
+    'This disk is used whole as a single member, so there is nowhere to put an EFI system partition. The switch stays usable so a profile saved with it on can still be turned off, but leaving it on is reported as a contradiction.',
+  'storage.raidEspCount':
+    'Disks that get an EFI system partition: {count}. With none, the install completes but the machine cannot boot.',
+  'storage.raidRoleDataNote':
+    'This array is only assembled: it gets no filesystem and is not mounted. Create a filesystem yourself after the installation.',
   'storage.raidDiskIncomplete': 'No disk specified',
   'storage.raidRowUnreadable':
     'This row could not be read; the profile may have been edited by hand. Delete it and enter it again.',
@@ -1230,6 +1243,7 @@ Date: {date}`,
   'migrate.category.raidArray': 'RAID arrays',
   'migrate.field.raidLevel': 'the RAID level (storage.raid.arrays[].level)',
   'migrate.field.raidRole': 'what the array is used for (storage.raid.arrays[].role)',
+  'migrate.field.raidDiskUsage': 'how the disk is used (storage.raid.disks[].usage)',
   'migrate.field.raidRootFstype': 'the file system for root (storage.raid.rootFstype)',
   'migrate.raidDiskRefDropped':
     '{count} disk reference(s) held by RAID arrays pointed at disks that are not in this profile, so those references were removed. Check that no array is now short of members.',
@@ -1453,8 +1467,14 @@ Date: {date}`,
     'Array "{name}" is RAID0. Losing a single disk loses everything on the array.',
   'validate.raidSparesIgnoredForLevel0':
     'Array "{name}" is RAID0, so its spares are never used and are ignored.',
-  'validate.raidBootArrayMemberNotBootDisk':
-    'Array "{name}" contains a disk that is not marked as a boot disk. No EFI system partition is created there, so the machine cannot start from it.',
+  'validate.raidBootArrayWithoutEspDisk':
+    'No member of array "{name}" carries an EFI system partition. The machine starts from the disk that holds the bootloader and reads /boot from there, so putting /boot on an entirely separate set of disks can leave the machine unbootable after a single disk fails.',
+  'validate.raidWholeDiskEsp':
+    'Disk #{n} is set to be used as one whole member, yet it is also asked to hold an EFI system partition. No partition table is written to it, so there is nowhere to put one. Either turn the ESP off or switch the disk back to being partitioned.',
+  'validate.raidWholeDiskInBootArray':
+    'Array "{name}" (which holds /boot) has {count} disk(s) used as one whole member. No partitions are cut on those disks, so there is no room for /boot. Switch them back to being partitioned or remove them from this array.',
+  'validate.raidArrayNotMounted':
+    'Array "{name}" is only assembled: it is not formatted and not mounted. Create a filesystem on it and add it to /etc/fstab after the installation (this is fine if that is what you intended).',
   'validate.raidDiskUnused':
     'Disk #{n} is not used by any array and is not a boot disk. Nothing at all is written to it, so a disk you did not mean to use is not erased.',
   'validate.raidWipesAllMemberDisks':

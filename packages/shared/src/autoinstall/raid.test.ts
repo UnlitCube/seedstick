@@ -34,8 +34,13 @@ import { formatLocalized } from '../i18n/index.js'
 const HASH =
   '$6$saltsalt$.XeWDrCjouuYgs/UGMlCRi7DbQGo.D1eElJrsOdTTiB3cMADnjs1koQGbOqnqfjNvuX4oBtad6mDPQUgJiwjZ1'
 
-function disk(id: string, serial: string, boot: boolean): RaidDisk {
-  return { id, match: { kind: 'serial', serial }, boot }
+function disk(id: string, serial: string, esp: boolean): RaidDisk {
+  return { id, match: { kind: 'serial', serial }, usage: 'partitions', esp }
+}
+
+/** ディスク丸ごとを 1 つの md メンバーにする行（パーティションを切らない）。 */
+function wholeDisk(id: string, serial: string): RaidDisk {
+  return { id, match: { kind: 'serial', serial }, usage: 'whole', esp: false }
 }
 
 function array(over: Partial<RaidArray> & Pick<RaidArray, 'id' | 'name' | 'role'>): RaidArray {
@@ -217,20 +222,40 @@ describe('RAID + LVM の生成', () => {
     expect(config.filter((a) => a['path'] === '/boot/efi')).toHaveLength(1)
   })
 
-  it('grub_device は 1 台目の boot ディスクだけに付く', () => {
+  // **UEFI では `grub_device` は ESP の「パーティション」に付ける。**
+  // ディスク側に付けた形は subiquity の `needs_bootloader_partition()` を通らず、
+  // `autoinstall config did not create needed bootloader partition` で止まる
+  // （24.04.3 の VM で実際に踏んだ。`models/filesystem.py` の UEFI 分岐は
+  //  `self._all(type="partition", grub_device=True)` しか見ない）。
+  it('grub_device は 1 台目の ESP のパーティションだけに付く（disk には付けない）', () => {
     const config = configOf(raidProfile(BOOT_AND_DATA))
-    const withGrub = config.filter((a) => a['grub_device'] === true).map((a) => a['id'])
-    expect(withGrub).toEqual(['disk-0'])
+    const withGrub = config.filter((a) => a['grub_device'] === true)
+    expect(withGrub.map((a) => a['id'])).toEqual(['disk-0-esp'])
+    expect(withGrub.map((a) => a['type'])).toEqual(['partition'])
+    // disk アクションには 1 つも付かない（BIOS 起動用の形をうっかり残さない）。
+    expect(config.filter((a) => a['type'] === 'disk' && a['grub_device'] === true)).toEqual([])
   })
 
-  it('boot に使わないディスクが 1 台目でも、grub_device は boot ディスクに付く', () => {
+  it('boot に使わないディスクが 1 台目でも、grub_device は ESP のあるディスクの ESP に付く', () => {
     const config = configOf(
       raidProfile({
         disks: [disk('d0', 'SER0', false), disk('d1', 'SER1', true), disk('d2', 'SER2', true)],
         arrays: [array({ id: 'ap', name: 'md0', role: 'lvm-pv', diskIds: ['d0', 'd1', 'd2'] })],
       }),
     )
-    expect(config.filter((a) => a['grub_device'] === true).map((a) => a['id'])).toEqual(['disk-1'])
+    expect(config.filter((a) => a['grub_device'] === true).map((a) => a['id'])).toEqual([
+      'disk-1-esp',
+    ])
+  })
+
+  it('grub_device が付く ESP は、実際に /boot/efi にマウントされるものと同じ', () => {
+    const config = configOf(raidProfile(BOOT_AND_DATA))
+    const grubPart = config.find((a) => a['grub_device'] === true)
+    const fs = config.find((a) => a['type'] === 'format' && a['volume'] === grubPart?.['id'])
+    const mount = config.find((a) => a['type'] === 'mount' && a['device'] === fs?.['id'])
+    // subiquity はこの 3 つが繋がっていることを見る（繋がっていないと
+    // 「bootloader partition が無い」と判定される）。
+    expect(mount?.['path']).toBe('/boot/efi')
   })
 
   it('データ用パーティションはそのディスクの最後なので size: -1', () => {
@@ -308,7 +333,7 @@ describe('RAID + LVM の生成', () => {
     const config = configOf(
       raidProfile({
         disks: [
-          { id: 'd0', match: null as unknown as RaidDisk['match'], boot: true },
+          { id: 'd0', match: null as unknown as RaidDisk['match'], usage: 'partitions', esp: true },
           disk('d1', 'S1', true),
         ],
         arrays: [array({ id: 'ap', name: 'md0', role: 'lvm-pv', diskIds: ['d0', 'd1'] })],
@@ -353,6 +378,207 @@ describe('RAID + LVM の生成', () => {
     }
     expect(shapeOf(parsed.autoinstall.storage.config)).toEqual(shapeOf(configOf(p)))
     expect(referenceProblems(parsed.autoinstall.storage.config)).toEqual([])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 利用者の実機構成（SATA SSD 2 台 + NVMe 2 台）
+// ---------------------------------------------------------------------------
+//
+//   /boot/efi : 1G   vfat  **sda1 だけ**（ESP は RAID に置けない）
+//   /boot     : 2G   RAID1 (md0)  <- sda2, sdb2
+//   /         : 残り RAID1 (md1) + LVM (vg0/lv-0) ext4  <- sda3, sdb3
+//   md2       : RAID1  <- nvme0n1, nvme1n1（**ディスク丸ごと**・マウントしない）
+//
+// この 3 つ（丸ごとメンバー / マウントしない配列 / ESP をディスクごとに選ぶ）が
+// 同時に成立することを、出力の形を固定して確かめる。
+
+const SDA = 'S6RANE0T500001'
+const SDB = 'S6RANE0T500002'
+const NVME0 = 'S6CVNE0T900001'
+const NVME1 = 'S6CVNE0T900002'
+
+/** 利用者の実機構成そのもの。 */
+const REAL_MACHINE: Partial<RaidStorageConfig> = {
+  disks: [
+    // sda: パーティションを切る。**ESP はこの 1 台だけ。**
+    disk('sda', SDA, true),
+    // sdb: パーティションを切るが ESP は作らない。/boot と root のミラー相手。
+    disk('sdb', SDB, false),
+    // NVMe 2 枚は**丸ごと** md2 のメンバー。パーティションを 1 つも切らない。
+    wholeDisk('nvme0', NVME0),
+    wholeDisk('nvme1', NVME1),
+  ],
+  arrays: [
+    array({ id: 'a-boot', name: 'md0', role: 'boot', level: 'raid1', diskIds: ['sda', 'sdb'] }),
+    array({ id: 'a-root', name: 'md1', role: 'lvm-pv', level: 'raid1', diskIds: ['sda', 'sdb'] }),
+    array({ id: 'a-data', name: 'md2', role: 'data', level: 'raid1', diskIds: ['nvme0', 'nvme1'] }),
+  ],
+  volumeGroup: 'vg0',
+  rootName: 'lv-0',
+  rootSize: '',
+  rootFstype: 'ext4',
+  espSize: '1G',
+  bootSize: '2G',
+  mirrorBootloader: true,
+}
+
+describe('利用者の実機構成（丸ごとメンバー + マウントしない配列 + ESP は 1 台だけ）', () => {
+  const profile = raidProfile(REAL_MACHINE)
+  const config = configOf(profile)
+  const find = (id: string): Action | undefined => config.find((a) => a['id'] === id)
+  const ofType = (type: string): Action[] => config.filter((a) => a['type'] === type)
+
+  it('アクション列の形を固定する', () => {
+    expect(shapeOf(config)).toEqual([
+      'disk:disk-0',
+      'disk:disk-1',
+      'disk:disk-2',
+      'disk:disk-3',
+      'partition:disk-0-esp',
+      'partition:disk-0-boot',
+      'partition:disk-1-boot',
+      'partition:disk-0-data',
+      'partition:disk-1-data',
+      'raid:md-0',
+      'raid:md-1',
+      'raid:md-2',
+      'format:disk-0-esp-fs',
+      'format:md-0-fs',
+      'lvm_volgroup:vg-0',
+      'lvm_partition:lv-root',
+      'format:lv-root-fs',
+      'mount:lv-root-mnt',
+      'mount:md-0-mnt',
+      'mount:disk-0-esp-mnt',
+    ])
+  })
+
+  it('id の参照がすべて解決し、前方参照が無い', () => {
+    expect(referenceProblems(config)).toEqual([])
+    // YAML を往復させても同じ（`1G` が数に化けるような事故を拾う）。
+    const parsed = parse(generateUserData(profile, { comments: 'ja' })) as {
+      autoinstall: { storage: { config: Action[] } }
+    }
+    expect(referenceProblems(parsed.autoinstall.storage.config)).toEqual([])
+    expect(parsed.autoinstall.storage.config).toEqual(config)
+  })
+
+  it('丸ごとメンバーの disk には ptable を出さない（資料に無い形を出さない）', () => {
+    expect(find('disk-2')).toEqual({
+      type: 'disk',
+      id: 'disk-2',
+      wipe: 'superblock-recursive',
+      match: { serial: NVME0 },
+    })
+    expect(find('disk-3')).toEqual({
+      type: 'disk',
+      id: 'disk-3',
+      wipe: 'superblock-recursive',
+      match: { serial: NVME1 },
+    })
+    expect(find('disk-2')).not.toHaveProperty('ptable')
+    expect(find('disk-3')).not.toHaveProperty('ptable')
+    // パーティションを切るディスクには今までどおり GPT を作る。
+    expect(find('disk-0')?.['ptable']).toBe('gpt')
+    expect(find('disk-1')?.['ptable']).toBe('gpt')
+  })
+
+  it('丸ごとメンバーにはパーティションを 1 つも作らない', () => {
+    const owners = ofType('partition').map((a) => a['device'])
+    expect(new Set(owners)).toEqual(new Set(['disk-0', 'disk-1']))
+  })
+
+  it('md2 は disk の id を直接メンバーにする', () => {
+    expect(find('md-2')).toEqual({
+      type: 'raid',
+      id: 'md-2',
+      name: 'md2',
+      raidlevel: 'raid1',
+      devices: ['disk-2', 'disk-3'],
+      wipe: 'superblock',
+    })
+  })
+
+  it('md2 は format も mount も出さない（作るだけ）', () => {
+    expect(ofType('format').some((a) => a['volume'] === 'md-2')).toBe(false)
+    expect(ofType('mount').some((a) => a['device'] === 'md-2')).toBe(false)
+    // 参照している側が 1 つも無いことまで見る（別名の format が残っていないか）。
+    expect(JSON.stringify(config).split('"md-2"').length - 1).toBe(1)
+  })
+
+  it('ESP は sda だけに 1G で作り、/boot は 2 台のミラーになる', () => {
+    expect(find('disk-0-esp')).toEqual({
+      type: 'partition',
+      id: 'disk-0-esp',
+      // UEFI の GRUB 導入先。**disk ではなく ESP の partition に付ける。**
+      grub_device: true,
+      device: 'disk-0',
+      size: '1G',
+      flag: 'boot',
+      number: 1,
+      wipe: 'superblock',
+    })
+    expect(ofType('partition').filter((a) => a['flag'] === 'boot')).toHaveLength(1)
+    expect(find('md-0')?.['devices']).toEqual(['disk-0-boot', 'disk-1-boot'])
+    expect(find('disk-0-boot')?.['size']).toBe('2G')
+    expect(find('disk-1-boot')?.['size']).toBe('2G')
+    // sdb には ESP が無いので、/boot が 1 番目のパーティションになる。
+    expect(find('disk-0-boot')?.['number']).toBe(2)
+    expect(find('disk-1-boot')?.['number']).toBe(1)
+    // **grub_device は ESP のパーティション側**（UEFI）。disk には付けない。
+    expect(ofType('disk').filter((a) => a['grub_device'] === true)).toEqual([])
+    expect(
+      config.filter((a) => a['grub_device'] === true).map((a) => a['id']),
+    ).toEqual(['disk-0-esp'])
+  })
+
+  it('root は md1 の上の vg0/lv-0（残り全部）', () => {
+    expect(find('md-1')?.['devices']).toEqual(['disk-0-data', 'disk-1-data'])
+    expect(find('disk-0-data')?.['size']).toBe(-1)
+    expect(find('vg-0')).toEqual({
+      type: 'lvm_volgroup',
+      id: 'vg-0',
+      name: 'vg0',
+      devices: ['md-1'],
+    })
+    expect(find('lv-root')).toEqual({
+      type: 'lvm_partition',
+      id: 'lv-root',
+      name: 'lv-0',
+      volgroup: 'vg-0',
+      size: -1,
+    })
+    expect(find('lv-root-fs')?.['fstype']).toBe('ext4')
+    expect(ofType('mount').map((a) => a['path'])).toEqual(['/', '/boot', '/boot/efi'])
+  })
+
+  it('error は 1 件も出ず、マウントしない配列は info で伝える', () => {
+    const result = validateProfile(profile)
+    expect(result.issues.filter((i) => i.severity === 'error')).toEqual([])
+    const notMounted = result.issues.filter((i) => i.text.key === 'validate.raidArrayNotMounted')
+    expect(notMounted).toHaveLength(1)
+    expect(notMounted[0]?.severity).toBe('info')
+    expect(formatLocalized('ja', notMounted[0]!.text)).toContain('md2')
+    // 「ESP を作らないディスクが /boot 配列に入っている」だけでは警告しない
+    // （ESP は 1 台目・/boot は 2 台のミラー、が意図した構成）。
+    expect(keysOf(profile)).not.toContain('validate.raidBootArrayWithoutEspDisk')
+    // 4 台すべてが消えることは必ず言う（落とし穴 65）。
+    const wiped = result.issues.filter((i) => i.text.key === 'validate.raidWipesAllMemberDisks')
+    expect(formatLocalized('ja', wiped[0]!.text)).toContain('4')
+  })
+
+  it('保存して読み戻しても同じ構成になる（丸ごと・ESP の別軸が消えない）', () => {
+    const { profile: back } = migrateProfile(JSON.parse(JSON.stringify(profile)) as unknown)
+    if (back.storage.mode !== 'raid') throw new Error('mode ga raid de nai')
+    expect(back.storage.raid.disks.map((d) => [d.id, d.usage, d.esp])).toEqual([
+      ['sda', 'partitions', true],
+      ['sdb', 'partitions', false],
+      ['nvme0', 'whole', false],
+      ['nvme1', 'whole', false],
+    ])
+    expect(back.storage.raid.arrays.map((a) => a.role)).toEqual(['boot', 'lvm-pv', 'data'])
+    expect(configOf(back)).toEqual(config)
   })
 })
 
@@ -447,6 +673,12 @@ describe.each(['22.04', '24.04', '25.10', '26.04'] as UbuntuSeries[])(
       // `storage` はどのリリースでも `{type: object}` としか宣言されていないので、
       // リリース差は無い（落とし穴 64 の確認）。実際に 4 リリースで通す。
       const built = toPlain(buildAutoinstallObject(raidProfile(BOOT_AND_DATA, series), { comments: 'none' }))
+      const errors = validate(built)
+      expect(errors?.map((e) => `${e.instancePath} ${e.message ?? ''}`).join('\n') ?? '').toBe('')
+    })
+
+    it('利用者の実機構成（丸ごとメンバー + マウントしない配列）もスキーマを通る', () => {
+      const built = toPlain(buildAutoinstallObject(raidProfile(REAL_MACHINE, series), { comments: 'none' }))
       const errors = validate(built)
       expect(errors?.map((e) => `${e.instancePath} ${e.message ?? ''}`).join('\n') ?? '').toBe('')
     })
@@ -553,8 +785,8 @@ describe('RAID の検証', () => {
   it('曖昧なディスク指定は強く警告する（どれが消えるか分からない）', () => {
     const p = raidProfile({
       disks: [
-        { id: 'd0', match: { kind: 'largest' }, boot: true },
-        { id: 'd1', match: { kind: 'any' }, boot: true },
+        { id: 'd0', match: { kind: 'largest' }, usage: 'partitions', esp: true },
+        { id: 'd1', match: { kind: 'any' }, usage: 'partitions', esp: true },
       ],
       arrays: [array({ id: 'ap', name: 'md0', role: 'lvm-pv', diskIds: ['d0', 'd1'] })],
     })
@@ -612,7 +844,7 @@ describe('RAID の検証', () => {
   it('読めないディスク指定も error にする（一致するディスクが無い）', () => {
     const p = raidProfile({
       disks: [
-        { id: 'd0', match: null as unknown as RaidDisk['match'], boot: true },
+        { id: 'd0', match: null as unknown as RaidDisk['match'], usage: 'partitions', esp: true },
         disk('d1', 'S1', true),
       ],
       arrays: [array({ id: 'ap', name: 'md0', role: 'lvm-pv', diskIds: ['d0', 'd1'] })],
@@ -735,7 +967,7 @@ describe('RAID の読み込み', () => {
       }),
     )
     expect(raidOf(profile).disks.map((d) => d.id)).toEqual(['d0', 'd1'])
-    expect(raidOf(profile).disks.map((d) => d.boot)).toEqual([true, false])
+    expect(raidOf(profile).disks.map((d) => d.esp)).toEqual([true, false])
     expect(raidOf(profile).arrays.map((a) => [a.name, a.role, a.diskIds])).toEqual([
       ['md0', 'boot', ['d0']],
       ['md1', 'lvm-pv', ['d1']],

@@ -637,7 +637,21 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
     GPT では `flag: boot` が **ESP** になる（msdos では bootable）。
     `flag: bios_grub` は別物（BIOS 起動用の 1 MB 領域。ファイルシステムを作らない）。
 
-98. **`grub_device` は 1 台にしか設定できない**（curtin のドキュメント）。
+98. **UEFI の `grub_device` は「ディスク」ではなく「ESP のパーティション」に付ける。**
+    curtin のドキュメントは disk の任意キーとしてしか触れていないので
+    （R8 の表がそう写している）、disk に付けた形を出していた。
+    **subiquity はそれを bootloader パーティションと認めない。**
+    `models/filesystem.py` の `needs_bootloader_partition()` は、UEFI のとき
+    `self._all(type="partition", grub_device=True)` だけを見て、
+    そのうち `/boot/efi` にマウントされるものがあるかを調べる
+    （disk を見るのは **BIOS 起動のときだけ**）。
+    通らないと `apply_autoinstall_config` が
+    `autoinstall config did not create needed bootloader partition` を投げ、
+    **ディスクに 1 バイトも書かないまま**インストールが止まる。
+    24.04.3 の VM で実際に踏んだ（subiquity 6806 のソースで確認）。
+    付けるのは**実際に `/boot/efi` にマウントする 1 台目の ESP だけ**。
+    2 台目以降は「マウントされない ESP」なので late-commands で補う。
+
     「どちらが壊れても起動する」は curtin が面倒を見てくれないので、
     **late-commands で 2 台目に `grub-install` する**のはこのアプリの補いであって
     一次資料の裏付けは無い。**この手順そのものは未検証**（`docs/HANDOFF.md` §3.1）。
@@ -674,15 +688,57 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
     中身の正しさを保証するのは curtin であって autoinstall のスキーマではない。
     スキーマが緑でも「実機で組まれる」証拠にはならない。
 
+### VM で検証する（続き・RAID の巡）
+
+104. **検証の道具が「見つけた順」に選ぶと、別のものを試してしまう。**
+    `e2e-vm.mts` の `findIso()` は `~/images` を上から見るので
+    `ubuntu-22.04.5-live-server` が先に当たるのに、プロファイルは
+    `createDefaultProfile('24.04')` 固定だった。
+    **ISO と設定のリリースが食い違ったまま 15 分走らせて「原因不明の無音」**になった。
+    選ぶ側が複数あるなら**優先順位を決め、選んだものを出力に書き、
+    その選択を後段の設定にも通す**（`findIso()` は `series` も返す）。
+
+105. **カーネルがシリアルに出ていないと、「失敗」と「時間がかかっている」が区別できない。**
+    Ubuntu の ISO の grub.cfg は `console=` を付けないので、
+    GRUB のエラー 2 行のあとは**無音**になる。
+    ディスクが 1 バイトも増えないまま 15 分待つことになった。
+    VM のときだけ `console=tty0 console=ttyS0,115200n8` を kernel-arg に足す
+    （**実機の USB に焼くときは付けない**。`e2e-vm.mts` だけが足す）。
+    そのうえで、**失敗時にログを CIDATA へ書き出す `error-commands`** が効く
+    ——インストール先に 1 バイトも書かれていなくても、
+    USB のイメージ側から `subiquity-traceback.txt` が読める。
+
+106. **テンプレートリテラルの中の `\s` は正規表現の `\s` にならない。**
+    `` new RegExp(`${host}\s+login:`) `` は `host` + `s+login:` を探す形になり、
+    **永久に一致しない**。`RegExp` に文字列で渡すときは `\\s` と二重にする。
+    「一致しないだけ」なので**テストが静かに嘘の FAIL を出す**
+    （実装は正しいのに「起動していない」と報告する。落とし穴 93 の親戚）。
+
+107. **`raid.name` はメタデータの `Name:` には残らない。**
+    `name: md0` は `/dev/md0` というデバイス名になり、
+    mdadm はそこから名前を **`0`** と決める（`Name : <homehost>:0`）。
+    「md0 と名付けたものが md0 になったか」は
+    **`/etc/mdadm/mdadm.conf` の `ARRAY /dev/md0`** で見る。
+    メタデータ名で照合すると、正しく組めているのに FAIL を出す（実際に出した）。
+    別のホストで組み立て直すと **`/dev/md127` のように番号も変わる**ので、
+    検査は「レベル・台数・その md の上に何が載っているか」で見分けるのが確実。
+
 ## 検証済みのこと
 
-- **RAID + LVM と bond の生成**を `scripts/e2e-raid-bond.mts` で確かめた（**70 / 70**）。
+- **RAID + LVM と bond の生成**を `scripts/e2e-raid-bond.mts` で確かめた（**73 / 73**）。
   利用者の要望どおりの構成（boot 2 台に ESP + RAID1 `/boot`、data 4 台に RAID10 → LVM → root、
   NIC 2 枚を 802.3ad で束ねて固定 IP）を組み立て、YAML へ往復させてから
-  **id の参照解決・参照先の種類・依存の順・ESP のマウント数・`grub_device` の台数・
-  メンバーにアドレスが付いていないこと**を機械で検査し、
+  **id の参照解決・参照先の種類・依存の順・ESP のマウント数・`grub_device` の位置（ESP の
+  partition であること）・メンバーにアドレスが付いていないこと**を機械で検査し、
   **subiquity 公式スキーマを 4 リリースとも通した**。
-  **ただし実機／VM でインストールを完走させてはいない**（落とし穴 103・`docs/HANDOFF.md` §3.2）。
+- **RAID + LVM の無人インストールを VM で完走させた** (`npm run e2e:vm:raid`、24.04.3)。
+  利用者の実機構成そのもの（ESP は 1 台目だけ + `/boot` の RAID1 + LVM /、
+  **丸ごとメンバーの NVMe 2 台をマウントしない RAID1**）を QEMU で組み、
+  インストールを完走させ、**そのシステムを USB 抜きで起動させた**。
+  **`grub_device` の位置の誤りはこの経路でしか見つからなかった**
+  ——生成の検証もスキーマ検証も緑のままだった（落とし穴 103 の実例・落とし穴 98）。
+  **容量は縮めてある**（実機 447.1GB x2 + 3.5TB x2 → 60G x2 + 20G x2）。
+  bond は VM では組んでいない（`docs/HANDOFF.md` §3.2）。
 - **実 ISO 2 種 (22.04.5 / 24.04.3) × 設定 10 パターン**を `scripts/e2e-matrix.mts` で網羅。
   10 パターンすべてが 生成 → プロファイル検証 → subiquity 公式スキーマ検証 →
   ISO パッチ → レイアウト計画 まで通る。
@@ -720,9 +776,11 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
 作業の引き継ぎ状態は **`docs/HANDOFF.md`** にまとめてある
 （残作業、監査ワークフローの再開方法、意図して直していないもの）。
 
-- 実機／VM からの起動と、完全無人インストールの完走
+- **実機**からの起動と、完全無人インストールの完走
+  （**VM では通した**。単一ディスク・LVM と RAID + LVM の 2 構成。実機は未実施）
 - 起動メニューから選んだホストの値が実機で反映されるか
   （置換スクリプトは実際に `sh` で実行して検証済みだが、subiquity 上では未実行）
+- **bond**（NIC を束ねる）が実際にリンクを上げるか。VM でも実機でも未検証
 - 追加ユーザー・アプリ展開・サービス登録・CUDA が実機で意図どおり動くか
 - macOS / Linux でのデバイス列挙と権限昇格（コードは書いたが実機未確認）
 
@@ -742,6 +800,8 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
 | `npm run e2e:usb` | **実 USB に書く**。管理者権限が必要。書いたあと読み戻して検証する |
 | `npm run e2e:usb-worker` | 同じく実 USB に書くが、**昇格ワーカー + NDJSON 経路**を通す（GUI と同じ経路） |
 | `npm run e2e:verify-usb` | 書き終わった USB を読み戻すだけ（権限が無ければ CIDATA だけ見る） |
+| `npm run e2e:vm` | **WSL2 + QEMU で無人インストールを完走させる**（単一ディスク・LVM）。実 USB は使わない |
+| `npm run e2e:vm:raid` | 同じ経路で**利用者の実機構成**（ディスク 2 台 + NVMe 2 台の RAID1 + LVM）を組む |
 | `npm test` | typecheck + unit + smoke |
 | `npm run dist:win` / `dist:mac` / `dist:linux` | electron-builder でパッケージ |
 
@@ -761,6 +821,16 @@ ISO 1 本につき数 GB の `.img` を作るが、**終了時に必ず消して
 `.e2e/run-elevated.ps1` を右クリック実行すると UAC 付きで `write` が走る。
 **worker モードは右クリックでは選べない**（Explorer は引数を渡せない）。
 管理者の PowerShell から `powershell -File .e2e/run-elevated.ps1 worker` を使う。
+
+`npm run e2e:vm` / `npm run e2e:vm:raid` は **WSL2 の QEMU** で動かす（実 USB も昇格も不要）。
+1 本で 30〜40 分かかるので `npm test` には入れていない。
+`~/images` などから **いちばん新しいリリースの live-server ISO** を選び、
+その `series` をそのまま設定に使う。ディスク構成は `VM_DISKS` で変えられる
+（例 `VM_DISKS="sda:60G sdb:60G nvme0n1:20G nvme1n1:20G"`。
+**名前が `nvme` で始まるものは NVMe デバイスとして見せる**）。
+VM のディスクは `\\wsl$\Ubuntu-24.04\root\vmlab` に残る。
+**`storage.config` を触ったら必ずこれを通すこと**
+（`e2e-raid-bond` が緑でもインストールできないことが実際にあった。落とし穴 98 / 103）。
 
 GUI を機械的に操作したいときは `--remote-debugging-port` を付けて起動し、`.e2e/` の
 ヘルパ（`drive.mjs`）を使う。React の state を直接いじらず、CDP の Input ドメインで

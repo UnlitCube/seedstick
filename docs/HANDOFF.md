@@ -5,7 +5,8 @@
 落とし穴そのものは `CLAUDE.md` の「落とし穴」節に入れてあるので、
 ここには**状態**と**残っていること**だけを書く。
 （項目数は変わるので断定しない。数えるなら `grep -cE '^[0-9]+\. \*\*' CLAUDE.md`。
-2026-09-07 時点で **103**。RAID / bond の巡で 94〜103 が増えた。）
+2026-09-07 時点で **107**。RAID / bond の巡で 94〜103、
+VM で RAID を組んだ巡で 104〜107 が増えた。）
 
 ---
 
@@ -13,19 +14,25 @@
 
 ### 検証結果
 
-上 6 行は**このセッションで実際に実行して数えた**（作業ツリー、`git rev-parse HEAD` = `e1843bb`）。
-下 2 行は**過去のログの数字で、現行コードに対するものではない**（→ 3.2）。
+上 7 行は**このセッションで実際に実行して数えた**
+（作業ツリー、`git rev-parse HEAD` = `38a588c`、`git status --porcelain` = 18 件）。
+下 3 行は**過去のログの数字で、現行コードに対するものではない**（→ 3.2）。
+特に **`npm run e2e:usb-worker` の 18/18 は `generate-raid.ts` を直す前のコード**に対するもの。
+ただし今回の変更は**書き込み経路 (`packages/media/` と `apps/desktop/src/main/`) を
+1 バイトも触っていない**（`git status` で確認済み）。
 
 | 検証 | コマンド | 結果 | いつ測ったか |
 |---|---|---|---|
 | 型検査 | `npm run typecheck` | **5 / 5 通過** ✅ | 今回（作業ツリー） |
-| ユニットテスト | `npm run test:unit` | **1206 / 1207**（61 ファイル、skip 1） ✅ | 今回（作業ツリー） |
+| ユニットテスト | `npm run test:unit` | **1235 / 1236**（61 ファイル、skip 1） ✅ | 今回（作業ツリー） |
 | スモーク（実 ISO → `.img`） | `npm run smoke` | **98 / 98** ✅ | 今回（作業ツリー） |
 | E2E マトリクス（実 ISO × 設定 10 パターン） | `npm run e2e` | **402 / 402** ✅ | 今回（作業ツリー） |
-| **RAID + bond の生成検証** | `npm run e2e:raid-bond` | **70 / 70** ✅ | 今回（作業ツリー） |
+| **RAID + bond の生成検証** | `npm run e2e:raid-bond` | **73 / 73** ✅ | 今回（作業ツリー） |
 | **イメージ保存の経路（実 ISO 2 種 → `.img`）** | `npm run e2e:image` | **84 / 84** ✅ | 今回（作業ツリー） |
+| **VM で無人インストール完走（RAID + LVM）** | `npm run e2e:vm:raid` | **30 / 30** ✅ | **今回（2026-09-07・24.04.3）** |
+| VM で無人インストール完走（単一ディスク・LVM） | `npm run e2e:vm` | 通した | **過去のログ。今回は再実行していない** |
 | 実 USB への書き込み | `npm run e2e:usb`（管理者権限） | 19/19 | **過去のログ。SHA 不明** |
-| **昇格ワーカー経路（実 USB）** | `npm run e2e:usb-worker`（管理者権限） | **18/18** ✅ | **今回（2026-09-06）。SHA 記録あり** |
+| **昇格ワーカー経路（実 USB）** | `npm run e2e:usb-worker`（管理者権限） | **18/18** ✅ | **過去のログ（2026-09-06）。SHA 記録あり** |
 
 - **前の巡で RED だった `image-write.test.ts` は閉じた。** 型 4 件は
   74 行目の `Parameters<WriteSupervisor['startImageWrite']>[0]` を
@@ -362,8 +369,9 @@ RAID の最小台数表、netplan の bonds）。
 1. **台数を決め打ちしない。** ディスクを何台でも並べ、配列ごとにレベルと
    使うディスクを選ぶ汎用 UI。台数不足は検証で止める。
 2. **各ディスクに ESP を作り、late-commands で 2 台目以降にも `grub-install`。**
-   curtin の `grub_device` は 1 台にしか設定できないので、
+   `grub_device` は 1 つにしか設定できないので、
    「どちらが壊れても起動する」はこのアプリが補う。
+   （**付ける場所は 2.9 で直した**: UEFI では disk ではなく **ESP の partition**。）
 3. **ディスクの構成方法の 4 つ目として追加。既存の 3 つは一切変えない。**
 
 #### 実際に生成して確かめた（`npm run e2e:raid-bond`）
@@ -380,7 +388,8 @@ NIC 2 枚を 802.3ad で束ねて固定 IP）を組み立て、
   さらに**参照先の種類**まで見る:
   `mount.device` → `format` / `lvm_volgroup.devices` → `raid` /
   `raid.devices` → `partition` / `lvm_partition.volgroup` → `lvm_volgroup`
-- ESP が boot ディスク 2 台にあり、**マウントは 1 つだけ**、`grub_device` は 1 台だけ
+- ESP が boot ディスク 2 台にあり、**マウントは 1 つだけ**、`grub_device` は 1 つだけ
+  （**2.9 で「disk ではなく ESP の partition に付ける」に直した**。当時は disk に付けていた）
 - late-commands に 2 台目への `grub-install` が入り、
   **ヒアドキュメントを使わず、利用者の入力を 1 文字も埋め込まず、必ず `exit 0`**
 - netplan の `bonds` にメンバーが並び、`ethernets` にも宣言があり、
@@ -505,6 +514,218 @@ ipcMain の配線と保存ダイアログだけが無い。
 
 ---
 
+### 2.9 今回のセッション：利用者の実機構成を VM で組んで完走させた
+
+**やったこと**: `scripts/e2e-vm.mts` に RAID 構成のモード (`--raid`) を足し、
+利用者の実機構成そのもの（容量だけ縮めたもの）を QEMU で組んで
+**無人インストールを完走させ、そのシステムを起動させた**。
+
+```
+npm run e2e:vm         既定（単一ディスク・LVM）— 一切変えていない
+npm run e2e:vm:raid    利用者の実機構成
+```
+
+VM のディスク（`VM_DISKS` の既定）:
+
+| VM | 実機 | 使い方 |
+|---|---|---|
+| `sda:60G` | SATA SSD 447.1GB | パーティション。**ESP 1G（この 1 台だけ）** + `/boot` 2G + 残り |
+| `sdb:60G` | SATA SSD 447.1GB | パーティション。`/boot` 2G + 残り（ESP は作らない） |
+| `nvme0n1:20G` | NVMe 3.5TB | **丸ごと** md2 のメンバー |
+| `nvme1n1:20G` | NVMe 3.5TB | **丸ごと** md2 のメンバー |
+
+**容量だけ縮めてある。構成（何が何台で、どの配列に入るか）は同じ。**
+3.5TB を実際に作ると `qemu-img convert` の時間が現実的でなくなる。
+**3.5TB そのものは試していない**（→ 3.2）。
+
+#### 最終結果（`npm run e2e:vm:raid`）
+
+**30 / 30 成功**（2026-09-07、Ubuntu Server **24.04.3**、`git rev-parse HEAD` = `38a588c` + 未コミット 18 件）。
+確かめている 30 件の内訳:
+
+| 段階 | 見ていること |
+|---|---|
+| 設定 | 検証を通る（error 0 件）/ イメージを書いて読み戻せる / WSL に運べた |
+| インストール | インストーラが起動した |
+| **できたもの** | md が 3 つ / `/boot` の md が RAID1 2 台で ext4 / LVM PV の md が RAID1 2 台 / **md2 は何も載っていない** / **md2 のメンバーはディスク丸ごと** / `/boot` と PV の md はパーティションがメンバー / mdadm.conf の ARRAY が `/dev/md0 /dev/md1 /dev/md2` / メタデータ名が 0・1・2 / vg0 の PV が md / vg0/lv-0 がある / ルートが `vg0-lv--0` |
+| **ESP** | 1 つだけ / あるのは sda だけ |
+| **fstab** | `/` `/boot` `/boot/efi` がある / **余分なマウントが無い**（md2 はマウントされない） |
+| user-data が効いたか | ホスト名 / cloud-init に管理ユーザーが渡っている / sudo 指定つき / autoinstall の user-data が読まれた |
+| **起動** | カーネルが起動した / **`vm-raid login:` が出た** |
+| 初回起動後 | 管理ユーザーが作られた (`USERS=vmadmin`) / sudo に入っている |
+
+**ここまで到達するのに VM を 4 回走らせている**（22.04 で無音 → 24.04 で
+`grub_device` の error → 直して 27 件中 24 件（残る 3 件は**検査側のバグ**）→
+検査を直して 30/30）。
+
+#### この巡で見つけた実バグ（VM でしか見つからなかったもの）
+
+**`grub_device` を「ディスク」に付けていた。UEFI では ESP の「パーティション」に付ける。**
+
+- 症状: `apply_autoinstall_config` が
+  `autoinstall config did not create needed bootloader partition` を投げ、
+  **ディスクに 1 バイトも書かないまま**インストールが止まる。
+- 原因: subiquity の `models/filesystem.py` の `needs_bootloader_partition()` は、
+  UEFI のとき `self._all(type="partition", grub_device=True)` **だけ**を見る。
+  `type="disk"` を見るのは **BIOS 起動のときだけ**。
+- なぜ気づけなかったか: **一次資料 (R8) が `disk` の任意キーとしてしか書いていない**。
+  curtin のドキュメントを写した表に `partition` の `grub_device` が無かった。
+  `e2e-raid-bond.mts` の 70 件も `raid.test.ts` も、
+  **「disk に 1 つだけ付く」ことを正として固定していた**（落とし穴 56 そのもの）。
+- 皮肉なことに、**`StorageStep.tsx` の「curtin 直書き」の記入例は最初から正しかった**
+  （`disk … grub_device: false` / `partition … flag: boot, grub_device: true`）。
+  生成側と画面の例が食い違っていたのに、誰も突き合わせていなかった。
+- 直した先: `generate-raid.ts`（disk からは出さない / **`/boot/efi` にマウントする
+  1 台目の ESP にだけ付ける**）、`raid.test.ts`、`scripts/e2e-raid-bond.mts`（70 → 73 件）、
+  `docs/research/R8-raid-and-bond.md` の §4.1（**一次資料を足した**）、
+  `CLAUDE.md` の落とし穴 98。
+
+#### ハーネス側で直したもの（バグではないが、これが無いと原因に到達できない）
+
+1. **`findIso()` が「見つけた順」に選んでいた。**
+   `~/images` を上から見るので `ubuntu-22.04.5-live-server` が先に当たり、
+   プロファイルは `createDefaultProfile('24.04')` 固定だった。
+   **ISO と設定のリリースが食い違ったまま**走っていた。
+   新しいリリースを優先し、**選んだ ISO の `series` をそのまま設定に使う**ようにした。
+2. **カーネルがシリアルに何も出していなかった。**
+   Ubuntu の ISO の grub.cfg は `console=` を付けないので、
+   GRUB のエラー 2 行のあとは無音になる。
+   **「失敗している」と「時間がかかっている」が区別できない**まま 15 分待った。
+   VM のときだけ `console=tty0 console=ttyS0,115200n8` を足す
+   （**実機の USB に焼くときは付けない**。`e2e-vm.mts` だけが足す）。
+3. **`inspect-disks.sh` に機械可読な行を足した**（既存の出力は 1 行も消していない）。
+   `MD=<名前>|<レベル>|<台数>|<md 上の FSTYPE>|<デバイス名>|<メンバー>` /
+   `LVM_PV=` / `LVM_LV=` / `ESP_PARTS=` / `ESP_DISKS=` /
+   `FSTAB_MOUNTS=` / `MDADM_CONF_ARRAYS=` / `MDADM_CONF_DEVS=`。
+   md の**番号と名前は当てにならない**（別ホストで組み立て直すと `/dev/md127`）ので、
+   **「レベル・台数・その md の上に何が載っているか」で見分ける**:
+   `ext4` = `/boot`、`LVM2_member` = LVM PV、**空 = 何も載っていない**（`role: 'data'`）。
+   **メンバーが `/dev/loopN`（末尾に `pN` が無い）なら丸ごとメンバー**
+   ——`usage: 'whole'` が意図どおり出たかは、ここでしか機械で言えない。
+
+
+#### 実際にできたもの（VM の中・最終実行の出力そのまま）
+
+```
+=== パーティション ===
+NAME            SIZE FSTYPE            LABEL
+loop2            20G                                   ← nvme0n1（丸ごとメンバー・表を作っていない）
+loop3            20G                                   ← nvme1n1（丸ごとメンバー・表を作っていない）
+loop4            60G                                   ← sda
+├─loop4p1         1G vfat                              ← ESP（この 1 台だけ）
+├─loop4p2         2G linux_raid_member ubuntu-server:0
+│ └─md127         2G ext4                              ← /boot
+└─loop4p3        57G linux_raid_member ubuntu-server:1
+  └─md126        57G LVM2_member
+    └─vg0-lv--0  57G ext4                              ← /
+loop5            60G                                   ← sdb
+├─loop5p1         2G linux_raid_member ubuntu-server:0 ← ESP が無いので /boot が p1
+│ └─md127         2G ext4
+└─loop5p2        58G linux_raid_member ubuntu-server:1
+  └─md126        57G LVM2_member
+    └─vg0-lv--0  57G ext4
+
+=== RAID ===
+Personalities : [raid1]
+md125 : active (read-only) raid1 loop2[0] loop3[1]        ← md2（NVMe 丸ごと・何も載っていない）
+md126 : active (read-only) raid1 loop5p2[1] loop4p3[0]    ← md1（LVM PV）
+md127 : active (read-only) raid1 loop5p1[1] loop4p2[0]    ← md0（/boot）
+
+MD=ubuntu-server:2|raid1|2||md125|/dev/loop2,/dev/loop3
+MD=ubuntu-server:1|raid1|2|LVM2_member|md126|/dev/loop4p3,/dev/loop5p2
+MD=ubuntu-server:0|raid1|2|ext4|md127|/dev/loop4p2,/dev/loop5p1
+
+=== LVM ===
+  /dev/md126 vg0 56.96g
+  lv-0 vg0 56.96g
+
+ESP_PARTS=1
+ESP_DISKS=sda
+ルート: /dev/mapper/vg0-lv--0
+HOSTNAME=vm-raid
+
+--- /etc/fstab ---
+/dev/disk/by-id/dm-uuid-LVM-kqV2czuhuS2Nos3SIUx2fbDrr4FIvYeyGctaNCtl4VAjTImYuWZ0ahujGwUiRpMc / ext4 defaults 0 1
+/dev/disk/by-id/md-uuid-d920010d:36e9311f:045d126d:eaa7ef6c /boot ext4 defaults 0 1
+/dev/disk/by-uuid/15F9-9D47 /boot/efi vfat defaults 0 1
+/swap.img	none	swap	sw	0	0
+
+--- /etc/mdadm/mdadm.conf ---
+ARRAY /dev/md0 metadata=1.2 UUID=d920010d:36e9311f:045d126d:eaa7ef6c
+ARRAY /dev/md1 metadata=1.2 UUID=b4d6990a:73671259:35c83ddf:2aeecc20
+ARRAY /dev/md2 metadata=1.2 UUID=2257f2f6:89d01ec1:aa8bad90:1a98fe00
+```
+
+読み方:
+
+- **`md2` は組み立てられているが、その上に何も無い**（`FSTYPE` が空、`fstab` にも無い）。
+  `role: 'data'`（作るだけ）が意図どおりに出ている。
+- **`md2` のメンバーは `/dev/loop2` `/dev/loop3`**（末尾に `pN` が無い＝**ディスク丸ごと**）。
+  `md0` / `md1` のメンバーは `/dev/loop4p2` のようなパーティション。
+  `usage: 'whole'` と `usage: 'partitions'` が両方とも意図どおり出ている。
+- **ESP は sda の p1 だけ**。sdb には無いので、sdb の `/boot` は p1・データは p2 になる
+  （実機の `lsblk` の sdb2 / sdb3 とは番号が 1 つずれるが、md のメタデータで対応が付く）。
+- **`/dev/md127` `/dev/md126` `/dev/md125` は検査ホスト側での番号**
+  （別ホストで組み立て直すと番号が変わる）。
+  新システムの `/etc/mdadm/mdadm.conf` には `md0` / `md1` / `md2` が入っている。
+- **起動した。** USB を挿さない状態（`run-vm.sh boot`）でカーネルが上がり、
+  シリアルに `vm-raid login:` が出た。
+  ＝ **RAID1 (metadata 1.2) の `/boot` を GRUB が読めている**（3.1 の宿題が 1 つ片付いた）。
+- **初回起動で cloud-init が管理ユーザーを作った**（`USERS=vmadmin` / `SUDO=vmadmin`）。
+  インストール直後は空なのが正しい（落とし穴 93）。
+- `/swap.img` は subiquity の既定。**このアプリが出しているものではない**。
+
+#### 検査側のバグも 3 件出た（実装は正しいのに FAIL を出していた）
+
+**「実装が悪い」と「検査が悪い」を取り違えないこと**（落とし穴 93）。
+`grub_device` を直したあとに残った FAIL は、どれも**検査の書き方**が悪かった。
+
+1. **`raid.name` をメタデータの `Name:` で照合していた。**
+   `name: md0` は `/dev/md0` になり、mdadm はそこから名前を **`0`** と決める
+   （`Name : ubuntu-server:0`）。**正しく組めているのに FAIL**。
+   照合先を `/etc/mdadm/mdadm.conf` の `ARRAY /dev/md0` に変えた（落とし穴 107）。
+2. **`fstab` のマウントポイントに swap の行が混ざっていた。**
+   `/swap.img none swap sw 0 0` の 2 列目は `none` なので、
+   「余分なマウントがある」に見えていた。`/` で始まる列だけを数えるようにした。
+3. **`` new RegExp(`${host}\s+login:`) `` が永久に一致しない。**
+   テンプレートリテラルの中の `\s` は正規表現の `\s` にならない（`s` 1 文字になる）。
+   **これは今回入れたコードではなく、元からあった**
+   ——つまり「ログインプロンプトがホスト名つきで出た」は
+   **単一ディスクの巡でも本当は測れていなかった**（落とし穴 106）。
+
+#### 変異検査をどこまで確かめたか（正直に・落とし穴 57 / 72）
+
+**生成側の修正（`grub_device` の位置）は 3 つの変異で確かめた。**
+`cp` で退避 → 変異 → `raid.test.ts` と `e2e-raid-bond.mts` を実行 → 復元
+（`git checkout` は使っていない。落とし穴 79。
+スクリプトは scratchpad の `mut-grub.py`）:
+
+| 変異 | raid.test.ts | e2e-raid-bond |
+|---|---|---|
+| 修正前の形に戻す（disk に付け、ESP から外す） | 4 件 FAIL | 4 件 FAIL |
+| `grub_device` をどこにも出さない | 4 件 FAIL | 3 件 FAIL |
+| 全部の ESP に付ける（マウントしない ESP にも） | 2 件 FAIL | 1 件 FAIL |
+
+復元後に `e2e-raid-bond` が **73 / 73** に戻ることも確認した。
+
+**VM 側の検査は、1 件だけ「変異させて落ちた」に相当する証拠がある。**
+`grub_device` を直す前の実行（2 回目）が、まさにその変異の状態で
+`autoinstall config did not create needed bootloader partition` で止まっている。
+**それ以外の VM 検査（丸ごとメンバー / md2 が何も載っていないこと / ESP の台数 /
+fstab の中身）は、個別に変異させて落ちることを確かめていない**
+——1 件あたり VM を 1 本走らせる（30〜40 分）ので、今回は見送った。
+ただしどの検査も**値を literal と比べる形**なので、
+報告に該当行が無ければ必ず落ちる（空振りで緑にはならない）。
+次に触る人が疑うなら、ここから疑うのが正しい。
+
+#### `error-commands` が効いた
+
+原因にたどり着けたのは、**失敗したときに `/var/log/installer/` を CIDATA に書き出す
+`error-commands` が既に入っていた**から。
+`subiquity-traceback.txt` を USB イメージ側から読むだけで原因が確定した。
+（VM のディスクではなく **USB のイメージ**に残るので、
+インストール先が 1 バイトも書かれていなくても読める。）
+
 ---
 
 ## 3. 残っている作業
@@ -538,12 +759,16 @@ ipcMain の配線と保存ダイアログだけが無い。
   つまり以後の `grub-install` / カーネル更新は 1 台目にしか届かず、
   **時間が経つほど 2 台目が古くなる**。運用で埋めるのか、
   `/boot/efi2` として mount まで出すのかは**未決**。
-- **RAID1 の上の `/boot` を GRUB が読めるか。**
-  metadata 1.2 の md は先頭 4 KiB にスーパーブロックを置くので、
-  GRUB は `mdraid1x` モジュールを読み込めないと `/boot` を辿れない。
-  Ubuntu の署名版 shim/grub にそれが入っている前提で組んでいるが**確かめていない**。
-  ここが外れると「インストールは完走するのに起動しない」という
-  いちばん気づきにくい形になる。
+- ~~**RAID1 の上の `/boot` を GRUB が読めるか。**~~
+  **→ 読めた（2026-09-07・VM）。** `npm run e2e:vm:raid` で
+  「ESP は 1 台目だけ・`/boot` は 2 台の RAID1（metadata 1.2）」の構成を作り、
+  **インストールしたシステムを USB を抜いた状態で起動させた**
+  （`run-vm.sh boot` は USB を挿さない）。カーネルが起動し、
+  `vm-raid login:` まで出る。Ubuntu 24.04.3 の署名版 shim/grub は
+  `mdraid1x` を読み込めている。
+  **確かめたのは 1 台目の ESP から起動する経路だけ**で、
+  「1 台目が死んだとき 2 台目から起動するか」は依然として未検証
+  （この構成では ESP が 1 つしかないので late-commands も走っていない）。
 - **`storage.config` を出すと、このアプリの他の機能が効かなくなっていないか。**
   `layout` 前提で書いた分岐（`reset-partition` / `partitionTable` / `match`）は
   検証で「効きません」と伝えるようにしたが、**数え上げてはいない**。
@@ -616,9 +841,12 @@ ipcMain の配線と保存ダイアログだけが無い。
   USB に焼き、そこから無人インストールが完走するかは未確認。
   読み戻し検証が見るのは「書いたものが読めるか」だけ（落とし穴 62）。
 
-- **RAID / bond の構成は、実機でも VM でもインストールを完走させていない。**
-  確かめたのは **YAML の形と、subiquity 公式スキーマを 4 リリースとも通ること**まで
-  （`npm run e2e:raid-bond` 70/70）。
+- ~~**RAID / bond の構成は、実機でも VM でもインストールを完走させていない。**~~
+  **→ RAID + LVM は VM で完走させた（2026-09-07・下の 2.9）。** bond は依然未検証。
+  以前ここに書いてあったのは「YAML の形と、subiquity 公式スキーマを 4 リリースとも
+  通ること」まで（当時 `npm run e2e:raid-bond` 70/70）で、
+  **その 70 件が通っていた構成は実際にはインストールできなかった**
+  （`grub_device` の位置が違った → 2.9）。
   **「スキーマを通る」は「そのとおりに組まれる」ではない。**
   `storage` のスキーマは 4 リリースとも `{type: object}` でしかないので、
   **アクション列の中身はスキーマ検証を一切通っていない**（中身の正しさを保証するのは
@@ -630,6 +858,32 @@ ipcMain の配線と保存ダイアログだけが無い。
      `RESULT: ok` / `incomplete` / `nothing to do` の 1 行で残る
   4. bond のリンクが上がるか。**`802.3ad` はスイッチ側にも LACP の設定が要る**ので、
      スイッチが未設定だとリンクが上がらない。切り分けの起点はここ
+- **RAID の構成で「VM では確かめたが、実機では確かめていない」もの。**
+  `npm run e2e:vm:raid` が確かめたのは**この 4 点を縮めた形**だけである。
+  - **バスが違う。** VM の `sda` / `sdb` は **virtio-blk**（ゲストからは `/dev/vda` /
+    `/dev/vdb`）で、実機の **SATA** ではない。NVMe は QEMU の `nvme` デバイスなので
+    `/dev/nvme0n1` として見えるが、実機の Samsung MZQL2 ではない。
+  - **容量が違う。** 60G x2 + 20G x2 で、実機は 447.1GB x2 + **3.5TB x2**。
+    `size: -1`（残り全部）と LVM の伸びは容量に依存する。
+    **3.5TB の md を作ったときの初期同期の時間**（実機では数時間になりうる）は
+    まったく見ていない。
+  - **シリアルの指定が違う。** VM では `serial: "*sda*"` のように
+    **glob** で引いている（QEMU が付ける ID_SERIAL が NVMe だけ
+    `<model>_<serial>` に組み立てられるため）。実機では
+    `S6RANE0T500001` のような完全一致を使う。**glob と完全一致で
+    subiquity の照合が同じに動くか**は VM でしか見ていない。
+  - **ESP が 1 台なので `late-commands` が 1 行も出ていない。**
+    利用者の構成は ESP が sda だけなので `needsRaidEspMirror` が false になり、
+    **2 台目への `grub-install` は今回も実行されていない**（→ 3.1 の最初の項目）。
+    「どちらが壊れても起動する」は**依然として未検証**。
+- **`npm run e2e:vm:raid` は 22.04 では試していない。**
+  `findIso()` が新しいリリースを優先するので 24.04.3 が選ばれる。
+  22.04 で最初に走らせたときは**ディスクに 1 バイトも書かれないまま無音**だったが、
+  そのときはまだシリアルにカーネルの出力が出ていなかったので
+  **原因は分かっていない**（`grub_device` の問題だった可能性が高いが、
+  22.04 固有の問題が別にある可能性も消えていない）。
+  22.04 で RAID を組むなら、まず `VM_DISKS` を指定して
+  22.04 の ISO を明示的に渡して確かめること。
 - **`size: -1` を `lvm_partition` に使えるかは実機未確認。**
   autoinstall リファレンスの節タイトル "Partition/logical volume extensions" から
   読み取っただけで、**例が載っているのはパーティション側だけ**。
@@ -849,6 +1103,21 @@ ipcMain の配線と保存ダイアログだけが無い。
    PowerShell だと `sh` が PATH に無く 19 件が ENOENT で落ちる
 8. **`npm run e2e:usb-worker` は人の操作が要る。** UAC はプログラムから
    承認できない。`.e2e\run-elevated.ps1 worker` を実行してもらう
+9. **「生成の検証が緑」は「インストールできる」ではない。**
+   RAID の巡は `e2e-raid-bond` 70/70 と subiquity 公式スキーマ 4 リリースを
+   通していたのに、**その構成は 1 台もインストールできなかった**
+   （`grub_device` の位置。落とし穴 98 / 103）。
+   **一次資料（curtin のドキュメント）に無いことは、実際に食う側
+   （subiquity のソース）を読むか、VM で走らせるしかない。**
+   `npm run e2e:vm` / `npm run e2e:vm:raid` は実 USB も昇格も要らないので、
+   `storage.config` を触ったら必ず通すこと。
+10. **検証の道具のバグを、実装のバグと取り違えない。**
+   今回の最初の緑でない結果は、27 件中 3 件の FAIL が**すべて検査側**の誤りだった
+   （md の名前の照合先 / swap の行 / テンプレートリテラルの `\s`）。
+   しかも 3 件目は**元から測れていなかった**
+   ——「ログインプロンプトがホスト名つきで出た」は前の巡でも一度も測れていない
+   （`RegExp` に渡す文字列で `\\s` にしていなかった。落とし穴 106）。
+   **緑だったものが本当に何かを測っていたかを、たまに疑うこと。**
 
 5 巡目の教訓は `CLAUDE.md` の落とし穴 **74〜78**
 （契約を広げたときの検査の写し / 境界を通さないテスト /

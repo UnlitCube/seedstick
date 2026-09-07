@@ -1,6 +1,7 @@
 import type { DiskMatch } from './model.js'
 import { shellQuote } from './presets.js'
 import type { RaidArray, RaidDisk, RaidStorageConfig } from './raid.js'
+import { raidDiskMakesEsp, raidDiskUsageOf, raidRoleIsMounted, raidRolePartClass } from './raid.js'
 
 // RAID + LVM を curtin の「アクション列」(`storage.config`) に落とす。
 //
@@ -11,14 +12,23 @@ import type { RaidArray, RaidDisk, RaidStorageConfig } from './raid.js'
 // （"The actions in the storage configuration are processed in the order they are in
 //   the autoinstall file." — autoinstall リファレンス）。
 //
-//   1. disk            … 1 台目の boot ディスクだけ grub_device: true
-//   2. ESP の partition … boot ディスクごと。flag: boot（GPT では ESP になる）
+//   1. disk            … `grub_device` は出さない（UEFI では ESP の partition に付ける）
+//   2. ESP の partition … ESP を作るディスクごと。flag: boot（GPT では ESP になる）。
+//                        **1 台目だけ grub_device: true**（UEFI の GRUB 導入先）
 //   3. /boot の partition
 //   4. データ用 partition（そのディスクの最後なので size: -1 = 残り全部）
 //   5. raid
 //   6. format（ESP / boot / root）
 //   7. lvm_volgroup → lvm_partition
 //   8. mount（**最後にまとめて、パスの浅い順**。理由は下のコメント）
+//
+// ディスクは 2 通りの使い方をする（`RaidDisk.usage`）:
+//
+//   - `partitions` … 上のとおりパーティションを切り、その id を `raid.devices` に並べる。
+//   - `whole`      … **ディスク丸ごと 1 つをメンバーにする**。パーティションを 1 つも
+//                     切らず、`raid.devices` に `disk` の id をそのまま並べる
+//                     （R8 の表: `devices` は disk/partition の id を指せる。
+//                      curtin の例も `devices: [sdb, sdc]` と disk を直接並べている）。
 
 /** `disk` アクションと `layout` の両方で使える match spec。 */
 export function diskMatchSpec(match: DiskMatch): Record<string, unknown> {
@@ -96,10 +106,17 @@ interface DiskSlot {
 export interface RaidPlan {
   /** `storage.config` に入れるアクション列 */
   readonly config: Record<string, unknown>[]
-  /** ESP を作るディスク（= `boot: true` のディスク）の台数 */
+  /** ESP を作るディスク（= `esp: true` かつパーティションを切るディスク）の台数 */
   readonly espCount: number
   /** 配列にもホストにも使われず、`disk` アクションを出さなかったディスクの位置（0 始まり） */
   readonly unusedDiskIndexes: readonly number[]
+  /**
+   * `raid` アクションだけを出し、`format` も `mount` も出さなかった配列の名前。
+   *
+   * 検証が「この配列はフォーマットもマウントもされません」と伝えるために使う
+   * （同じ計算を 2 度書かない）。
+   */
+  readonly unmountedArrayNames: readonly string[]
 }
 
 /**
@@ -128,11 +145,21 @@ export function buildRaidPlan(raid: RaidStorageConfig): RaidPlan {
 
   // どのディスクにどのパーティションが要るか。
   // スペアにも本体と同じ大きさのパーティションが要る（入れ替わったときに使えないと意味がない）。
+  //
+  // **丸ごとメンバー (`usage: 'whole'`) にはパーティションを 1 つも作らない。**
+  // 配列に使われていることだけを覚えて、`raid.devices` では disk の id を直接指す。
   const needsBoot = new Set<string>()
   const needsData = new Set<string>()
+  const usedWhole = new Set<string>()
   for (const array of rawArrays) {
-    const target = array.role === 'boot' ? needsBoot : needsData
-    for (const id of memberIdsOf(array)) if (byId.has(id)) target.add(id)
+    // `lvm-pv` と `data` は同じ「データ用パーティション」を使う（1 台に 1 つだけ）。
+    const target = raidRolePartClass(array.role) === 'boot' ? needsBoot : needsData
+    for (const id of memberIdsOf(array)) {
+      const slot = byId.get(id)
+      if (!slot) continue
+      if (raidDiskUsageOf(slot.disk) === 'whole') usedWhole.add(id)
+      else target.add(id)
+    }
   }
 
   // **どの配列でも使わず、起動にも使わないディスクには `disk` アクションを出さない。**
@@ -148,7 +175,7 @@ export function buildRaidPlan(raid: RaidStorageConfig): RaidPlan {
       unusedDiskIndexes.push(index)
       return
     }
-    if (disk.boot === true || needsBoot.has(id) || needsData.has(id)) {
+    if (raidDiskMakesEsp(disk) || needsBoot.has(id) || needsData.has(id) || usedWhole.has(id)) {
       slots.push({ disk, index })
     } else {
       unusedDiskIndexes.push(index)
@@ -161,23 +188,31 @@ export function buildRaidPlan(raid: RaidStorageConfig): RaidPlan {
   const dataPartId = (index: number): string => `${diskId(index)}-data`
 
   // --- 1. disk ---
-  let grubAssigned = false
   for (const { disk, index } of slots) {
+    const whole = raidDiskUsageOf(disk) === 'whole'
     const action: Record<string, unknown> = {
       type: 'disk',
       id: diskId(index),
-      ptable: 'gpt',
+      // **丸ごとメンバーには `ptable` を出さない**（理由は下）。
+      ...(whole ? {} : { ptable: 'gpt' }),
       // 既存の md / LVM / パーティションテーブルの痕跡を消す。
       // これを付けないと、前に RAID を組んでいたディスクで組み立てに失敗する。
       wipe: 'superblock-recursive',
       match: safeDiskMatchSpec(disk.match),
     }
-    // curtin の `grub_device` は 1 台にしか設定できない（curtin のドキュメント）。
-    // 2 台目以降は late-commands で補う（`raidEspMirrorCommand()`）。
-    if (disk.boot === true && !grubAssigned) {
-      action['grub_device'] = true
-      grubAssigned = true
-    }
+    // **丸ごとメンバーには `ptable` を出さない。**
+    // curtin のドキュメント (R8) は「パーティションテーブルを作ったディスクを
+    // そのまま `raid.devices` に並べてよいか」を一言も書いていない。
+    // 書けば「GPT を作ったうえで、そのディスク全体に md のスーパーブロックを置く」
+    // ことになり、テーブルとメンバーが同じ先頭セクタを取り合う形になる。
+    // 資料に無い形を出すより、**パーティションテーブルを作らない**ほうを選ぶ
+    // （mdadm でディスク丸ごとをメンバーにする通常の使い方と同じ）。
+    // ここを変えるなら、まず一次資料を足すこと。
+    //
+    // **`grub_device` はここ（disk）には出さない。**
+    // UEFI では ESP の**パーティション**に付ける（下の ESP の生成を参照）。
+    // ディスクに付けた形は subiquity の `needs_bootloader_partition()` を通らず、
+    // `autoinstall config did not create needed bootloader partition` で止まる。
     config.push(action)
   }
 
@@ -193,8 +228,10 @@ export function buildRaidPlan(raid: RaidStorageConfig): RaidPlan {
   const espSize = size(raid?.espSize, '512M')
   const bootSize = size(raid?.bootSize, '2G')
 
-  const espSlots = slots.filter((s) => s.disk.boot === true)
-  for (const { index } of espSlots) {
+  // ESP は「そのディスクに作る」と選ばれた台だけ。**`/boot` 用の配列のメンバーかどうかとは別の軸**
+  // （ESP は 1 台目だけ・`/boot` は 2 台のミラー、という構成が作れる）。
+  const espSlots = slots.filter((s) => raidDiskMakesEsp(s.disk))
+  espSlots.forEach(({ index }, i) => {
     config.push({
       type: 'partition',
       id: espId(index),
@@ -206,8 +243,22 @@ export function buildRaidPlan(raid: RaidStorageConfig): RaidPlan {
       flag: 'boot',
       number: nextNumber(index),
       wipe: 'superblock',
+      // **UEFI では `grub_device` は「ディスク」ではなく「ESP のパーティション」に付ける。**
+      // subiquity の `FilesystemModel.needs_bootloader_partition()` は、UEFI のとき
+      //   `for esp in self._all(type="partition", grub_device=True):`
+      //   `    if esp.fs() and esp.fs().mount() and ...mount().path == "/boot/efi": return False`
+      // を見る（`models/filesystem.py`。24.04.3 の subiquity 6806 で確認）。
+      // ディスク側にだけ付けた形は**この検査を通らず**、
+      // `autoinstall config did not create needed bootloader partition` で
+      // インストールが止まる（VM で実際に踏んだ）。
+      // ディスク側を見るのは BIOS 起動のときだけ（`type="disk", grub_device=True`）で、
+      // このアプリは GPT + UEFI しか出さない。
+      // **付けるのは実際に `/boot/efi` にマウントする 1 台目だけ。**
+      // 2 台目以降は curtin から見て「マウントされない ESP」なので、
+      // GRUB の導入は late-commands で補う（`raidEspMirrorCommand()`）。
+      ...(i === 0 ? { grub_device: true } : {}),
     })
-  }
+  })
   for (const { disk, index } of slots) {
     if (!needsBoot.has(disk.id as string)) continue
     config.push({
@@ -237,20 +288,28 @@ export function buildRaidPlan(raid: RaidStorageConfig): RaidPlan {
 
   // --- 5. raid ---
   const pvArrayIds: string[] = []
+  const unmountedArrayNames: string[] = []
   let bootArrayId: string | null = null
+  // `disk` アクションを出した位置。出していないディスクを `raid.devices` から指さない
+  // （前方参照でも未定義参照でもない「存在しない id」になる）。
+  const emitted = new Set(slots.map((s) => s.index))
   rawArrays.forEach((array, j) => {
-    const partOf = (internalId: string): string | null => {
+    const memberOf = (internalId: string): string | null => {
       const slot = byId.get(internalId)
-      if (!slot) return null
-      return array.role === 'boot' ? bootPartId(slot.index) : dataPartId(slot.index)
+      if (!slot || !emitted.has(slot.index)) return null
+      // **丸ごとメンバーは disk の id をそのまま指す**（R8 の表: `devices` は
+      // disk/partition の id を指せる）。パーティションは 1 つも作っていない。
+      if (raidDiskUsageOf(slot.disk) === 'whole') return diskId(slot.index)
+      return raidRolePartClass(array.role) === 'boot' ? bootPartId(slot.index) : dataPartId(slot.index)
     }
-    const devices = strings(array.diskIds).map(partOf).filter((v): v is string => v !== null)
-    const spares = strings(array.spareDiskIds).map(partOf).filter((v): v is string => v !== null)
+    const devices = strings(array.diskIds).map(memberOf).filter((v): v is string => v !== null)
+    const spares = strings(array.spareDiskIds).map(memberOf).filter((v): v is string => v !== null)
     const id = `md-${j}`
+    const name = size(array.name, `md${j}`)
     const action: Record<string, unknown> = {
       type: 'raid',
       id,
-      name: size(array.name, `md${j}`),
+      name,
       raidlevel: array.level,
       devices,
       wipe: 'superblock',
@@ -260,8 +319,13 @@ export function buildRaidPlan(raid: RaidStorageConfig): RaidPlan {
     if (array.role === 'boot') {
       // /boot は 1 か所にしかマウントできない。2 つ目以降は検証が error にする。
       if (bootArrayId === null) bootArrayId = id
-    } else {
+    } else if (raidRoleIsMounted(array.role)) {
       pvArrayIds.push(id)
+    } else {
+      // `role: 'data'`。**`raid` アクションだけを出す。** `format` も `mount` も出さない。
+      // 配列は組み上がるが中身は空のまま。インストール後に利用者が好きに使う。
+      // 検証が info で「フォーマットもマウントもされません」と伝える（落とし穴 67）。
+      unmountedArrayNames.push(name)
     }
   })
 
@@ -332,7 +396,7 @@ export function buildRaidPlan(raid: RaidStorageConfig): RaidPlan {
   })
   for (const m of mounts) config.push(m.entry)
 
-  return { config, espCount: espSlots.length, unusedDiskIndexes }
+  return { config, espCount: espSlots.length, unusedDiskIndexes, unmountedArrayNames }
 }
 
 // ---------------------------------------------------------------------------

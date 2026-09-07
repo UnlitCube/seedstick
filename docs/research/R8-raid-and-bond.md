@@ -30,7 +30,7 @@ RAID を組むには **`storage.config`**（アクションの配列）を出す
 | アクション | 必須 | 参照キー | 主な任意キー |
 |---|---|---|---|
 | `disk` | `id` `type` | — | `ptable`(msdos/gpt/vtoc) `serial` `path` `model` `wipe` `preserve` `name` `grub_device` |
-| `partition` | `id` `type` `device` `size` | `device` → disk の id | `number` `flag` `wipe` `preserve` `name` |
+| `partition` | `id` `type` `device` `size` | `device` → disk の id | `number` `flag` `wipe` `preserve` `name` **`grub_device`**（curtin の表には無いが subiquity の正当なキー → 4.1） |
 | `raid` | `id` `type` `name` `raidlevel` `devices` | `devices` `spare_devices` → disk/partition の id | `ptable` `metadata` `preserve` `wipe` |
 | `lvm_volgroup` | `id` `type` `name` `devices` | `devices` → partition/disk/**raid** の id | `preserve` |
 | `lvm_partition` | `id` `type` `name` `volgroup` | `volgroup` → lvm_volgroup の id | `size` `preserve` `wipe` |
@@ -55,7 +55,7 @@ RAID を組むには **`storage.config`**（アクションの配列）を出す
 **curtin が保証しているのは 4 台以上**。2 台で組ませたいなら
 `storage.raw`（curtin 直書き）に逃がすべきで、UI の既定にはしない。）
 
-## 4. `grub_device` は 1 台
+## 4. `grub_device` は 1 台 — ただし **UEFI では ESP の partition に付ける**
 
 > If the `grub_device` key is present and set true, then when post installation hooks
 > are run grub will be installed onto this disk.
@@ -66,6 +66,46 @@ curtin のドキュメントは **「1 台に設定する」**という書き方
 **curtin だけでは両方に GRUB を入れる保証が無い**。
 `late-commands` で 2 台目に `grub-install` する必要がある
 （このアプリには late-commands があるので、そこで補える）。
+
+### 4.1 **どこに付けるか**は curtin の資料に書かれていない（実測で確定）
+
+上の引用は `disk` の任意キーの説明で、curtin の表も `disk` にしか載せていない。
+**しかし autoinstall（subiquity）は UEFI のとき partition 側しか見ない。**
+`subiquity/models/filesystem.py`（24.04.3 に載る subiquity **6806**）:
+
+```python
+def needs_bootloader_partition(self):
+    # true if no disk have a boot partition, and one is needed
+    if self.bootloader == Bootloader.NONE:
+        return False
+    elif self.bootloader == Bootloader.BIOS:
+        return self._one(type="disk", grub_device=True) is None
+    elif self.bootloader == Bootloader.UEFI:
+        for esp in self._all(type="partition", grub_device=True):
+            if esp.fs() and esp.fs().mount():
+                if esp.fs().mount().path == "/boot/efi":
+                    return False
+        return True
+```
+
+`Partition` のクラスにも `grub_device: bool = False` があり、
+**partition の正当なキー**である（同ファイル）。
+
+- **UEFI**: `/boot/efi` にマウントされる ESP の **partition** に `grub_device: true`
+- **BIOS**: **disk** に `grub_device: true`（このアプリは BIOS 起動を出さない）
+
+`disk` にだけ付けた形は `apply_autoinstall_config` で
+`autoinstall config did not create needed bootloader partition` になり、
+**ディスクに 1 バイトも書かないまま止まる**（VM で実際に踏んだ）。
+
+取り出し方（同じことをもう一度確かめたい人向け。ISO を mount した状態で）:
+
+```bash
+unsquashfs -q -d x /mnt/iso/casper/ubuntu-server-minimal.ubuntu-server.installer.squashfs \
+  /var/lib/snapd/seed/snaps/subiquity_6806.snap
+unsquashfs -q -d s x/var/lib/snapd/seed/snaps/subiquity_6806.snap \
+  /lib/python3.10/site-packages/subiquity/models/filesystem.py
+```
 
 ## 5. ESP を RAID に置けるかは**明記が無い**
 

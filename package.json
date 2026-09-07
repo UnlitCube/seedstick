@@ -25,6 +25,7 @@
     "e2e:raid-bond": "tsx scripts/e2e-raid-bond.mts",
     "e2e:usb": "tsx scripts/e2e-write-usb.mts",
     "e2e:vm": "tsx scripts/e2e-vm.mts",
+    "e2e:vm:raid": "tsx scripts/e2e-vm.mts --raid",
     "e2e:verify-usb": "tsx scripts/e2e-verify-usb.mts",
     "e2e:usb-worker": "tsx scripts/e2e-worker-usb.mts"
   },

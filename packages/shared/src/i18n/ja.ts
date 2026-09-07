@@ -335,6 +335,7 @@ export const ja = {
   'storage.raidLevelRaid10': 'RAID10（ミラー + ストライプ・4 台から）',
   'storage.raidRoleBoot': '/boot にする',
   'storage.raidRoleLvmPv': 'LVM の物理ボリュームにする（この上に root を切る）',
+  'storage.raidRoleData': '作るだけ（フォーマットもマウントもしない）',
   'storage.raidFstypeExt4': 'ext4',
   'storage.raidFstypeXfs': 'XFS',
   'storage.layoutRaid': 'RAID + LVM（複数のディスクをまとめる）',
@@ -351,6 +352,18 @@ export const ja = {
   'storage.raidDiskBootHint':
     'EFI システムパーティション (ESP) を作ります。ESP は RAID に置けないので、起動に使うディスクごとに 1 つずつ作られます。',
   'storage.raidDiskBootBadge': '起動用',
+  'storage.raidDiskUsage': 'このディスクの使い方',
+  'storage.raidDiskUsagePartitions': 'パーティションを切って使う',
+  'storage.raidDiskUsageWhole': 'ディスク丸ごとを 1 つのメンバーにする',
+  'storage.raidDiskUsageHint':
+    '丸ごとを選ぶと、パーティションを 1 つも作らずにディスクそのものを RAID のメンバーにします。パーティションテーブルを作らないので、このディスクには EFI システムパーティションも /boot も置けません。',
+  'storage.raidDiskWholeBadge': '丸ごと',
+  'storage.raidDiskEspOnWhole':
+    'このディスクは丸ごと 1 つのメンバーにするので、EFI システムパーティションを置く場所がありません。操作は残してあります（有効のまま保存されたプロファイルを解除できなくしないため）が、有効にすると矛盾として指摘されます。',
+  'storage.raidEspCount':
+    'EFI システムパーティションを作るディスク: {count} 台。ここが 0 台だと、インストールできても起動できません。',
+  'storage.raidRoleDataNote':
+    'この配列は組み立てるだけで、フォーマットもマウントもされません。インストール後に自分でファイルシステムを作って使ってください。',
   'storage.raidDiskIncomplete': 'ディスク未指定',
   'storage.raidRowUnreadable':
     'この行は読み取れませんでした（プロファイルを手で編集した可能性があります）。削除してから入れ直してください。',
@@ -1227,6 +1240,7 @@ export const ja = {
   'migrate.category.raidArray': 'RAID の配列',
   'migrate.field.raidLevel': 'RAID レベル (storage.raid.arrays[].level)',
   'migrate.field.raidRole': '配列の用途 (storage.raid.arrays[].role)',
+  'migrate.field.raidDiskUsage': 'ディスクの使い方 (storage.raid.disks[].usage)',
   'migrate.field.raidRootFstype': 'root のファイルシステム (storage.raid.rootFstype)',
   'migrate.raidDiskRefDropped':
     'RAID の配列が指していたディスク {count} 件が見つからなかったため、その参照を外しました。台数が足りなくなっていないか確認してください。',
@@ -1410,8 +1424,14 @@ export const ja = {
     '配列 "{name}" は RAID0 です。1 台でも壊れると配列全体のデータが失われます。',
   'validate.raidSparesIgnoredForLevel0':
     '配列 "{name}" は RAID0 なのでスペアは使われません（無視されます）。',
-  'validate.raidBootArrayMemberNotBootDisk':
-    '配列 "{name}" のメンバーに「起動に使う」を外したディスクがあります。そのディスクには EFI システムパーティションが作られないので、そこからは起動できません。',
+  'validate.raidBootArrayWithoutEspDisk':
+    '配列 "{name}" のメンバーに、EFI システムパーティションを作るディスクが 1 台もありません。起動はブートローダのあるディスクから始まり、そこから /boot を読みます。/boot をまったく別のディスク群に置くと、その配列が 1 台落ちただけで起動できなくなることがあります。',
+  'validate.raidWholeDiskEsp':
+    'ディスク #{n} は「丸ごとを 1 つのメンバーにする」設定なのに、EFI システムパーティションを作ることになっています。パーティションテーブルを作らないので置き場所がありません。ESP を外すか、使い方を「パーティションを切って使う」に戻してください。',
+  'validate.raidWholeDiskInBootArray':
+    '配列 "{name}"（/boot 用）に、「丸ごとを 1 つのメンバーにする」ディスクが {count} 台入っています。そのディスクにはパーティションを切らないので、/boot 用の領域を作れません。使い方を「パーティションを切って使う」に戻すか、この配列から外してください。',
+  'validate.raidArrayNotMounted':
+    '配列 "{name}" は組み立てるだけで、フォーマットもマウントもされません。インストール後に自分でファイルシステムを作って /etc/fstab に足してください（意図した設定ならこのままで問題ありません）。',
   'validate.raidDiskUnused':
     'ディスク #{n} はどの配列でも使われず、起動にも使いません。何にも使わないディスクを消さないよう、このディスクには一切書き込みません。',
   'validate.raidWipesAllMemberDisks':

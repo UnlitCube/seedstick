@@ -8,7 +8,7 @@ import type {
 } from './advanced.js'
 import { UBUNTU_SERIES } from './model.js'
 import type { RaidArray, RaidDisk, RaidStorageConfig } from './raid.js'
-import { RAID_LEVELS, RAID_ROLES, RAID_ROOT_FSTYPES } from './raid.js'
+import { RAID_DISK_USAGES, RAID_LEVELS, RAID_ROLES, RAID_ROOT_FSTYPES } from './raid.js'
 import type { BondMember, BondNetworkConfig, BondParameters } from './bond.js'
 import {
   BOND_ADDRESSINGS,
@@ -292,12 +292,24 @@ function readDiskMatch(raw: unknown, fallback: unknown): unknown {
 }
 
 /** RAID のディスク行と配列行のひな型。欠けたキーはここから埋める。 */
-const RAID_DISK_TEMPLATE = { id: '', boot: true }
+const RAID_DISK_TEMPLATE = { id: '', esp: true }
 const RAID_ARRAY_TEMPLATE = {
   id: '',
   name: '',
   diskIds: [] as string[],
   spareDiskIds: [] as string[],
+}
+
+/**
+ * 「このディスクに ESP を作るか」。旧形式の `boot` を引き継ぐ。
+ *
+ * v1 のプロファイルは `boot: boolean` しか持っていない。`esp` が無いときだけ
+ * `boot` を見る（両方あるなら新しいほうが正）。どちらも読めなければ既定の true。
+ */
+function readRaidDiskEsp(el: Record<string, unknown>): boolean {
+  if (typeof el['esp'] === 'boolean') return el['esp']
+  if (typeof el['boot'] === 'boolean') return el['boot']
+  return true
 }
 
 /**
@@ -308,7 +320,9 @@ const RAID_ARRAY_TEMPLATE = {
  *   - `disks` / `arrays` は**レコードの配列**（素通しにすると `[null]` が通る・落とし穴 31）。
  *     `mergeSection` はレコードの配列を `strList` で文字列だけに潰すので、
  *     ここを通さないと**行が丸ごと消える**。
- *   - `level` / `role` / `rootFstype` は列挙値（`oneOf` で既定に戻し、戻したと伝える）
+ *   - `level` / `role` / `rootFstype` / `disks[].usage` は列挙値
+ *     （`oneOf` で既定に戻し、戻したと伝える）
+ *   - `disks[].esp` は旧形式の `boot` から引き継ぐ（`readRaidDiskEsp`）
  *
  * 配列が参照するディスク id は、**同じ要素オブジェクトから**取る
  * （`rawList` は非オブジェクトを落として詰め直すので、添字で元配列を引くとずれる・落とし穴 48）。
@@ -327,6 +341,14 @@ function readRaidStorage(base: RaidStorageConfig, raw: unknown): RaidStorageConf
       // largest / any に落とすと、**どのディスクが消えるか分からない**指定に
       // 黙って化ける（落とし穴 22 / 49）。
       match: readDiskMatch(el['match'], { kind: 'serial', serial: '' }),
+      // **旧形式との橋渡し。** `boot`（真偽）は「このディスクに ESP を作るか」
+      // だったので、そのまま `esp` に移す。`esp` が既にあればそちらを優先する。
+      // ここを落とすと `esp` が既定の true に化け、**ESP を作らないと決めた
+      // ディスクにパーティションが増える**（ずれた番号で /boot が作られる）。
+      esp: readRaidDiskEsp(el),
+      // 旧形式には `usage` が無い。**必ずパーティションを切る**側で読む
+      // （丸ごとに化けると、切ったはずのパーティションが消えて構成が別物になる）。
+      usage: oneOf(el['usage'], RAID_DISK_USAGES, 'partitions', 'migrate.field.raidDiskUsage'),
     })),
   ) as unknown as RaidDisk[]
 

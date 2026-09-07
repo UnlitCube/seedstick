@@ -1,8 +1,11 @@
 import { ArrowDown, ArrowUp, HardDrive, Layers, Plus, Trash2 } from 'lucide-react'
 import { useMemo } from 'react'
 import {
+  RAID_DISK_USAGES,
+  RAID_DISK_USAGE_CHOICES,
   RAID_LEVEL_CHOICES,
   RAID_MIN_DEVICES,
+  RAID_ROLES,
   RAID_ROLE_CHOICES,
   RAID_ROOT_FSTYPE_CHOICES,
   buildRaidPlan,
@@ -10,9 +13,13 @@ import {
   createRaidArray,
   createRaidDisk,
   isValidSizeSpec,
+  raidDiskMakesEsp,
+  raidDiskUsageOf,
   validateProfile,
   type RaidArray,
+  type RaidArrayRole,
   type RaidDisk,
+  type RaidDiskUsage,
   type RaidLevel,
   type RaidRootFstype,
   type RaidStorageConfig,
@@ -55,6 +62,18 @@ function idsOf(value: unknown): string[] {
 }
 
 const trimmed = (value: unknown): string => (typeof value === 'string' ? value.trim() : '')
+
+/**
+ * `<select>` から返る文字列を、**知っている値だけ**に絞って書き戻す。
+ *
+ * `v as RaidDiskUsage` のような素通しをすると、DOM をいじった値や
+ * 手で編集された JSON の値がそのままプロファイルに入り、
+ * 生成側 (`raidDiskUsageOf`) は既定に読むのに保存された値だけが別物、という
+ * 「画面と保存が食い違う」状態になる（落とし穴 22 / 49 と同じ入口）。
+ */
+function oneOf<T extends string>(value: string, allowed: readonly T[], fallback: T): T {
+  return (allowed as readonly string[]).includes(value) ? (value as T) : fallback
+}
 
 /**
  * 中身が消えるディスクの台数。
@@ -209,7 +228,7 @@ export function RaidStorageSection({
   }
 
   // 並べ替えても配列の参照は ID なので壊れない。順序は
-  // 「1 台目の起動ディスク」（curtin の `grub_device` が付く 1 台）を決めるので意味がある。
+  // 「1 台目の起動ディスク」（その ESP に `grub_device` が付く）を決めるので意味がある。
   const moveDisk = (index: number, delta: number): void => patch({ disks: moved(disks, index, delta) })
 
   // --- 配列 -----------------------------------------------------------------
@@ -229,6 +248,7 @@ export function RaidStorageSection({
     patch({ arrays: moved(arrays, index, delta) })
 
   const rootFixed = trimmed(raid.rootSize).length > 0
+  const espCount = disks.filter((d) => raidDiskMakesEsp(d)).length
 
   return (
     <div className="space-y-5">
@@ -278,7 +298,19 @@ export function RaidStorageSection({
                           {isEmptyDiskMatch((disk as RaidDisk).match) && (
                             <Badge tone="danger">{t('storage.raidDiskIncomplete')}</Badge>
                           )}
-                          {(disk as RaidDisk).boot === true && (
+                          {/*
+                            「丸ごと」はパーティションテーブルごと消える指定なので、
+                            一覧を眺めただけで分かるようにする（落とし穴 65）。
+                          */}
+                          {raidDiskUsageOf(disk) === 'whole' && (
+                            <Badge tone="warning">{t('storage.raidDiskWholeBadge')}</Badge>
+                          )}
+                          {/*
+                            バッジは**実際に ESP が作られるか**で出す（`esp === true` では出さない）。
+                            丸ごとのディスクには作られないので、スイッチが入っていても
+                            「起動用」と出すのは嘘になる。判定は生成側と同じ関数から採る。
+                          */}
+                          {raidDiskMakesEsp(disk) && (
                             <Badge tone="info">{t('storage.raidDiskBootBadge')}</Badge>
                           )}
                         </p>
@@ -319,11 +351,51 @@ export function RaidStorageSection({
                         onChange={(match) => patchDisk(i, { match })}
                         showKindNotes={false}
                       />
+                      {/*
+                        使い方（パーティションを切る / 丸ごと 1 メンバー）。
+                        **ディスク指定の下に置く**——上に置くと、この行の最初の
+                        `<select>` が指定方法ではなくこちらになる。
+                      */}
+                      <Field label={t('storage.raidDiskUsage')} hint={t('storage.raidDiskUsageHint')}>
+                        {(id) => (
+                          <Select
+                            id={id}
+                            value={raidDiskUsageOf(disk)}
+                            onChange={(v) => {
+                              const usage = oneOf<RaidDiskUsage>(v, RAID_DISK_USAGES, 'partitions')
+                              // 丸ごとに変えたら ESP も落とす。**黙ってではなく、
+                              // 目の前でスイッチが切れる**（「起動用」のバッジも消える）ので
+                              // 落とし穴 50 の「黙って既定に戻す」には当たらない。
+                              // 残すと、NVMe を 2 本足しただけで解除の当てのない error が
+                              // 2 件出る（新しい行の既定は `esp: true`）。
+                              // スイッチ自体は**丸ごとでも押せるまま**にしてある。
+                              // 手で編集した `{usage:'whole', esp:true}` の error を
+                              // 画面から解除できなくしないため（落とし穴 66）。
+                              patchDisk(i, usage === 'whole' ? { usage, esp: false } : { usage })
+                            }}
+                            options={RAID_DISK_USAGE_CHOICES.map((c) => ({
+                              value: c.value,
+                              label: t(c.label),
+                            }))}
+                          />
+                        )}
+                      </Field>
+                      {/*
+                        **丸ごとでも ESP のスイッチを隠さない・無効にしない**（落とし穴 66）。
+                        `esp: true` のまま保存されたプロファイルを開いたときに、
+                        隠すと `validate.raidWholeDiskEsp` の error を解除する操作が
+                        画面から消え、書き込みボタンが理由も分からず沈黙する。
+                        代わりに「置き場所が無い」ことを説明に出す。
+                      */}
                       <Switch
-                        checked={(disk as RaidDisk).boot === true}
-                        onChange={(boot) => patchDisk(i, { boot })}
+                        checked={(disk as RaidDisk).esp === true}
+                        onChange={(esp) => patchDisk(i, { esp })}
                         label={t('storage.raidDiskBoot')}
-                        description={t('storage.raidDiskBootHint')}
+                        description={
+                          raidDiskUsageOf(disk) === 'whole'
+                            ? t('storage.raidDiskEspOnWhole')
+                            : t('storage.raidDiskBootHint')
+                        }
                       />
                       <IssueList issues={under(`${F}.disks[${i}]`)} />
                     </div>
@@ -331,6 +403,18 @@ export function RaidStorageSection({
                 </li>
               ))}
             </ul>
+          )}
+          {/*
+            **ESP が何台に作られるか**をその場に出す。0 台だとインストールは
+            通るのに起動しない、という一番気づきにくい失敗なので、
+            確認画面まで待たせない（error 自体は上の IssueList に出る）。
+            数え方は生成側と同じ `raidDiskMakesEsp` から採る
+            ——ここで `d.esp` を数えると、丸ごとのディスクを 1 台と数えてしまう。
+          */}
+          {disks.length > 0 && (
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {t('storage.raidEspCount', { count: espCount })}
+            </p>
           )}
           <div>
             <Button onClick={addDisk}>
@@ -550,6 +634,9 @@ function ArrayRow({
   const t = useT()
   const members = idsOf(array.diskIds)
   const spares = idsOf(array.spareDiskIds)
+  // 読めない用途は既定 (`lvm-pv`) として**見せる**が、書き戻すのは操作したときだけ。
+  const role: RaidArrayRole =
+    typeof array.role === 'string' ? oneOf<RaidArrayRole>(array.role, RAID_ROLES, 'lvm-pv') : 'lvm-pv'
   const level: RaidLevel | undefined =
     typeof array.level === 'string' && array.level in RAID_MIN_DEVICES
       ? (array.level as RaidLevel)
@@ -613,12 +700,24 @@ function ArrayRow({
         )}
       </Field>
 
-      <Field label={t('storage.raidArrayRole')}>
+      {/*
+        用途は 3 つ（`/boot` / LVM の PV / 作るだけ）。
+        **選択肢の一覧と書き戻しの両方を `RAID_ROLES` から導く。**
+        書き戻しを `v === 'boot' ? 'boot' : 'lvm-pv'` のように手で書くと、
+        選択肢を足したときにここだけ古いまま残り、選んだ「作るだけ」が
+        黙って `lvm-pv` に化ける（＝マウントしないつもりの配列に root が載る）。
+        「作るだけ」はフォーマットもマウントもされないので、選んだその場で言う
+        （検証の info は配列カードの先頭に出るだけで、どの行の話か分からない）。
+      */}
+      <Field
+        label={t('storage.raidArrayRole')}
+        hint={role === 'data' ? t('storage.raidRoleDataNote') : undefined}
+      >
         {(id) => (
           <Select
             id={id}
-            value={typeof array.role === 'string' ? array.role : 'lvm-pv'}
-            onChange={(v) => onPatch({ role: v === 'boot' ? 'boot' : 'lvm-pv' })}
+            value={role}
+            onChange={(v) => onPatch({ role: oneOf<RaidArrayRole>(v, RAID_ROLES, 'lvm-pv') })}
             options={RAID_ROLE_CHOICES.map((c) => ({ value: c.value, label: t(c.label) }))}
           />
         )}
@@ -664,6 +763,14 @@ function ArrayRow({
                       onChange={(e) => setMembership(id, e.target.checked ? 'device' : 'none')}
                     />
                     <span>{label}</span>
+                    {/*
+                      丸ごとのディスクは `/boot` 用の配列には入れられない
+                      （`validate.raidWholeDiskInBootArray`）。どれが丸ごとかを
+                      **選ぶ場所で**見せないと、error を読んでから一覧へ戻ることになる。
+                    */}
+                    {raidDiskUsageOf(disk) === 'whole' && (
+                      <Badge tone="warning">{t('storage.raidDiskWholeBadge')}</Badge>
+                    )}
                   </label>
                   {(isMember || isSpare) && (
                     <label className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">

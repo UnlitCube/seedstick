@@ -7,6 +7,7 @@ import {
   createDefaultRaidStorage,
   createTranslator,
   ja,
+  validateProfile,
   type AutoinstallProfile,
   type RaidStorageConfig,
   type StorageConfig,
@@ -190,9 +191,9 @@ describe('RAID + LVM を画面から作れる', () => {
     const el = render()
     toRaid(el)
     setUpDisks(el, ['SER-A'])
-    expect(raidOf().disks[0]!.boot).toBe(true)
+    expect(raidOf().disks[0]!.esp).toBe(true)
     click(byLabel(diskRow(el, 0), t('storage.raidDiskBoot')))
-    expect(raidOf().disks[0]!.boot).toBe(false)
+    expect(raidOf().disks[0]!.esp).toBe(false)
   })
 })
 
@@ -468,5 +469,322 @@ describe('手で編集された JSON でも落ちない（落とし穴 23 / 30 /
     handEdited({ disks: 'nope', arrays: null, volumeGroup: 42, rootSize: [], espSize: null })
     const el = render()
     expect(el.textContent).toContain(ja['storage.raidDisksEmpty'])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 実機の構成（OS 用 SATA×2 はパーティション、DATA 用 NVMe×2 は丸ごと）を
+// 画面から作れること。落ちてほしいのは次の 4 つ:
+//
+//   6. ディスクの使い方を選べない（＝丸ごとメンバーが画面から作れない）
+//   7. 「作るだけ」を選んでも別の用途に化ける（マウントしないつもりの配列に root が載る）
+//   8. 丸ごとにしたら ESP の操作が消える／無効になる（落とし穴 66。
+//      手で編集したプロファイルの error を画面から解除できなくなる）
+//   9. ESP と /boot の大きさを画面から決められない
+// ---------------------------------------------------------------------------
+
+/** ディスク `i` の使い方を選ぶ。 */
+function setUsage(el: HTMLElement, i: number, usage: 'partitions' | 'whole'): void {
+  setValue(byLabel(diskRow(el, i), t('storage.raidDiskUsage')), usage)
+}
+
+/** 配列 `j` の用途を選ぶ。 */
+function setRole(el: HTMLElement, j: number, role: string): void {
+  setValue(byLabel(arrayRow(el, j), t('storage.raidArrayRole')), role)
+}
+
+const espSwitch = (el: HTMLElement, i: number): HTMLInputElement =>
+  byLabel(diskRow(el, i), t('storage.raidDiskBoot'))
+
+/** 行の見出し（バッジが並ぶ最初の段落）。説明文や選択肢の文言を巻き込まずに見る。 */
+const diskHeading = (el: HTMLElement, i: number): string =>
+  diskRow(el, i).querySelector('p')?.textContent ?? ''
+
+/**
+ * 配列 `j` のメンバー一覧で、ディスク `i` を選ぶ行（`<label>`）の文言。
+ * 行全体の textContent で見ると、検証の指摘の文（「丸ごとを 1 つのメンバーにする」）が
+ * 同じ言葉を含むので、バッジを消しても通ってしまう（変異検査で見つけた）。
+ */
+function memberLabel(el: HTMLElement, j: number, i: number): string {
+  const heading = t('storage.raidDiskHeading', { n: i + 1 })
+  for (const l of arrayRow(el, j).querySelectorAll('label')) {
+    if (l.textContent?.includes(heading)) return l.textContent
+  }
+  throw new Error(`${heading} を選ぶところが配列 ${j} に無い`)
+}
+
+describe('ディスクの使い方を選べる（丸ごと 1 メンバー）', () => {
+  it('選ぶとプロファイルに入り、行に「丸ごと」と出る', () => {
+    const el = render()
+    toRaid(el)
+    setUpDisks(el, ['SER-A'])
+    expect(raidOf().disks[0]!.usage, '既定がパーティションでない').toBe('partitions')
+    // 「丸ごと」は選択肢と説明文にも出るので、**行の見出し**（バッジが並ぶところ）だけを見る。
+    expect(diskHeading(el, 0)).not.toContain(ja['storage.raidDiskWholeBadge'])
+
+    setUsage(el, 0, 'whole')
+    expect(raidOf().disks[0]!.usage, '使い方が保存されていない').toBe('whole')
+    expect(diskHeading(el, 0), '丸ごとであることが行の見出しから読めない').toContain(
+      ja['storage.raidDiskWholeBadge'],
+    )
+  })
+
+  it('知らない値を書き戻さない（DOM をいじっても既定に落ちる）', () => {
+    const el = render()
+    toRaid(el)
+    setUpDisks(el, ['SER-A'])
+    const select = byLabel(diskRow(el, 0), t('storage.raidDiskUsage')) as unknown as HTMLSelectElement
+    const rogue = document.createElement('option')
+    rogue.value = 'nonsense'
+    select.appendChild(rogue)
+    setValue(select, 'nonsense')
+    expect(raidOf().disks[0]!.usage, '知らない値がプロファイルに入った').toBe('partitions')
+  })
+
+  it('丸ごとにすると ESP は落ちるが、操作は残る（落とし穴 66）', () => {
+    const el = render()
+    toRaid(el)
+    setUpDisks(el, ['SER-A'])
+    expect(raidOf().disks[0]!.esp).toBe(true)
+
+    setUsage(el, 0, 'whole')
+    // 目の前でスイッチが切れる（黙って値だけ変える、ではない）
+    expect(raidOf().disks[0]!.esp, '置けない ESP が残っている').toBe(false)
+    expect(espSwitch(el, 0).checked).toBe(false)
+    // 隠さない・無効にしない。理由はその場に出す。
+    expect(espSwitch(el, 0).disabled, 'ESP の操作が無効になっている').toBe(false)
+    expect(diskRow(el, 0).textContent, '置けない理由を言っていない').toContain(
+      ja['storage.raidDiskEspOnWhole'],
+    )
+    // 「起動用」のバッジも消える（作られないのに出したままにしない）
+    expect(diskHeading(el, 0)).not.toContain(ja['storage.raidDiskBootBadge'])
+  })
+
+  it('手で編集した「丸ごとなのに ESP」も、画面から解除できる', () => {
+    const p = createDefaultProfile('24.04')
+    if (p.storage.mode === 'raw') throw new Error('既定が raw')
+    useStore.setState({
+      profile: {
+        ...p,
+        storage: {
+          ...p.storage,
+          mode: 'raid',
+          raid: {
+            ...createDefaultRaidStorage(),
+            disks: [
+              { id: 'd1', match: { kind: 'serial', serial: 'SER-A' }, usage: 'whole', esp: true },
+              { id: 'd2', match: { kind: 'serial', serial: 'SER-B' }, usage: 'partitions', esp: true },
+            ],
+          },
+        },
+      },
+    })
+    const el = render()
+    const line = t('validate.raidWholeDiskEsp', { n: 1 })
+    expect(diskRow(el, 0).textContent, '矛盾がその行に出ていない').toContain(line)
+    // バッジも台数も「実際に作られるか」で出す（`esp === true` で出すと、
+    // 丸ごとのディスクを起動用と言い、ESP の台数も 1 台多く数える）。
+    expect(diskHeading(el, 0), '作られない ESP を「起動用」と出している').not.toContain(
+      ja['storage.raidDiskBootBadge'],
+    )
+    expect(el.textContent, '作られない ESP を数えている').toContain(
+      t('storage.raidEspCount', { count: 1 }),
+    )
+
+    // 解除の道が生きている: ESP を外す
+    click(espSwitch(el, 0))
+    expect(raidOf().disks[0]!.esp).toBe(false)
+    expect(diskRow(el, 0).textContent, '外しても error が消えない').not.toContain(line)
+  })
+
+  it('/boot 用の配列に丸ごとのディスクを入れると、その配列の行で止められる', () => {
+    const el = render()
+    toRaid(el)
+    setUpDisks(el, ['SER-A', 'SER-B'])
+    setUsage(el, 1, 'whole')
+    addArray(el)
+    setRole(el, 0, 'boot')
+    toggleMember(el, 0, 0)
+    toggleMember(el, 0, 1)
+    expect(arrayRow(el, 0).textContent, '丸ごとを /boot に使おうとして止まらない').toContain(
+      t('validate.raidWholeDiskInBootArray', { name: 'md0', count: 1 }),
+    )
+    // どれが丸ごとかは、選ぶ場所（メンバーの一覧）でも分かる
+    expect(memberLabel(el, 0, 1), '選ぶところで丸ごとだと分からない').toContain(
+      ja['storage.raidDiskWholeBadge'],
+    )
+    expect(memberLabel(el, 0, 0), '丸ごとでないディスクにまで付いている').not.toContain(
+      ja['storage.raidDiskWholeBadge'],
+    )
+  })
+})
+
+describe('ESP を作るディスクを選べる（0 台だと起動できない）', () => {
+  it('何台に作られるかがディスクの一覧に出る', () => {
+    const el = render()
+    toRaid(el)
+    setUpDisks(el, ['SER-A', 'SER-B'])
+    expect(el.textContent).toContain(t('storage.raidEspCount', { count: 2 }))
+
+    click(espSwitch(el, 1))
+    expect(el.textContent, 'ESP の台数が変わっていない').toContain(
+      t('storage.raidEspCount', { count: 1 }),
+    )
+    // 丸ごとのディスクは数に入らない（作られないものを数えない）
+    setUsage(el, 0, 'whole')
+    expect(el.textContent).toContain(t('storage.raidEspCount', { count: 0 }))
+  })
+
+  it('1 台も無くなると、確認画面まで待たずにその場で分かる', () => {
+    const el = render()
+    toRaid(el)
+    setUpDisks(el, ['SER-A', 'SER-B'])
+    expect(el.textContent).not.toContain(ja['validate.raidNoBootDisk'])
+    click(espSwitch(el, 0))
+    click(espSwitch(el, 1))
+    expect(el.textContent, 'ESP が 1 台も無いのに何も言わない').toContain(
+      ja['validate.raidNoBootDisk'],
+    )
+  })
+})
+
+describe('配列の用途に「作るだけ」がある', () => {
+  const build = (): HTMLElement => {
+    const el = render()
+    toRaid(el)
+    setUpDisks(el, ['SER-A', 'SER-B'])
+    addArray(el)
+    return el
+  }
+
+  it('選ぶとそのまま保存される（別の用途に化けない）', () => {
+    const el = build()
+    setRole(el, 0, 'data')
+    expect(raidOf().arrays[0]!.role, '「作るだけ」が別の用途に化けた').toBe('data')
+    setRole(el, 0, 'boot')
+    expect(raidOf().arrays[0]!.role).toBe('boot')
+    setRole(el, 0, 'lvm-pv')
+    expect(raidOf().arrays[0]!.role).toBe('lvm-pv')
+  })
+
+  it('選んだその場で「フォーマットもマウントもされない」と出る', () => {
+    const el = build()
+    expect(arrayRow(el, 0).textContent).not.toContain(ja['storage.raidRoleDataNote'])
+    setRole(el, 0, 'data')
+    expect(arrayRow(el, 0).textContent, 'マウントされないことをその行で言っていない').toContain(
+      ja['storage.raidRoleDataNote'],
+    )
+  })
+
+  it('知らない用途を書き戻さない', () => {
+    const el = build()
+    const select = byLabel(arrayRow(el, 0), t('storage.raidArrayRole')) as unknown as HTMLSelectElement
+    const rogue = document.createElement('option')
+    rogue.value = 'nonsense'
+    select.appendChild(rogue)
+    setValue(select, 'nonsense')
+    expect(raidOf().arrays[0]!.role).toBe('lvm-pv')
+  })
+})
+
+describe('ESP と /boot の大きさを入力できる', () => {
+  it('既定は 512M / 2G で、入れた値がプロファイルに入る', () => {
+    const el = render()
+    toRaid(el)
+    setUpDisks(el, ['SER-A'])
+    expect(raidOf()).toMatchObject({ espSize: '512M', bootSize: '2G' })
+
+    setValue(byLabel(el, t('storage.raidEspSize')), '1G')
+    setValue(byLabel(el, t('storage.raidBootSize')), '3G')
+    expect(raidOf()).toMatchObject({ espSize: '1G', bootSize: '3G' })
+  })
+
+  it('不正な大きさはその場で分かる', () => {
+    const el = render()
+    toRaid(el)
+    setUpDisks(el, ['SER-A'])
+    expect(el.textContent).not.toContain(ja['adv.swapSizeHint'])
+    setValue(byLabel(el, t('storage.raidEspSize')), 'いっぱい')
+    expect(el.textContent, '不正な大きさを黙って受けている').toContain(ja['adv.swapSizeHint'])
+  })
+})
+
+describe('利用者の実機構成を画面だけで作れる（SATA×2 + NVMe×2）', () => {
+  it('4 台・3 配列を作り終えたとき error が 1 件も残らない', () => {
+    const el = render()
+    toRaid(el)
+    setUpDisks(el, ['S6RANE0T500001', 'S6RANE0T500002', 'S6CVNE0T900001', 'S6CVNE0T900002'])
+
+    // ESP は sda だけ。sdb は /boot のミラーには入るが ESP は作らない。
+    click(espSwitch(el, 1))
+    // NVMe 2 本はディスク丸ごとをメンバーにする
+    setUsage(el, 2, 'whole')
+    setUsage(el, 3, 'whole')
+
+    // md0 = /boot (RAID1, sda+sdb)
+    addArray(el)
+    setRole(el, 0, 'boot')
+    toggleMember(el, 0, 0)
+    toggleMember(el, 0, 1)
+    // md1 = LVM の PV (RAID1, sda+sdb)
+    addArray(el)
+    setRole(el, 1, 'lvm-pv')
+    toggleMember(el, 1, 0)
+    toggleMember(el, 1, 1)
+    // md2 = 作るだけ (RAID1, nvme0+nvme1)
+    addArray(el)
+    setRole(el, 2, 'data')
+    toggleMember(el, 2, 2)
+    toggleMember(el, 2, 3)
+
+    setValue(byLabel(el, t('storage.raidEspSize')), '1G')
+    setValue(byLabel(el, t('storage.raidBootSize')), '2G')
+
+    const raid = raidOf()
+    expect(raid.disks.map((d) => [d.usage, d.esp])).toEqual([
+      ['partitions', true],
+      ['partitions', false],
+      ['whole', false],
+      ['whole', false],
+    ])
+    expect(raid.arrays.map((a) => a.role)).toEqual(['boot', 'lvm-pv', 'data'])
+    const byId = new Map(raid.disks.map((d) => [d.id, d.match]))
+    expect(raid.arrays.map((a) => a.diskIds.map((id) => byId.get(id)))).toEqual([
+      [
+        { kind: 'serial', serial: 'S6RANE0T500001' },
+        { kind: 'serial', serial: 'S6RANE0T500002' },
+      ],
+      [
+        { kind: 'serial', serial: 'S6RANE0T500001' },
+        { kind: 'serial', serial: 'S6RANE0T500002' },
+      ],
+      [
+        { kind: 'serial', serial: 'S6CVNE0T900001' },
+        { kind: 'serial', serial: 'S6CVNE0T900002' },
+      ],
+    ])
+    expect(raid).toMatchObject({ espSize: '1G', bootSize: '2G' })
+
+    // ディスクまわりの error だけを見る（既定のプロファイルにはパスワード未設定の
+    // error が別にあるので、それを混ぜると何を守っているか分からなくなる）。
+    const errors = validateProfile(profileOf()).issues.filter(
+      (i) => i.severity === 'error' && i.field.startsWith('storage'),
+    )
+    expect(errors.map((i) => `${i.field}: ${i.text.key}`), 'error が残っている').toEqual([])
+    // 「作るだけ」の配列があることは info で伝わる（黙って作らない）
+    expect(el.textContent).toContain(t('validate.raidArrayNotMounted', { name: 'md2' }))
+  })
+
+  it('消えるのは 4 台。丸ごと使うディスクも数に入る（落とし穴 65）', () => {
+    const el = render()
+    toRaid(el)
+    setUpDisks(el, ['SER-A', 'SER-B', 'SER-C', 'SER-D'])
+    setUsage(el, 2, 'whole')
+    setUsage(el, 3, 'whole')
+    addArray(el)
+    for (let i = 0; i < 4; i++) toggleMember(el, 0, i)
+    expect((el.firstElementChild as HTMLElement).textContent).toContain(
+      t('storage.warningRaid', { count: 4 }),
+    )
   })
 })

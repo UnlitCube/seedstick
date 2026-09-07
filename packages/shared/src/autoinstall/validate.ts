@@ -25,7 +25,10 @@ import {
   RAID_MIN_DEVICES,
   isValidLvmName,
   isValidRaidArrayName,
+  raidDiskMakesEsp,
+  raidDiskUsageOf,
   raidHasRedundancy,
+  raidRolePartClass,
 } from './raid.js'
 import {
   interactiveSectionsFor,
@@ -244,16 +247,32 @@ function validateRaidStorage(raid: RaidStorageConfig, add: AddIssue): void {
     }
   })
 
-  const bootDisks = disks.filter((d) => d?.boot === true)
-  if (disks.length > 0 && bootDisks.length === 0) {
+  // **丸ごとメンバーのディスクには ESP も /boot も置けない**（切る場所が無い）。
+  // 生成側は黙って作らないので、ここで矛盾だと伝える。設定は残るので
+  // 「ESP を外す」か「使い方をパーティションに戻す」で解除できる（落とし穴 66）。
+  disks.forEach((d, i) => {
+    if (raidDiskUsageOf(d) === 'whole' && (d as { esp?: unknown } | null)?.esp === true) {
+      add('error', `${F}.disks[${i}]`, 'validate.raidWholeDiskEsp', { n: i + 1 })
+    }
+  })
+
+  // ESP を作るディスク。`/boot` 用の配列のメンバーかどうかとは**別の軸**。
+  const espDisks = disks.filter((d) => raidDiskMakesEsp(d))
+  if (disks.length > 0 && espDisks.length === 0) {
     add('error', `${F}.disks`, 'validate.raidNoBootDisk')
-  } else if (bootDisks.length === 1 && disks.length > 1) {
+  } else if (espDisks.length === 1 && disks.length > 1) {
     add('info', `${F}.disks`, 'validate.raidSingleBootDisk')
   }
 
   // --- 配列 ---
   const bootArrays = arrays.filter((a) => a?.role === 'boot')
   const pvArrays = arrays.filter((a) => a?.role === 'lvm-pv')
+  const diskById = new Map<string, (typeof disks)[number]>()
+  for (const d of disks) {
+    const id = text(d?.id)
+    // 重複した id は先に出てきたほうを採る（`indexDisks` と同じ。検証が別途 error にする）。
+    if (id && !diskById.has(id)) diskById.set(id, d)
+  }
   if (arrays.length === 0) {
     add('error', `${F}.arrays`, 'validate.raidNoArrays')
   } else {
@@ -297,18 +316,23 @@ function validateRaidStorage(raid: RaidStorageConfig, add: AddIssue): void {
     if (new Set(all).size !== all.length) {
       add('error', where, 'validate.raidDiskDuplicatedInArray', { name: label })
     }
-    // 同じ用途の配列に同じディスクが 2 度出ると、そのディスクのどちらの配列に
+    // 同じパーティションを 2 つの配列が取り合うと、そのディスクにどちらの配列の
     // パーティションを作ればよいか決まらない（`/boot` 用と PV 用の 2 本に
-    // 同じディスクが入るのは**正常**なので、用途ごとに見る）。
-    const role = typeof a?.role === 'string' ? a.role : 'lvm-pv'
-    const used = usedByRole.get(role) ?? new Set<string>()
+    // 同じディスクが入るのは**正常**なので、作るパーティションの種類ごとに見る）。
+    //
+    // `lvm-pv` と `data` は**同じデータ用パーティション**を使うので、ここで衝突する。
+    // 丸ごとメンバー (`usage: 'whole'`) はディスクそのものがメンバーなので、
+    // 用途にかかわらず 2 つの配列には入れられない（`whole` という 1 つの枠で見る）。
     for (const id of new Set(all)) {
+      const cls =
+        raidDiskUsageOf(diskById.get(id)) === 'whole' ? 'whole' : raidRolePartClass(a?.role)
+      const used = usedByRole.get(cls) ?? new Set<string>()
       if (used.has(id)) {
         add('error', where, 'validate.raidDiskInTwoArraysOfSameRole', { name: label })
       }
       used.add(id)
+      usedByRole.set(cls, used)
     }
-    usedByRole.set(role, used)
 
     // 最小台数は curtin のドキュメントの数字（R8 の表）。**RAID10 は 4 台から。**
     const level = a?.level
@@ -332,20 +356,38 @@ function validateRaidStorage(raid: RaidStorageConfig, add: AddIssue): void {
     }
 
     if (a?.role === 'boot') {
-      for (const id of all) {
-        const d = disks.find((x) => text(x?.id) === id)
-        if (d && d.boot !== true) {
-          add('warning', where, 'validate.raidBootArrayMemberNotBootDisk', { name: label })
-          break
-        }
+      // **「ESP を作るか」と「/boot のメンバーか」は別の軸**なので、
+      // 「ESP を作らないディスクが /boot 配列に入っている」こと自体は正常
+      // （ESP は 1 台目だけ・/boot は 2 台のミラー、という構成がまさにそれ）。
+      //
+      // 危ないのは「ESP を作るディスクが 1 台もこの配列に入っていない」ほう。
+      // GRUB は ESP のあるディスクから起動して /boot を読むので、
+      // /boot がまったく別のディスク群にあると、そのディスクが 1 台落ちただけで
+      // 起動できなくなる組み合わせになりうる。
+      const hasEspMember = all.some((id) => raidDiskMakesEsp(diskById.get(id)))
+      if (all.length > 0 && espDisks.length > 0 && !hasEspMember) {
+        add('warning', where, 'validate.raidBootArrayWithoutEspDisk', { name: label })
+      }
+      // 丸ごとメンバーには /boot 用のパーティションを切れない（矛盾）。
+      const wholeMembers = all.filter((id) => raidDiskUsageOf(diskById.get(id)) === 'whole')
+      if (wholeMembers.length > 0) {
+        add('error', where, 'validate.raidWholeDiskInBootArray', {
+          name: label,
+          count: wholeMembers.length,
+        })
       }
     }
   })
 
-  // --- 使われないディスク・消えるディスク ---
+  // --- 使われないディスク・消えるディスク・マウントしない配列 ---
   // `buildRaidPlan` と同じ計算を 2 度書かない（食い違うと「検証は通るのに
   // 生成だけ違う」が戻る）。
   const plan = buildRaidPlan(raid)
+  // 作るだけでマウントしない配列。黙って作ると「作ったのに使えない」に見える
+  // （落とし穴 67）。ただし意図的な構成なので **error ではなく info**。止めない。
+  for (const name of plan.unmountedArrayNames) {
+    add('info', `${F}.arrays`, 'validate.raidArrayNotMounted', { name })
+  }
   for (const i of plan.unusedDiskIndexes) {
     add('warning', `${F}.disks[${i}]`, 'validate.raidDiskUnused', { n: i + 1 })
   }
@@ -365,7 +407,7 @@ function validateRaidStorage(raid: RaidStorageConfig, add: AddIssue): void {
     add('error', `${F}.rootName`, 'validate.raidRootNameInvalid', { name: text(raid.rootName) })
   }
   // そのサイズが実際に使われるときだけ見る（使われない欄で書き込みを止めない）。
-  if (bootDisks.length > 0 && !isValidSizeSpec(text(raid.espSize))) {
+  if (espDisks.length > 0 && !isValidSizeSpec(text(raid.espSize))) {
     add('error', `${F}.espSize`, 'validate.raidSizeInvalid', {
       field: localized('validate.raidFieldEsp'),
       value: text(raid.espSize),
@@ -386,7 +428,7 @@ function validateRaidStorage(raid: RaidStorageConfig, add: AddIssue): void {
   }
 
   // --- ブートローダ ---
-  if (bootDisks.length >= 2) {
+  if (espDisks.length >= 2) {
     if (raid.mirrorBootloader) {
       // 「実機で確かめていない」ことを黙らない（落とし穴 72）。
       add('info', `${F}.mirrorBootloader`, 'validate.raidGrubMirrorUnverified')

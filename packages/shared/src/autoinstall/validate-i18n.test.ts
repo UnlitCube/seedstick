@@ -125,7 +125,13 @@ function host(over: Record<string, unknown> = {}): unknown {
 
 /** RAID の 1 行。判別可能ユニオン (`match`) を含むので、既定に重ねずに毎回書く。 */
 function rdisk(over: Record<string, unknown> = {}): unknown {
-  return { id: 'd1', match: { kind: 'serial', serial: 'S1' }, boot: true, ...over }
+  return {
+    id: 'd1',
+    match: { kind: 'serial', serial: 'S1' },
+    usage: 'partitions',
+    esp: true,
+    ...over,
+  }
 }
 
 function rarray(over: Record<string, unknown> = {}): unknown {
@@ -433,7 +439,7 @@ const MUTATIONS: Record<string, () => AutoinstallProfile> = {
     broken({
       ...base(),
       storage: raidStorage({
-        disks: [rdisk({ boot: false }), rdisk({ id: 'd2', boot: false })],
+        disks: [rdisk({ esp: false }), rdisk({ id: 'd2', esp: false })],
       }),
     }),
   'RAID: 内部 ID が重複': () =>
@@ -467,9 +473,10 @@ const MUTATIONS: Record<string, () => AutoinstallProfile> = {
     broken({
       ...base(),
       storage: raidStorage({
-        disks: [rdisk(), rdisk({ id: 'd2', boot: false })],
+        disks: [rdisk(), rdisk({ id: 'd2', esp: false })],
         arrays: [
-          rarray({ id: 'ab', name: 'md0', role: 'boot' }),
+          // ESP を作るディスク (d1) が 1 台も入っていない /boot 配列。
+          rarray({ id: 'ab', name: 'md0', role: 'boot', diskIds: ['d2'] }),
           rarray({ id: 'ab2', name: 'md1', role: 'boot' }),
           rarray({ id: 'ap', name: 'md2', role: 'lvm-pv' }),
         ],
@@ -494,6 +501,26 @@ const MUTATIONS: Record<string, () => AutoinstallProfile> = {
       storage: raidStorage({
         disks: [rdisk(), rdisk({ id: 'd2' })],
         arrays: [rarray({ role: 'boot' })],
+      }),
+    }),
+  'RAID: ディスク丸ごとのメンバーと、マウントしない配列': () =>
+    broken({
+      ...base(),
+      storage: raidStorage({
+        disks: [
+          rdisk(),
+          rdisk({ id: 'd2' }),
+          // 丸ごとメンバーなのに ESP を作ることになっている（矛盾）。
+          rdisk({ id: 'd3', usage: 'whole', esp: true }),
+          rdisk({ id: 'd4', usage: 'whole', esp: false }),
+        ],
+        arrays: [
+          rarray(),
+          // 丸ごとメンバーには /boot 用のパーティションを切れない。
+          rarray({ id: 'a2', name: 'md1', role: 'boot', diskIds: ['d3', 'd4'] }),
+          // 作るだけでマウントしない配列。
+          rarray({ id: 'a3', name: 'md2', role: 'data', diskIds: ['d3', 'd4'] }),
+        ],
       }),
     }),
   'RAID: ブートローダを複製しない': () =>

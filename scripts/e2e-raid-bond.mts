@@ -126,12 +126,12 @@ function buildProfile(series: UbuntuSeries): AutoinstallProfile {
     // boot デバイス 2 個。ESP を作り、/boot の RAID1 のメンバーになる。
     ...BOOT_SERIALS.map((serial, i) => ({
       ...createRaidDisk(bootDiskId(i), { kind: 'serial' as const, serial }),
-      boot: true,
+      esp: true,
     })),
     // data 4 台。RAID10 のメンバー。ESP は作らない。
     ...DATA_SERIALS.map((serial, i) => ({
       ...createRaidDisk(dataDiskId(i), { kind: 'serial' as const, serial }),
-      boot: false,
+      esp: false,
     })),
   ]
 
@@ -385,8 +385,26 @@ const espMounts = mounts.filter((m) => espFormats.some((f) => f['id'] === m['dev
 check('ESP のマウントは 1 つだけ', espMounts.length === 1, `${espMounts.length} 個`)
 check('その 1 つが /boot/efi', espMounts[0]?.['path'] === '/boot/efi')
 
-const grubDevices = byType(config, 'disk').filter((d) => d['grub_device'] === true)
-check('grub_device は 1 台だけ（curtin の制約）', grubDevices.length === 1, `${grubDevices.length} 台`)
+// **UEFI では `grub_device` は ESP の「パーティション」に付ける。**
+// disk 側に付けた形は subiquity の `needs_bootloader_partition()` を通らず、
+// `autoinstall config did not create needed bootloader partition` で止まる
+// （24.04.3 の VM で実際に踏んだ）。
+const grubParts = config.filter((a) => a['grub_device'] === true)
+check('grub_device は 1 つだけ', grubParts.length === 1, `${grubParts.length} 個`)
+check(
+  'grub_device が付くのは ESP の partition（disk ではない）',
+  grubParts[0]?.['type'] === 'partition' && grubParts[0]['flag'] === 'boot',
+  `type=${String(grubParts[0]?.['type'])} flag=${String(grubParts[0]?.['flag'])}`,
+)
+check(
+  'disk アクションには grub_device を出さない',
+  byType(config, 'disk').every((d) => d['grub_device'] === undefined),
+)
+const grubEspFs = formats.find((f) => f['volume'] === grubParts[0]?.['id'])
+check(
+  'grub_device の ESP が /boot/efi にマウントされる',
+  mounts.some((m) => m['device'] === grubEspFs?.['id'] && m['path'] === '/boot/efi'),
+)
 
 // data ディスクには ESP を作らない（boot: false）。
 const dataDisks = byType(config, 'disk').filter((d) => {
@@ -492,8 +510,8 @@ const tooFew: AutoinstallProfile = {
     raid: {
       ...createDefaultRaidStorage(),
       disks: [
-        { ...createRaidDisk('d0', { kind: 'serial', serial: 'S0' }), boot: true },
-        { ...createRaidDisk('d1', { kind: 'serial', serial: 'S1' }), boot: true },
+        { ...createRaidDisk('d0', { kind: 'serial', serial: 'S0' }), esp: true },
+        { ...createRaidDisk('d1', { kind: 'serial', serial: 'S1' }), esp: true },
       ],
       arrays: [
         {
@@ -526,7 +544,7 @@ const justEnough: AutoinstallProfile = {
       ...structuredStorage(tooFew).raid,
       disks: [0, 1, 2, 3].map((i) => ({
         ...createRaidDisk(`d${i}`, { kind: 'serial' as const, serial: `S${i}` }),
-        boot: i < 2,
+        esp: i < 2,
       })),
       arrays: [
         {
