@@ -5,7 +5,7 @@
 落とし穴そのものは `CLAUDE.md` の「落とし穴」節に入れてあるので、
 ここには**状態**と**残っていること**だけを書く。
 （項目数は変わるので断定しない。数えるなら `grep -cE '^[0-9]+\. \*\*' CLAUDE.md`。
-2026-09-05 時点で **81**。6 巡目で 79〜81 が増えた。）
+2026-09-07 時点で **103**。RAID / bond の巡で 94〜103 が増えた。）
 
 ---
 
@@ -13,18 +13,33 @@
 
 ### 検証結果
 
-上 4 行は**このセッションで実際に実行して数えた**。
+上 6 行は**このセッションで実際に実行して数えた**（作業ツリー、`git rev-parse HEAD` = `e1843bb`）。
 下 2 行は**過去のログの数字で、現行コードに対するものではない**（→ 3.2）。
 
 | 検証 | コマンド | 結果 | いつ測ったか |
 |---|---|---|---|
-| 型検査 | `npm run typecheck` | 通過（**5 つ**の tsconfig） | 今回（作業ツリー） |
-| ユニットテスト | `npm run test:unit` | **993 / 993**（54 ファイル） | 今回（作業ツリー） |
-| スモーク（実 ISO → `.img`） | `npm run smoke` | **98 / 98** | 今回（作業ツリー） |
-| E2E マトリクス（実 ISO × 設定 10 パターン） | `npm run e2e` | **402 / 402** | 今回（作業ツリー） |
+| 型検査 | `npm run typecheck` | **5 / 5 通過** ✅ | 今回（作業ツリー） |
+| ユニットテスト | `npm run test:unit` | **1206 / 1207**（61 ファイル、skip 1） ✅ | 今回（作業ツリー） |
+| スモーク（実 ISO → `.img`） | `npm run smoke` | **98 / 98** ✅ | 今回（作業ツリー） |
+| E2E マトリクス（実 ISO × 設定 10 パターン） | `npm run e2e` | **402 / 402** ✅ | 今回（作業ツリー） |
+| **RAID + bond の生成検証** | `npm run e2e:raid-bond` | **70 / 70** ✅ | 今回（作業ツリー） |
+| **イメージ保存の経路（実 ISO 2 種 → `.img`）** | `npm run e2e:image` | **84 / 84** ✅ | 今回（作業ツリー） |
 | 実 USB への書き込み | `npm run e2e:usb`（管理者権限） | 19/19 | **過去のログ。SHA 不明** |
 | **昇格ワーカー経路（実 USB）** | `npm run e2e:usb-worker`（管理者権限） | **18/18** ✅ | **今回（2026-09-06）。SHA 記録あり** |
 
+- **前の巡で RED だった `image-write.test.ts` は閉じた。** 型 4 件は
+  74 行目の `Parameters<WriteSupervisor['startImageWrite']>[0]` を
+  `InstanceType<typeof WriteSupervisor>` に直して消え（`WriteSupervisor` は
+  `await import()` 由来の**値**なので型位置に書けない。TS2749）、
+  落ちていたテスト 6 件は**実装側の 3 つの実バグ**が原因だった
+  （→ 2.8）。**現在は typecheck / unit とも全緑**。
+- **書き込み経路 3 本は 1 バイトも変えていない。**
+  `git diff e1843bb -- packages/media/src/writer/execute.ts
+  packages/media/src/layout/plan.ts packages/media/src/grub/patch.ts` が空。
+  ただし **`apps/desktop/src/main/write-supervisor.ts` は +261 / -0** で、
+  `.img` 書き出し (`startImageWrite`) が**追加**されている（別セッションの作業）。
+  **削除・変更が 0 行**なので既存の USB 書き込み経路は素通しのままだが、
+  「4 本とも無改変」ではなくなっている。
 - **型検査は 4 つから 5 つに増えた。** `scripts/tsconfig.json` を足したため
   （`scripts/` は長らく対象外で、`ValidationIssue` から消えた `messageJa` を
   4 本が読み続けていた）。`CLAUDE.md` の開発コマンド表も直してある。
@@ -37,21 +52,19 @@
   HEAD の値ではない。
 - **スモークと E2E の件数は変わっていない**
   （書き込みのバイト列・順序・条件に触っていないので、増えないのが正しい）。
-  `git diff --stat HEAD -- packages/media/src/writer packages/media/src/layout
-  packages/media/src/grub apps/desktop/src/main/write-supervisor.ts` が空であることも
-  確認した。
+  `npm run e2e:image` の 84 件は**新設**（下の 2.8）。
 - **`npm run test:unit` は Git Bash から実行する。** PowerShell だと `sh` が
   PATH に無く 19 件が ENOENT で落ちる（テストの失敗ではない）。
-- 作業ツリーは**全部が未コミット**（`git rev-parse HEAD` = `565ca23`、
-  `git status --porcelain` が **63 件**＝変更 43 / 新規 20）。
-  上の 4 行はその未コミットの木に対する結果。
+- 作業ツリーは**全部が未コミット**（`git rev-parse HEAD` = `e1843bb`、
+  `git status --porcelain` が **46 件**＝変更 25 / 新規 21）。
+  上の 6 行はその未コミットの木に対する結果。
 
 ---
 
 ## 2. セッションの記録
 
-**2.1〜2.4 は前々セッション、2.5 が前セッション、2.6 が今回。**
-新しい順に読みたければ 2.6 から。
+**2.1〜2.4 は前々セッション、2.5 が前セッション、2.6〜2.8 が今回。**
+新しい順に読みたければ 2.8 から。
 
 ### 2.1 昇格ワーカー経路の実機確認（完了・前々セッション）
 
@@ -336,6 +349,162 @@ main / media のソース走査（`message:` / `label:` / `blockedReason:` に
 **それ以外は作成時の確認に依拠している。**
 次に触る人が疑うなら、そこから疑うのが正しい。
 
+### 2.7 今回のセッション：RAID + LVM と bond（利用者の要望）
+
+利用者の要望は「NIC が複数ある際の bond の設定、RAID の設定、
+ストレージを boot デバイスに 2 個設定し、RAID1 で /boot、RAID10 で LVM を組んで
+root パーティションを切る、を UI から可能に」。
+**一次資料は `docs/research/R8-raid-and-bond.md`**（curtin のアクション仕様、
+RAID の最小台数表、netplan の bonds）。
+
+合意した設計判断（変えていない）:
+
+1. **台数を決め打ちしない。** ディスクを何台でも並べ、配列ごとにレベルと
+   使うディスクを選ぶ汎用 UI。台数不足は検証で止める。
+2. **各ディスクに ESP を作り、late-commands で 2 台目以降にも `grub-install`。**
+   curtin の `grub_device` は 1 台にしか設定できないので、
+   「どちらが壊れても起動する」はこのアプリが補う。
+3. **ディスクの構成方法の 4 つ目として追加。既存の 3 つは一切変えない。**
+
+#### 実際に生成して確かめた（`npm run e2e:raid-bond`）
+
+`scripts/e2e-raid-bond.mts` を足した。**利用者の言葉どおりの構成**
+（boot 2 台 = ESP + RAID1 `/boot`、data 4 台 = RAID10 → LVM → root、
+NIC 2 枚を 802.3ad で束ねて固定 IP）を組み立て、
+`generateUserData()` の出力を**実際に YAML へ往復させて**から見る。**70 / 70 成功**。
+
+見ているのは、形の目視ではなく**機械で追える性質**:
+
+- `storage.config` を出し **`layout` は出さない**（排他）
+- **id の参照が全部解決し、前方参照が無い**（＝依存の順に並んでいる）。
+  さらに**参照先の種類**まで見る:
+  `mount.device` → `format` / `lvm_volgroup.devices` → `raid` /
+  `raid.devices` → `partition` / `lvm_partition.volgroup` → `lvm_volgroup`
+- ESP が boot ディスク 2 台にあり、**マウントは 1 つだけ**、`grub_device` は 1 台だけ
+- late-commands に 2 台目への `grub-install` が入り、
+  **ヒアドキュメントを使わず、利用者の入力を 1 文字も埋め込まず、必ず `exit 0`**
+- netplan の `bonds` にメンバーが並び、`ethernets` にも宣言があり、
+  **メンバーにアドレスが付いていない**。`802.3ad` が YAML 往復で文字列のまま残る
+- **subiquity 公式スキーマを 4 リリースとも通る**。あわせて
+  `schema.properties.storage` が 4 リリースとも `{type: object}` であることも見る
+  （＝**リリース差が無い**ことの確認。落とし穴 64）
+- **RAID10 を 2 台で組もうとすると検証が止め、4 台なら通る**（境界の両側）
+- 既存 3 モードが `layout` を出し `config` を出さないまま
+
+#### 変異検査（落とし穴 57）
+
+**このスクリプト自体が何も見ていない可能性**を潰すため、12 個の変異を入れた。
+`cp` で退避 → 変異 → 実行 → 復元し、4 ファイルとも `diff` 一致を確認済み
+（`git checkout` は使っていない。落とし穴 79）。
+
+| 変異 | 落ちた件数 |
+|---|---|
+| mount のソートを外す | 1 |
+| `RAID_MIN_DEVICES.raid10` を 4 → 2 | 2 |
+| bond のメンバーにもアドレスを付ける | 1 |
+| `grub_device` の「1 台だけ」の歯止めを外す | 1 |
+| ESP を全 boot ディスクでマウントする | 1 |
+| `mount.device` を partition の id にする | 3 |
+| 2 台目への `grub-install` を丸ごと出さない | 5 |
+| 802.3ad なのに `lacp-rate` を出さない | 1 |
+| メンバーを `ethernets` に宣言しない | 3 |
+| RAID なのに `layout` も一緒に出す | 1 |
+| mount を先頭に置く（依存の順を壊す） | 2 |
+| 読めない `match` を `{}` に落とす | **0 →** 下記 |
+
+**最後の 1 つは落ちなかった。** このスクリプトの構成は
+`match` がすべて読める（シリアル指定）ので、**その経路を踏んでいない**。
+スクリプトの穴であって実装の穴ではない
+（`raid.test.ts` が同じ変異で落ちることは StorageCore 側で確認済み）。
+**「変異を入れたが落ちなかった」ことをここに残す**のは、
+次に見る人が「12 件すべて落ちた」と誤読しないため（落とし穴 72）。
+
+また、最初に書いた変異のうち **3 つは実装に当たっていなかった**
+（置換文字列が実際のコードと違い、no-op だった）。
+`assert old in s` を入れて当たったことを確かめてから測り直している。
+**「変異を入れた」ことと「変異が効いた」ことは別。**
+
+---
+
+### 2.8 今回のセッション：イメージファイル (.img) として保存
+
+**USB を挿さず、管理者権限も要らずに、USB と同じ内容の `.img` を作れるようにした。**
+出来上がったファイルは Rufus / balenaEtcher / `dd` で焼ける。
+
+引き継いだ作業ツリーには**実装より先にテストだけがあった**
+（`image-write.test.ts` 324 行が、まだ無い `startImageWrite` を import していて
+typecheck が RED）。テストが求めている契約をそのまま実装する形で閉じた。
+
+#### 直した実バグ 3 件（`apps/desktop/src/main/write-supervisor.ts`）
+
+1. `startImageWrite()` が `write.statusCheckingPrivileges`（「権限を確認しています」）を
+   出していた。**昇格しないのに権限の話をするのは嘘。** `image.statusPreparing` に。
+2. `settleImageFailure()` が `const removed = true` を置いていて、
+   **`removeImageFile()` を一度も呼んでいなかった**。書きかけ／中止した `.img` が
+   そのまま残り、しかも「中止しました」と成功扱いになる（落とし穴 50 そのもの）。
+   → `fileCreated ? await removeImageFile(imagePath) : true`。
+   `fileCreated === false` のときは**同名の既存 `.img` に触らない**（前回作った
+   イメージを消したら事故）。
+3. `toWritingStatus()` が `bytesDone` と `bytesTotal` を**入れ替えて**写していた。
+   進捗バーが逆進する。
+
+テスト側も 1 行直した。`image-write.test.ts:74` の
+`Parameters<WriteSupervisor['startImageWrite']>[0]` は、`WriteSupervisor` が
+`await import()` で受けた**値**なので型位置に書けない（TS2749）。
+同ファイル 92 行目が既に使っている `InstanceType<typeof WriteSupervisor>` に揃えた。
+**仕様の書き換えではなく TS の書き間違いの修正**（落とし穴 56 に照らして、
+「テストを実装に合わせて緩める」ことはしていない）。
+
+#### 実際に `.img` を作って確かめた（`npm run e2e:image`）
+
+`scripts/e2e-image-file.mts` を新設。**`npm run smoke` とは通る経路が違う** ——
+smoke は media パッケージを素で並べるが、こちらは **GUI が通る main の経路**
+（`checkImageDestination` → `buildGrubPlan` + `buildIsoPatches` →
+`buildSeedBundle` → `checkFreeSpace` → `WriteSupervisor.startImageWrite`）を
+そのまま呼び、`WriteStatus` を購読して終端まで待つ。
+ipcMain の配線と保存ダイアログだけが無い。
+
+実 ISO 2 種（22.04.5 / 24.04.3）で **84 / 84 成功**。
+
+| 確かめたこと | 22.04.5 | 24.04.3 |
+|---|---|---|
+| 出来上がりのサイズ | 2.2 GB | 3.4 GB |
+| `minimumDiskSize()` と**バイト単位で一致** | ✅ | ✅ |
+| 書き出し時間（読み戻し検証こみ） | 7.0 秒 | 11.5 秒 |
+| 読み戻し検証 (`verified`) | ✅ | ✅ |
+| protective MBR / GRUB ブートコード / 0xEE がディスク全体を覆う | ✅ | ✅ |
+| GPT（ヘッダ CRC / エントリ CRC / CIDATA / 末尾のバックアップ） | ✅ | ✅ |
+| ISO9660 の Volume ID が保たれる | ✅ | ✅ |
+| **すべての casper エントリに `autoinstall`**（落とし穴 1） | ✅ | ✅ |
+| Joliet 側の Data Length も更新（落とし穴 3） | ✅ | ✅ |
+| `md5sum.txt` の grub.cfg 行（落とし穴 4） | ✅ | ✅ |
+| CIDATA の全ファイルがバイト単位で一致 | ✅ | ✅ |
+| **昇格の文言が 1 度も出ない** | ✅ | ✅ |
+| **作った `.img` を削除した**（数 GB。落とし穴 86） | ✅ | ✅ |
+
+- **31 GB の USB に書いた場合との差は 28.8 GB / 27.6 GB。**
+  デバイス容量に水増ししていないことが実測で出ている。
+- 許可リスト（落とし穴 55）は**断ることも**確かめている：ダイアログを通っていない
+  パスは `image.pathNotChosen`、開いた実績のある ISO への上書きは `image.sameAsIso`。
+  空き容量の判定も `checkFreeSpace(required, 1024)` が `image.noSpace` を返すことまで見た。
+- **監査記録は入れていない** (`auditRecord: false`)。`buildAuditRecord()` が
+  `app.getName()` を呼ぶので Electron の外（tsx）では動かせない。
+  記録そのものは `seed-builder` の単体テストが見ている。
+
+#### 変異検査（落とし穴 57）
+
+`write-supervisor.ts` を `cp` で退避してから 2 か所を壊し、スクリプトが落ちることを
+確認した（`git checkout` は使っていない。落とし穴 79。復元後 `diff` で一致を確認）。
+
+| 変異 | 落ちた検査 |
+|---|---|
+| `image.statusPreparing` → `write.statusCheckingPrivileges` | 「最初の状態は image 専用」「権限まわりの文言が 1 度も出ない」 |
+| `minimumDiskSize(...)` に `+ 4_000_000_000` | 「minimumDiskSize と一致」「水増ししていない」 |
+
+4 件が落ち、42 件中 38 件成功で `exit 1`。**このスクリプトは空回りしていない。**
+
+---
+
 ---
 
 ## 3. 残っている作業
@@ -347,6 +516,40 @@ main / media のソース走査（`message:` / `label:` / `blockedReason:` に
 6 巡目は `mode === 'lvm'` の軸を塞いだが、`series`（リリース）の軸は
 手つかずで、22.04 で「全画面で入力を待つ」と出しながら実際は完全無人だった。
 **今回入れた修正も同じ疑いを持って見るべき。** 特に:
+
+- **`grub-install` のコマンドが正しいか（RAID の巡でいちばん怪しい）。**
+  一次資料が保証しているのは「`grub_device` は 1 台」「ESP は RAID に置けない」までで、
+  **複製の手順そのものはどの資料にも書かれていない**。こちらの組み立てである。
+  疑うべき点:
+  - `--no-nvram` を付けているので **NVRAM に起動項目が増えない**。
+    1 台目が物理的に死んだとき、ファームウェアが 2 台目の ESP を自力で見つけられるかは
+    機種依存。`EFI/BOOT/BOOTX64.EFI`（removable media path）を置いて補っているが、
+    **これで足りるかは実機でしか分からない**
+  - `curtin in-target -- grub-install` が失敗したときの
+    **`cp -a` フォールバックは「1 台目の ESP の中身をそのまま複製する」だけ**。
+    grub の埋め込み設定が 1 台目のディスクを指していたら、複製しても意味が無い可能性がある
+  - ESP を **`lsblk` のパーティションタイプ GUID で探し、`findmnt` で 1 台目を除外**している。
+    USB インストールメディア自身の ESP を巻き込まないか（`findmnt` は
+    `/target/boot/efi` しか見ていないので、**インストーラ USB の ESP は除外されない**）。
+    実機で `/var/log/autoinstall-raid-esp.log` の `--- $dev` の行を読んで確かめる
+- **「ESP を 1 つだけマウントする」判断。**
+  同じ `/boot/efi` に 2 つはマウントできないので 1 台目だけを `mount` しているが、
+  その結果 **2 台目の ESP は `/etc/fstab` に載らない**。
+  つまり以後の `grub-install` / カーネル更新は 1 台目にしか届かず、
+  **時間が経つほど 2 台目が古くなる**。運用で埋めるのか、
+  `/boot/efi2` として mount まで出すのかは**未決**。
+- **RAID1 の上の `/boot` を GRUB が読めるか。**
+  metadata 1.2 の md は先頭 4 KiB にスーパーブロックを置くので、
+  GRUB は `mdraid1x` モジュールを読み込めないと `/boot` を辿れない。
+  Ubuntu の署名版 shim/grub にそれが入っている前提で組んでいるが**確かめていない**。
+  ここが外れると「インストールは完走するのに起動しない」という
+  いちばん気づきにくい形になる。
+- **`storage.config` を出すと、このアプリの他の機能が効かなくなっていないか。**
+  `layout` 前提で書いた分岐（`reset-partition` / `partitionTable` / `match`）は
+  検証で「効きません」と伝えるようにしたが、**数え上げてはいない**。
+  `grep -n "storage\." packages/shared/src/autoinstall/generate.ts` で
+  `mode === 'raid'` のとき通らない枝を全部拾い、
+  **どれも検証が言及しているか**を突き合わせるのが次の巡の宿題（落とし穴 67 / 73）。
 
 - **`seriesGate` の網羅。** 7 巡目で `SERIES_FEATURES` の 11 フラグを
   表にして塞いだが、**フラグが増えたときに追いつく保証は
@@ -390,6 +593,50 @@ main / media のソース走査（`message:` / `label:` / `blockedReason:` に
 「今回の修正そのもの」を攻撃対象にした新しいスクリプトを書くほうがよい。
 
 ### 3.2 実機でしか確かめられないこと
+
+- **GUI からのイメージ保存は、動かして確かめていない。**
+  通したのは `npm run e2e:image`（`scripts/e2e-image-file.mts`）だけで、
+  これは **main の関数を tsx から直接呼んでいる**。
+  **Electron を起動していないので、次の 3 つは未検証**:
+  1. **保存ダイアログ** (`dialog.showSaveDialog`)。既定ファイル名の生成
+     (`suggestImageFileName`) と `allowedImagePaths` への登録は単体テストが見ているが、
+     **実際にダイアログが開いて `.img` フィルタが効くところは見ていない**。
+     ここが唯一の許可の入口（落とし穴 55）なので、動かないと機能が丸ごと使えない。
+  2. **ipcMain の配線**（`chooseImagePath` / `startImageWrite` の
+     `preload` → `window.autoinstall` → `store.saveAsImage()`）。
+     契約は型で繋がっていて `ipc.test.ts` も緑だが、**実際の IPC を往復していない**。
+  3. **画面の見え方**。`write-image-target.test.tsx` (18 件) は jsdom で
+     class 名と DOM 構造までしか見ていない。Tailwind の実描画・
+     赤いボタンとの取り違えにくさ・進捗表示は**目視していない**。
+  やるなら `npm run dev` で GUI を開き、ISO を選んで「イメージファイル (.img) として
+  保存」→ 保存先を指定 → 完了画面にフルパスが出るところまで。
+  **中止 (`cancelWrite`) で書きかけの `.img` が消えることも実際に見ておくとよい**
+  （消す処理は今回直したばかりで、単体テストとスクリプト経由でしか通っていない）。
+- **`.img` を実際に焼いて起動させていない。** `dd` / Rufus / balenaEtcher で
+  USB に焼き、そこから無人インストールが完走するかは未確認。
+  読み戻し検証が見るのは「書いたものが読めるか」だけ（落とし穴 62）。
+
+- **RAID / bond の構成は、実機でも VM でもインストールを完走させていない。**
+  確かめたのは **YAML の形と、subiquity 公式スキーマを 4 リリースとも通ること**まで
+  （`npm run e2e:raid-bond` 70/70）。
+  **「スキーマを通る」は「そのとおりに組まれる」ではない。**
+  `storage` のスキーマは 4 リリースとも `{type: object}` でしかないので、
+  **アクション列の中身はスキーマ検証を一切通っていない**（中身の正しさを保証するのは
+  curtin であって、autoinstall のスキーマではない）。実機で見るべき順:
+  1. RAID10 が 4 台で組まれ、その上に LVM の PV が乗るか
+  2. **RAID1 の上の `/boot` を GRUB が読めるか**（下の 3.1 参照）
+  3. 1 台目から起動し、**2 台目からも起動するか**（＝ late-commands の複製が効いたか）。
+     結果は新システムの `/var/log/autoinstall-raid-esp.log` に
+     `RESULT: ok` / `incomplete` / `nothing to do` の 1 行で残る
+  4. bond のリンクが上がるか。**`802.3ad` はスイッチ側にも LACP の設定が要る**ので、
+     スイッチが未設定だとリンクが上がらない。切り分けの起点はここ
+- **`size: -1` を `lvm_partition` に使えるかは実機未確認。**
+  autoinstall リファレンスの節タイトル "Partition/logical volume extensions" から
+  読み取っただけで、**例が載っているのはパーティション側だけ**。
+- **BIOS 起動（`flag: bios_grub`）に対応していない。** GPT + UEFI のみ。
+  `grub-install` も `--target=x86_64-efi` 決め打ちなので **arm64 でも効かない**。
+- **root のサイズが VG の容量を超えるかは検査していない**（ディスク容量を知らないため）。
+  形式検査だけなので、`rootSize` に大きすぎる値を書くと**インストール中に**落ちる。
 
 - ~~**書き込み経路の実機再検証。**~~ **→ 通した（2026-09-06）。**
   `.e2e\run-elevated.ps1 worker`（＝`npm run e2e:usb-worker`。GUI が実際に使う

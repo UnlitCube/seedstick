@@ -6,6 +6,8 @@ import type {
   ChecksumResult,
   DeviceInfo,
   GeneratedConfig,
+  ImageTarget,
+  ImageWriteRequest,
   IsoOpenResult,
   LocalizedText,
   PickedFile,
@@ -96,6 +98,17 @@ const api: AutoinstallApi = {
   cancelWrite: () => ipcRenderer.invoke('cancelWrite') as Promise<void>,
   onWriteStatus: (cb) => subscribe('write-status', cb),
   getWriteStatus: () => ipcRenderer.invoke('getWriteStatus') as Promise<WriteStatus>,
+
+  // イメージファイル (.img) への書き出し。昇格しない経路だが、進捗と中止は
+  // デバイスへの書き込みと同じチャネル（write-status / cancelWrite）を使う。
+  chooseImagePath: (suggestedName: string) =>
+    ipcRenderer.invoke('chooseImagePath', suggestedName) as Promise<ImageTarget | null>,
+  startImageWrite: (req: ImageWriteRequest) =>
+    ipcRenderer.invoke('startImageWrite', req) as Promise<{
+      started: boolean
+      message?: LocalizedText
+      detail?: string | null
+    }>,
 
   getSettings: () => ipcRenderer.invoke('getSettings') as Promise<AppSettings>,
   saveSettings: (next: AppSettings) => ipcRenderer.invoke('saveSettings', next) as Promise<AppSettings>,

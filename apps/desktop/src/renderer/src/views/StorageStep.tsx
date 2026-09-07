@@ -3,8 +3,8 @@ import { Eye, EyeOff } from 'lucide-react'
 import {
   SERIES_FEATURES,
   createDefaultProfile,
+  createDefaultRaidStorage,
   isValidSizeSpec,
-  type DiskMatch,
   type StorageConfig,
   type SwapMode,
 } from '@autoinstall/shared'
@@ -23,6 +23,8 @@ import {
   TextArea,
   TextInput,
 } from '../components/ui.js'
+import { DiskMatchPicker } from './sections/DiskMatchPicker.js'
+import { RaidStorageSection, raidWipeCount } from './sections/RaidStorage.js'
 
 type Mode = StorageConfig['mode']
 
@@ -61,6 +63,13 @@ function isObject(value: unknown): value is Record<string, unknown> {
  * 設定が失われていることに気づけない。呼び出し側は `undefined` のとき
  * **折りたたみを開いた状態**にして、中を見せる。
  *
+ * RAID + LVM (`mode: 'raid'`) では、折りたたみの中に**描画されるもの**が
+ * swap・パーティション形式・復旧用パーティションの 3 つになる（`useWholeDisk` と
+ * 暗号化は LVM レイアウトにしか無いので描画されない）。数えるのはそこだけ。
+ * RAID の構成そのもの（ディスクと配列）は**表に出している**ので数えない。
+ * `undefined`（＝読めない）に落とさないこと: 折りたたみが常に開いたままになり、
+ * 「読めない設定がある」という嘘を毎回出すことになる。
+ *
  * 判別可能ユニオン（`raw` とそれ以外）は判別子ごとに読む（落とし穴 22 / 29）。
  * 暗号化は「入っているかどうか」で数える（パスフレーズを打ち直しても件数は増えない）。
  * 復旧用パーティションは**そのリリースで UI に出ないときも数える**。
@@ -78,7 +87,14 @@ export function countStorageDetailChanges(
     if (typeof yaml !== 'string') return undefined
     return yaml.trim().length > 0 ? 1 : 0
   }
-  if (s['mode'] !== 'lvm' && s['mode'] !== 'direct' && s['mode'] !== 'zfs') return undefined
+  if (
+    s['mode'] !== 'lvm' &&
+    s['mode'] !== 'direct' &&
+    s['mode'] !== 'zfs' &&
+    s['mode'] !== 'raid'
+  ) {
+    return undefined
+  }
   // 既定が raw になることはないが、比較の相手も同じ疑いで見る。
   if (defaults.mode === 'raw') return undefined
 
@@ -137,6 +153,10 @@ export function StorageStep(): React.JSX.Element {
         swap: { mode: 'installer-default', size: '4G' },
         partitionTable: 'default',
         resetPartition: { enabled: false, size: '' },
+        // RAID の構成は「生の curtin」から戻ってきた時点では何も無い。
+        // ここで既定を入れておかないと `mode: 'raid'` へ移った瞬間に
+        // 参照するものが無くなる。
+        raid: createDefaultRaidStorage(),
       })
     } else {
       // 暗号化のパスフレーズは LVM レイアウトにしか無い設定なので、
@@ -148,6 +168,16 @@ export function StorageStep(): React.JSX.Element {
       // `sizing-policy` は lvm レイアウトにしか出ない（`generate.ts`）。
       // 残すと direct / zfs で「1 件変更」の Badge だけが出て、
       // 開いても変えた覚えのある設定が 1 つも見つからない。
+      //
+      // **RAID の構成 (`storage.raid`) は逆に残す**（`...storage` でそのまま写る）。
+      // 消す理由がこの 2 つにはあって RAID には無いから:
+      //   - 暗号化と `useWholeDisk` は、他のモードでは**検証が指摘を出す**のに
+      //     解除する操作が画面から消える（＝書き込めないまま直せない）
+      //   - RAID の構成は `mode !== 'raid'` のとき検証に一切かからない
+      //     （`validate.ts` は `mode === 'raid'` のときだけ `validateRaidStorage` を呼ぶ）。
+      //     出力にも出ない。残しても壊れない値なので、消すと
+      //     「4 台ぶんのシリアルを打ち直す」だけの損になる。
+      //     RAID を選び直せばそのまま戻ってくる（落とし穴 61 / 66）。
       setStorage({
         ...storage,
         mode,
@@ -159,12 +189,26 @@ export function StorageStep(): React.JSX.Element {
 
   return (
     <div className="space-y-5">
-      <Callout tone="danger" title={t('storage.warning')}>
+      {/*
+        **RAID では消えるディスクが 1 台ではない。**「選んだディスクの中身はすべて
+        消去されます」のままだと、4 台構成でも 1 台の話に読める（落とし穴 65）。
+        台数は `buildRaidPlan` から導く（＝実際に書き込む台数。使わないディスクには
+        `disk` アクションを出さないので、その分は数えない）。
+      */}
+      <Callout
+        tone="danger"
+        title={
+          storage.mode === 'raid'
+            ? t('storage.warningRaid', { count: raidWipeCount(storage.raid) })
+            : t('storage.warning')
+        }
+      >
         {t('storage.warningBody')}
       </Callout>
 
       {/*
-        構成方法（LVM / そのまま / ZFS / 生の curtin）とディスクの指定は**必ず表に出す**。
+        構成方法（LVM / そのまま / ZFS / RAID + LVM / 生の curtin）とディスクの指定は
+        **必ず表に出す**。
         「どのディスクが消えるか」を決めるのはこの 2 つで、たたんだまま気づけないと
         取り返しがつかない（落とし穴 65）。
         生の curtin を選ぶと swap や暗号化は使われなくなるが、その関係が折りたたみで
@@ -192,6 +236,12 @@ export function StorageStep(): React.JSX.Element {
               description: t('storage.layoutZfsHint'),
             },
             {
+              value: 'raid',
+              label: t('storage.layoutRaid'),
+              badge: <Badge>{t('common.advanced')}</Badge>,
+              description: t('storage.layoutRaidHint'),
+            },
+            {
               value: 'raw',
               label: t('storage.layoutRaw'),
               badge: <Badge>{t('common.advanced')}</Badge>,
@@ -201,10 +251,29 @@ export function StorageStep(): React.JSX.Element {
         />
       </Card>
 
-      {storage.mode !== 'raw' && (
+      {/*
+        RAID + LVM では「どのディスクにインストールするか」は 1 バイトも使われない
+        （出力するのは `storage.config` で、そこには配列ごとのディスク指定が入る）。
+        ここに残すと**ディスクを決める場所が 2 つある**画面になり、
+        どちらが効くのか分からないまま「使われないほう」を直しかねない。
+        値そのものは消さずに残す（他のモードへ戻せばそのまま編集できる。落とし穴 61 / 66）。
+        効かないことは検証が `validate.raidMatchIgnored` で伝える（落とし穴 67）。
+      */}
+      {storage.mode !== 'raw' && storage.mode !== 'raid' && (
         <Card title={t('storage.match')} description={t('storage.matchHint')}>
           <DiskMatchPicker value={storage.match} onChange={(match) => setStorage({ ...storage, match })} />
         </Card>
+      )}
+
+      {/*
+        RAID の構成は**折りたたみの外**に置く。ここが「どのディスクが何台消えるか」を
+        決める場所で、隠したものを要約が見ていない限り「既定のまま」に見えてしまう。
+      */}
+      {storage.mode === 'raid' && (
+        <RaidStorageSection
+          raid={storage.raid}
+          onChange={(raid) => setStorage({ ...storage, raid })}
+        />
       )}
 
       {/*
@@ -286,6 +355,16 @@ export function StorageStep(): React.JSX.Element {
                   )}
                 </Field>
               )}
+              {/*
+                RAID + LVM で効かない設定は、**隠さずに「効かない」と書く**（落とし穴 67）。
+                隠すと、有効なまま保存されたプロファイルを開いたときに解除できなくなる
+                （落とし穴 61 / 66）。復旧用パーティションは検証も
+                `validate.raidResetPartitionIgnored` で伝えるが、それが見えるのは
+                確認画面まで進んだあと。
+              */}
+              {features.resetPartition && storage.mode === 'raid' && (
+                <Callout tone="info">{t('validate.raidResetPartitionIgnored')}</Callout>
+              )}
               {features.resetPartition && (
                 <Switch
                   checked={storage.resetPartition.enabled}
@@ -364,7 +443,16 @@ export function StorageStep(): React.JSX.Element {
               </div>
             )}
 
-            <div className="mt-4">
+            <div className="mt-4 space-y-3">
+              {/*
+                RAID + LVM は `disk` アクションに `ptable: gpt` を直接書く
+                （`generate-raid.ts`）。この選択は 1 バイトも出力に出ない。
+                **検証はここを何も言わない**ので、画面で言う（落とし穴 67）。
+                → 検証にも足すべき。担当（StorageCore）へ申し送り済み。
+              */}
+              {storage.mode === 'raid' && (
+                <Callout tone="info">{t('storage.raidPtableIgnored')}</Callout>
+              )}
               <Field label={t('storage.partitionTable')}>
                 {(id) => (
                   <Select
@@ -389,104 +477,6 @@ export function StorageStep(): React.JSX.Element {
           </>
         )}
       </Disclosure>
-    </div>
-  )
-}
-
-function DiskMatchPicker({
-  value,
-  onChange,
-}: {
-  value: DiskMatch
-  onChange: (value: DiskMatch) => void
-}): React.JSX.Element {
-  const t = useT()
-  return (
-    <div className="space-y-3">
-      <Select
-        value={value.kind}
-        onChange={(kind) => {
-          switch (kind) {
-            case 'largest':
-            case 'smallest':
-            case 'ssd':
-            case 'any':
-              onChange({ kind })
-              break
-            case 'path':
-              onChange({ kind: 'path', path: '' })
-              break
-            case 'serial':
-              onChange({ kind: 'serial', serial: '' })
-              break
-            default:
-              onChange({ kind: 'model', model: '' })
-          }
-        }}
-        options={[
-          { value: 'largest', label: t('storage.matchLargest') },
-          { value: 'smallest', label: t('storage.matchSmallest') },
-          { value: 'ssd', label: t('storage.matchSsd') },
-          { value: 'any', label: t('storage.matchAny') },
-          { value: 'path', label: t('storage.matchPath') },
-          { value: 'serial', label: t('storage.matchSerial') },
-          { value: 'model', label: t('storage.matchModel') },
-        ]}
-      />
-      {value.kind === 'path' && (
-        <Field label={t('storage.pathLabel')} hint={t('storage.pathHint')}>
-          {(id) => (
-            <TextInput
-              id={id}
-              value={value.path}
-              spellCheck={false}
-              placeholder="/dev/nvme0n1"
-              onChange={(e) => onChange({ kind: 'path', path: e.target.value })}
-            />
-          )}
-        </Field>
-      )}
-      {value.kind === 'serial' && (
-        <Field
-          label={t('storage.serialLabel')}
-          hint={t('storage.serialHint')}
-        >
-          {(id) => (
-            <TextInput
-              id={id}
-              value={value.serial}
-              spellCheck={false}
-              placeholder="CT500MX*"
-              onChange={(e) => onChange({ kind: 'serial', serial: e.target.value })}
-            />
-          )}
-        </Field>
-      )}
-      {value.kind === 'model' && (
-        <Field label={t('storage.modelLabel')} hint={t('storage.modelHint')}>
-          {(id) => (
-            <TextInput
-              id={id}
-              value={value.model}
-              spellCheck={false}
-              placeholder="Samsung SSD*"
-              onChange={(e) => onChange({ kind: 'model', model: e.target.value })}
-            />
-          )}
-        </Field>
-      )}
-      {value.kind === 'any' && (
-        // **危険な設定ほど強い助言を出す**（落とし穴 65）。
-        // `match: {}` は「どのディスクでもよい」＝複数ディスク機で
-        // どれが消えるか分からない、この画面で最も危険な指定。
-        // より安全な largest / smallest / ssd にだけ注意書きがあり、
-        // ここだけ無言だった（検証は出るが、それは確認画面まで見えないうえ、
-        // 実行時にディスクを決める設定では出ない）。
-        <Callout tone="warning">{t('validate.diskMatchAny')}</Callout>
-      )}
-      {(value.kind === 'largest' || value.kind === 'smallest' || value.kind === 'ssd') && (
-        <Callout tone="info">{t('storage.usbExcluded')}</Callout>
-      )}
     </div>
   )
 }

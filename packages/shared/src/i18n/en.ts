@@ -29,6 +29,8 @@ export const en = {
   'common.show': 'Show',
   'common.hide': 'Hide',
   'common.edit': 'Edit',
+  'common.moveUp': 'Move up',
+  'common.moveDown': 'Move down',
 
   // --- formatting ---
   'format.etaMinutesSeconds': 'about {minutes}m {seconds}s',
@@ -247,6 +249,50 @@ export const en = {
   'network.detailsInactive':
     'Choose "Write the netplan YAML directly" above and the editor appears here.',
 
+  // --- network: bonding ---
+  'network.modeBond': 'Bond several network cards together',
+  'network.modeBondHint':
+    'Treat two or more NICs as one link, for redundancy (traffic keeps flowing if one goes down) or to add up bandwidth.',
+  'network.bondTitle': 'Bond settings',
+  'network.bondName': 'Bond name',
+  'network.bondNameHint': 'e.g. bond0. This becomes the netplan device name.',
+  'network.bondMembers': 'Network cards to bond',
+  'network.bondMembersHint':
+    'List two or more. The cards listed here do not get an IP address of their own.',
+  'network.bondMember': 'Network card {n}',
+  'network.bondAddMember': 'Add a network card',
+  'network.bondRemoveMember': 'Remove this row',
+  'network.bondParameters': 'How they are bonded',
+  'network.bondMode': 'Mode',
+  'network.bondModeHint': 'This decides whether the switch has to be configured as well.',
+  'network.bondModeActiveBackup': 'active-backup (one card standing by; no switch setup)',
+  'network.bondMode8023ad': '802.3ad (LACP; the switch must be configured)',
+  'network.bondModeBalanceRr': 'balance-rr (round robin)',
+  'network.bondModeBalanceXor': 'balance-xor (spread by destination)',
+  'network.bondModeBalanceTlb': 'balance-tlb (outgoing traffic balanced)',
+  'network.bondModeBalanceAlb': 'balance-alb (both directions balanced)',
+  'network.bondModeBroadcast': 'broadcast (send everything on every card)',
+  'network.bondLacpRate': 'LACP rate (lacp-rate)',
+  'network.bondLacpRateHint':
+    'Only has an effect with 802.3ad. Leave it empty to follow the netplan default.',
+  'network.bondLacpRateDefault': 'Not specified (netplan default)',
+  'network.bondLacpRateFast': 'fast (every second)',
+  'network.bondLacpRateSlow': 'slow (every 30 seconds)',
+  'network.bondMiiMonitor': 'Link monitoring interval (mii-monitor-interval)',
+  'network.bondMiiMonitorHint':
+    'Milliseconds. 0 means no monitoring, so an unplugged cable never triggers a failover. Around 100 is normal in production.',
+  'network.bondHashPolicy': 'Transmit hash policy (transmit-hash-policy)',
+  'network.bondHashPolicyHint':
+    'Only has an effect with balance-xor and 802.3ad. e.g. layer2, layer3+4. Leave it empty to follow the netplan default.',
+  'network.bondAddressing': 'IP address of the bond',
+  'network.bondAddressingHint':
+    'The address goes on the bond itself, never on the individual cards.',
+  'network.bondAddressingDhcp': 'Get one over DHCP',
+  'network.bondAddressingStatic': 'Use a static IP',
+  'network.bondOptional': 'Do not wait for the bond at boot if it does not come up',
+  'network.bondTargetInactive':
+    'This layout does not use "Target network card" - pick the cards to bond below instead.',
+
   // --- storage ---
   'storage.title': 'Disk layout',
   'storage.warning': 'Everything on the selected disk will be erased.',
@@ -287,6 +333,71 @@ export const en = {
   'storage.layoutLvmHint':
     'You can grow the volumes or take snapshots later. This is also the Ubuntu default.',
   'storage.layoutRawHint': 'Choose this to write RAID or a complex partition layout yourself.',
+  // --- RAID + LVM ---
+  'storage.raidLevelRaid0': 'RAID0 (striped, no redundancy, 2 disks or more)',
+  'storage.raidLevelRaid1': 'RAID1 (mirrored, 2 disks or more)',
+  'storage.raidLevelRaid5': 'RAID5 (single parity, 3 disks or more)',
+  'storage.raidLevelRaid6': 'RAID6 (double parity, 4 disks or more)',
+  'storage.raidLevelRaid10': 'RAID10 (mirrored and striped, 4 disks or more)',
+  'storage.raidRoleBoot': 'Hold /boot',
+  'storage.raidRoleLvmPv': 'Be an LVM physical volume (root is carved out of it)',
+  'storage.raidFstypeExt4': 'ext4',
+  'storage.raidFstypeXfs': 'XFS',
+  'storage.layoutRaid': 'RAID + LVM (combine several disks)',
+  'storage.layoutRaidHint':
+    'Build RAID arrays across several disks, put LVM on top and carve root out of it. Arrays can be split by purpose, such as RAID1 for /boot and RAID10 for LVM. Every disk listed here is erased completely.',
+  'storage.warningRaid': 'All {count} selected disks are erased completely.',
+  'storage.raidDisksTitle': 'Disks used for RAID',
+  'storage.raidDisksHint':
+    'One row per disk. Identify each disk by serial number or device path so the wrong disk is never erased. The order decides which disk is the first boot disk.',
+  'storage.raidDisksEmpty': 'No disks listed yet.',
+  'storage.raidAddDisk': 'Add a disk',
+  'storage.raidDiskHeading': 'Disk #{n}',
+  'storage.raidDiskBoot': 'Make this disk bootable',
+  'storage.raidDiskBootHint':
+    'Creates an EFI system partition (ESP). An ESP cannot live on RAID, so one is created on each bootable disk.',
+  'storage.raidDiskBootBadge': 'Boot',
+  'storage.raidDiskIncomplete': 'No disk specified',
+  'storage.raidRowUnreadable':
+    'This row could not be read; the profile may have been edited by hand. Delete it and enter it again.',
+  'storage.raidArraysTitle': 'RAID arrays',
+  'storage.raidArraysHint':
+    'Choose a level and the disks for each array. Keep the array for /boot separate from the one used as an LVM physical volume, which is where root is created.',
+  'storage.raidArraysEmpty': 'No arrays defined yet.',
+  'storage.raidAddArray': 'Add an array',
+  'storage.raidArrayHeading': 'Array #{n}',
+  'storage.raidArrayName': 'Array name (md device)',
+  'storage.raidArrayNameHint': 'For example md0, which becomes /dev/md/md0.',
+  'storage.raidArrayLevel': 'RAID level',
+  'storage.raidArrayRole': 'What this array is for',
+  'storage.raidArrayMembers': 'Disks to use',
+  'storage.raidArrayMembersHint':
+    'Disks are handed to mdadm in the order you tick them. A spare steps in when a disk fails and does not count towards the minimum.',
+  'storage.raidLevelMin': 'Needs {need} disks or more; {have} selected.',
+  'storage.raidMemberSpare': 'Use as a spare',
+  'storage.raidLvmTitle': 'LVM and root',
+  'storage.raidLvmHint':
+    'The volume group is created on the arrays marked as an LVM physical volume, and root is a logical volume inside it.',
+  'storage.raidVolumeGroup': 'Volume group name',
+  'storage.raidRootName': 'Logical volume name for root',
+  'storage.raidRootSize': 'Size of root',
+  'storage.raidRootSizeRest': 'All remaining space',
+  'storage.raidRootSizeFixed': 'Set an explicit size',
+  'storage.raidRootSizeValue': 'Space to give root',
+  'storage.raidRootSizeHint': 'For example 100G. Space left over can be added later with lvextend.',
+  'storage.raidRootFstype': 'Filesystem for root',
+  'storage.raidBootTitle': 'Booting',
+  'storage.raidBootHint':
+    'Sizes for the ESP and /boot, and what happens to the second and later boot disks.',
+  'storage.raidEspSize': 'Size of the EFI system partition',
+  'storage.raidEspSizeHint': 'One is created on each bootable disk. For example 512M.',
+  'storage.raidBootSize': 'Size of /boot',
+  'storage.raidBootSizeHint': 'Only used when an array holds /boot. For example 2G.',
+  'storage.raidMirrorBootloader': 'Install the bootloader on the other boot disks too',
+  'storage.raidMirrorBootloaderHint':
+    'curtin installs the bootloader on one disk only. This copies it at the end of the installation so the machine still boots if the first disk dies. The procedure has not been verified on real hardware yet.',
+  'storage.raidPtableIgnored':
+    'RAID + LVM does not use this setting. The partition table is always GPT.',
   'storage.layoutZfsHint':
     'Uses a ZFS root, with far stronger snapshots and data integrity checking.',
   'storage.modelHint': 'For example Samsung SSD*. Wildcards are allowed.',
@@ -611,6 +722,46 @@ export const en = {
   'write.verifyMismatch':
     'The data read back does not match what was written (offset {offset}). The USB drive may be faulty, or it may have been removed during the write. Create the drive again, preferably with a different USB stick.',
 
+  // Writing to an image file (.img). Nothing is elevated here, so never mention
+  // administrator rights.
+  'image.statusPreparing': 'Preparing the image file',
+  'image.pathNotChosen':
+    'That destination was not chosen here. Use "Choose destination" and pick it again.',
+  'image.sameAsIso':
+    'The image cannot be written over the ISO file you selected (that would destroy the source). Choose another name.',
+  'image.overwritesPayload':
+    'The image cannot be written over {path}, which is used as a file to deploy (that would destroy the source). Choose another name.',
+  'image.noSpace':
+    'Not enough free space on the destination. {required} is required, but only {free} is available. Choose another drive or free up space, then try again.',
+  'image.createFailed':
+    'Could not create the image file. Check that the destination folder is writable.',
+  'image.cancelledLeftover':
+    'The export was cancelled, but the half-written image file could not be deleted. Delete {path} yourself (that file will not boot).',
+  'image.errorLeftover':
+    '{reason} On top of that, the half-written image file could not be deleted. Delete {path} yourself (that file will not boot).',
+  'image.doneSaved': 'Saved to {path}.',
+
+  // The "save as an image file" path on the write screen. Keep the wording
+  // clearly secondary: writing a real USB drive is what this tool is for.
+  'image.cardTitle': 'Save as an image file (.img)',
+  'image.cardHint':
+    'Create a .img file without plugging in a USB drive. Burning it later with Rufus, balenaEtcher or dd gives you exactly the same drive this app would have written directly.',
+  'image.noElevation': 'No administrator rights needed',
+  'image.saveButton': 'Save as an image file...',
+  'image.approxSize': 'Resulting file size: about {size}',
+  'image.destination': 'Destination: {path}',
+  'image.needIso': 'Choose an ISO first, and you can create an image file too.',
+  'image.needConfig':
+    'Fix the errors on the "Review" step, and you can create an image file.',
+  'image.doneTitle': 'The image file is ready',
+  'image.doneBody':
+    'Burn this file onto a USB drive with Rufus, balenaEtcher or dd, then boot the server you want to install.',
+  'image.next1':
+    'Burn the image file onto a USB drive with Rufus, balenaEtcher or dd, then plug it into the server you want to install.',
+  'image.cancelledBody': 'The half-written image file was deleted. Please try again.',
+  'write.noDevicesImage':
+    'If you do not have a USB drive at hand, use "Save as an image file (.img)" below.',
+
   // --- devices (enumeration, and the worker re-checking them) ---
   'device.blockedSystemDisk': 'This is the system disk your OS runs from',
   'device.blockedReadOnly': 'This device is write-protected',
@@ -684,6 +835,8 @@ export const en = {
   'dialog.exportBundleDir': 'Choose a folder for the generated configuration',
   'dialog.pickPayload': 'Choose a file to deploy onto the installed system',
   'dialog.filterArchive': 'Archive',
+  'dialog.saveImage': 'Choose where to save the image file',
+  'dialog.filterImage': 'Disk image',
   'dialog.readTextFile': 'Choose a file',
   'dialog.filterPublicKey': 'Public key',
   'dialog.filterText': 'Text',
@@ -1073,6 +1226,17 @@ Date: {date}`,
   'migrate.category.user': 'extra users',
   'migrate.category.service': 'services',
   'migrate.category.deployment': 'app deployments',
+  'migrate.category.raidDisk': 'disks used for RAID',
+  'migrate.category.raidArray': 'RAID arrays',
+  'migrate.field.raidLevel': 'the RAID level (storage.raid.arrays[].level)',
+  'migrate.field.raidRole': 'what the array is used for (storage.raid.arrays[].role)',
+  'migrate.field.raidRootFstype': 'the file system for root (storage.raid.rootFstype)',
+  'migrate.raidDiskRefDropped':
+    '{count} disk reference(s) held by RAID arrays pointed at disks that are not in this profile, so those references were removed. Check that no array is now short of members.',
+  'migrate.category.bondMember': 'network cards bonded together',
+  'migrate.field.bondMode': 'the bond mode (network.parameters.mode)',
+  'migrate.field.bondLacpRate': 'the LACP rate (network.parameters.lacpRate)',
+  'migrate.field.bondAddressing': 'how the bond gets its IP address (network.addressing)',
 
 
   // --- Profile validation (`validate.ts` issues) ---
@@ -1244,6 +1408,109 @@ Date: {date}`,
     'Pick a host from the GRUB menu at boot to apply its values. For a host not listed, press e and edit the arguments.',
   'validate.diskKernelArgWithRawStorage':
     'Passing the disk as a kernel argument cannot be combined with a raw curtin config.',
+  'validate.diskKernelArgWithRaidStorage':
+    'Passing the disk as a kernel argument cannot be combined with a RAID + LVM layout. RAID emits storage.config, so there is no storage.layout for the substitution script to rewrite, and the install aborts right after it starts because the argument could not be applied.',
+
+  // --- RAID + LVM (pitfall 65: the more destructive the setting, the stronger the advice) ---
+  // Field names are interpolated as nested LocalizedText so that languages with a
+  // different word order still read correctly.
+  'validate.raidFieldEsp': 'the EFI system partition (ESP)',
+  'validate.raidFieldBoot': '/boot',
+  'validate.raidFieldRoot': 'root',
+
+  'validate.raidNoDisks': 'No disks have been listed for RAID.',
+  'validate.raidNeedsTwoDisks': 'RAID needs at least two disks; only one is listed.',
+  'validate.raidDiskIdInvalid':
+    'The internal ID of disk #{n} is empty or repeats another row, so there is no way to tell which disk an array refers to.',
+  'validate.raidDiskMatchEmpty':
+    'The disk selector on disk #{n} is empty or could not be read, so no disk matches it and the installation stops at the storage stage.',
+  'validate.raidMemberMatchNotSpecific':
+    'The selector on disk #{n} ({kind}) does not pin down which disk is chosen. RAID erases every disk it uses, so name each one by serial number or device path.',
+  'validate.raidNoBootDisk':
+    'No disk is marked as a boot disk, so no EFI system partition is created and the installed system cannot start.',
+  'validate.raidSingleBootDisk':
+    'Only one disk is marked as a boot disk. If that disk fails, the machine will not start even though the RAID survives.',
+  'validate.raidNoArrays': 'No RAID arrays have been defined.',
+  'validate.raidNoLvmArray':
+    'No array is set to be an LVM physical volume, so there is nowhere to create root.',
+  'validate.raidMultipleBootArrays':
+    'More than one array is set to hold /boot, but /boot can only be mounted in one place.',
+  'validate.raidNoDedicatedBootArray':
+    'There is no separate array for /boot, so /boot ends up inside LVM alongside root. GRUB can usually read that through its mdraid1x and lvm modules, but the primary documentation says nothing about this combination. Add a separate RAID1 array for /boot if you want certainty.',
+  'validate.raidArrayNameEmpty': 'Array #{n} has no name; give it one such as md0.',
+  'validate.raidArrayNameInvalid':
+    'The array name "{name}" is not valid (start with a letter or digit, then letters, digits, . _ - only, up to 32 characters).',
+  'validate.raidArrayNameDuplicated': 'The array name "{name}" is used more than once.',
+  'validate.raidUnknownDiskRef':
+    'Array "{name}" refers to {count} disk(s) that are not in this configuration. Check that it still has enough members.',
+  'validate.raidDiskDuplicatedInArray':
+    'Array "{name}" lists the same disk twice, which includes listing it both as a member and as a spare.',
+  'validate.raidDiskInTwoArraysOfSameRole':
+    'A disk in array "{name}" also belongs to another array with the same purpose, so it is undecided which partition to create on that disk.',
+  'validate.raidTooFewDevices':
+    'Array "{name}" is {level} but only has {have} disk(s); it needs at least {need}.',
+  'validate.raidLevel0NoRedundancy':
+    'Array "{name}" is RAID0. Losing a single disk loses everything on the array.',
+  'validate.raidSparesIgnoredForLevel0':
+    'Array "{name}" is RAID0, so its spares are never used and are ignored.',
+  'validate.raidBootArrayMemberNotBootDisk':
+    'Array "{name}" contains a disk that is not marked as a boot disk. No EFI system partition is created there, so the machine cannot start from it.',
+  'validate.raidDiskUnused':
+    'Disk #{n} is not used by any array and is not a boot disk. Nothing at all is written to it, so a disk you did not mean to use is not erased.',
+  'validate.raidWipesAllMemberDisks':
+    'All {count} disks used by this RAID configuration will be erased completely. The more disks, the less there is to recover. Check each serial number.',
+  'validate.raidSizeInvalid':
+    'The size "{value}" given for {field} is not valid; write it as 4G or 512M.',
+  'validate.raidVolumeGroupNameInvalid':
+    'The volume group name "{name}" is not valid (letters, digits and + _ . - only, and it cannot start with -).',
+  'validate.raidRootNameInvalid':
+    'The logical volume name "{name}" for root is not valid (letters, digits and + _ . - only, and it cannot start with -).',
+  'validate.raidGrubMirrorUnverified':
+    'Copying the bootloader to the second and later boot disks writes its result to /var/log/autoinstall-raid-esp.log on the installed system. That step has not been verified on real hardware yet, so confirm that the machine still starts with the first disk removed.',
+  'validate.raidGrubOnlyOnFirstDisk':
+    'The bootloader is installed only on the first boot disk. If that disk fails, the machine will not start even though the RAID survives.',
+  'validate.raidMatchIgnored':
+    'With RAID + LVM the "which disk to install to" selector is ignored; the list of disks in the RAID settings is used instead.',
+  'validate.raidResetPartitionIgnored':
+    'A reset partition is not created with RAID + LVM; the setting is ignored.',
+
+  // --- bonding ---
+  'validate.bondNameEmpty': 'Enter a name for the bond (e.g. bond0).',
+  'validate.bondNameInvalid':
+    'The bond name "{name}" is not valid (must start with a letter, then letters, digits and _ . - only, up to 15 characters).',
+  'validate.bondNeedsTwoMembers':
+    'A bond needs at least two network cards ({count} listed). A single card gives neither redundancy nor extra bandwidth.',
+  'validate.bondMemberNameEmpty':
+    'Network card {n} has no name. Name the card that should join the bond.',
+  'validate.bondMemberNameInvalid':
+    'The name "{name}" of network card {n} is not valid (must start with a letter, then letters, digits and _ . - only).',
+  'validate.bondMemberMacInvalid':
+    'The MAC address of network card {n} is not valid (e.g. 52:54:00:12:34:56).',
+  'validate.bondMemberUnreadable':
+    'The selector for network card {n} could not be read. Choose the card again; as it stands, the generated config matches no interface at all.',
+  'validate.bondMemberDuplicated':
+    'Network card {n} points at a card that is already in the bond. netplan treats it as one card, so a bond meant to have two members ends up with one.',
+  'validate.bondMemberAny':
+    'Network card {n} is set to "all wired interfaces". Which cards end up in the bond is only decided on the real machine, and a card you wanted to keep for management can be swallowed too. Select it by name or MAC address.',
+  'validate.bondMemberKeyIsBondName':
+    'A bonded network card has the same name as the bond itself ("{name}"). netplan device names must be unique.',
+  'validate.bondModeInvalid': 'The bond mode "{value}" is not supported.',
+  'validate.bondAddressingInvalid':
+    '"{value}" is not a valid way for the bond to get its IP address. As it stands it is treated as DHCP.',
+  'validate.bondModeNeedsSwitchConfig':
+    '{mode} also needs LACP configured on the switch. Without it the link never comes up and the machine has no network after the install.',
+  'validate.bondLacpRateIgnored':
+    'The LACP rate only has an effect with 802.3ad, so it is not written out for the current mode ({mode}).',
+  'validate.bondHashPolicyIgnored':
+    'The transmit hash policy only has an effect with balance-xor and 802.3ad, so it is not written out for the current mode ({mode}).',
+  'validate.bondHashPolicyInvalid':
+    'The transmit hash policy "{value}" is not valid (lowercase words joined by + or -, e.g. layer2, layer3+4).',
+  'validate.bondMiiMonitorInvalid':
+    'The link monitoring interval "{value}" is not valid. Enter a whole number of milliseconds, zero or greater.',
+  'validate.bondMiiMonitorDisabled':
+    'The link monitoring interval is 0, which means no monitoring: the bond never notices an unplugged cable and never fails over. Around 100 is normal in production.',
+  'validate.bondTargetIgnored':
+    'A bond ignores the "Target network card" selector; the cards to bond are chosen in the bond settings instead.',
   'validate.networkKernelArgWithRawNetplan':
     'Passing the IP as a kernel argument cannot be combined with raw netplan YAML.',
   'validate.networkKernelArgNeedsStatic':

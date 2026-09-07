@@ -12,6 +12,10 @@ export * from './autoinstall/generate.js'
 export * from './autoinstall/generate-provisioning.js'
 export * from './autoinstall/migrate.js'
 export * from './autoinstall/presets.js'
+export * from './autoinstall/raid.js'
+export * from './autoinstall/generate-raid.js'
+export * from './autoinstall/bond.js'
+export * from './autoinstall/generate-bond.js'
 export * from './autoinstall/validate.js'
 // Node 専用（node:crypto を使う）のでバレルには載せない。main からは
 // '@autoinstall/shared/crypt' を直接 import する。renderer に Node の型を持ち込まないための境界。

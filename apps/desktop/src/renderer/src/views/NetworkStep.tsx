@@ -1,19 +1,9 @@
-import type { InterfaceSelector, NetworkConfig } from '@autoinstall/shared'
+import { createDefaultBondNetwork, type NetworkConfig } from '@autoinstall/shared'
 import { useStore } from '../store.js'
 import { useT, useTx } from '../lib/i18n.js'
-import {
-  Badge,
-  Callout,
-  Card,
-  Disclosure,
-  Field,
-  RadioGroup,
-  Select,
-  Switch,
-  TextArea,
-  TextInput,
-  useListDraft,
-} from '../components/ui.js'
+import { Badge, Callout, Card, Disclosure, RadioGroup, Switch, TextArea } from '../components/ui.js'
+import { InterfacePicker, StaticAddressFields } from './sections/NetworkFields.js'
+import { BondNetworkSection } from './sections/BondNetwork.js'
 
 type Mode = NetworkConfig['mode']
 
@@ -24,6 +14,9 @@ type Mode = NetworkConfig['mode']
  * `createDefaultProfile()` の network は `{mode:'installer-default'}` で、
  * 生の YAML は raw モードのときにしか存在しない。だから「raw であること」が
  * そのまま「既定から変わっている」になる。
+ *
+ * bond もここでは数えない。**bond の設定は折りたたみの外に全部出ている**ので、
+ * ここで数えると件数と中身が食い違う（固定 IP と同じ扱い）。
  *
  * 判別可能ユニオンを丸ごと比較しない（落とし穴 22 / 29）。**判別子だけを見る**。
  * 深い比較にすると、`static` の nameservers を並べ替えただけで、
@@ -51,17 +44,6 @@ export function NetworkStep(): React.JSX.Element {
 
   const setNetwork = (next: NetworkConfig): void => update((p) => ({ ...p, network: next }))
 
-  // カンマ区切りの欄は、正規化した配列から value を作ると区切り文字が打てない。
-  // 入力中の生テキストを保持する（useListDraft のコメント参照）。
-  const nameserversDraft = useListDraft(
-    network.mode === 'static' ? network.nameservers : [],
-    ',',
-  )
-  const searchDomainsDraft = useListDraft(
-    network.mode === 'static' ? network.searchDomains : [],
-    ',',
-  )
-
   const changeMode = (mode: Mode): void => {
     if (mode === network.mode) return
     switch (mode) {
@@ -73,6 +55,13 @@ export function NetworkStep(): React.JSX.Element {
         break
       case 'static':
         setNetwork(DEFAULT_STATIC)
+        break
+      case 'bond':
+        // 既定の `target` は `any`（＝単一 NIC の選択なし）。ここで直前のモードの
+        // 選択を持ち込むと、**利用者が何もしていないのに**「この指定は使われません」の
+        // 警告が出る状態になる。持ち込まないので警告も出ない。
+        // 保存済みプロファイルに残っていた `target` は、bond の画面から消せる。
+        setNetwork(createDefaultBondNetwork())
         break
       case 'raw':
         setNetwork({
@@ -107,6 +96,11 @@ export function NetworkStep(): React.JSX.Element {
               value: 'static',
               label: t('network.modeStatic'),
               description: t('network.modeStaticHint'),
+            },
+            {
+              value: 'bond',
+              label: t('network.modeBond'),
+              description: t('network.modeBondHint'),
             },
             {
               value: 'raw',
@@ -146,63 +140,20 @@ export function NetworkStep(): React.JSX.Element {
 
       {network.mode === 'static' && (
         <Card title={t('network.staticTitle')}>
-          <div className="grid gap-5 sm:grid-cols-2">
-            <Field label={t('network.address')} hint={t('network.addressHint')} required>
-              {(id) => (
-                <TextInput
-                  id={id}
-                  value={network.address}
-                  spellCheck={false}
-                  placeholder="192.168.1.10/24"
-                  onChange={(e) => setNetwork({ ...network, address: e.target.value })}
-                />
-              )}
-            </Field>
-            <Field label={t('network.gateway')} required>
-              {(id) => (
-                <TextInput
-                  id={id}
-                  value={network.gateway}
-                  spellCheck={false}
-                  placeholder="192.168.1.1"
-                  onChange={(e) => setNetwork({ ...network, gateway: e.target.value })}
-                />
-              )}
-            </Field>
-            <Field label={t('network.nameservers')} hint={t('network.nameserversHint')}>
-              {(id) => (
-                <TextInput
-                  id={id}
-                  value={nameserversDraft.text}
-                  spellCheck={false}
-                  placeholder="1.1.1.1, 8.8.8.8"
-                  onChange={(e) =>
-                    setNetwork({ ...network, nameservers: nameserversDraft.change(e.target.value) })
-                  }
-                />
-              )}
-            </Field>
-            <Field label={t('network.searchDomains')} hint={t('network.searchDomainsHint')}>
-              {(id) => (
-                <TextInput
-                  id={id}
-                  value={searchDomainsDraft.text}
-                  spellCheck={false}
-                  placeholder="example.local"
-                  onChange={(e) =>
-                    setNetwork({
-                      ...network,
-                      searchDomains: searchDomainsDraft.change(e.target.value),
-                    })
-                  }
-                />
-              )}
-            </Field>
-          </div>
-          <div className="mt-4">
-            <Callout tone="warning">{t('network.staticCloudInitNote')}</Callout>
-          </div>
+          <StaticAddressFields
+            value={network}
+            onChange={(patch) => setNetwork({ ...network, ...patch })}
+          />
         </Card>
+      )}
+
+      {/*
+        bond。束ねる NIC・束ね方・アドレスはすべてここ（折りたたみの外）に出す。
+        「どの NIC が束ねられるか」は畳んだまま気づけないと困る設定なので、
+        固定 IP と同じく表に置く。
+      */}
+      {network.mode === 'bond' && (
+        <BondNetworkSection value={network} onChange={(next) => setNetwork(next)} />
       )}
 
       {/*
@@ -251,64 +202,6 @@ export function NetworkStep(): React.JSX.Element {
           </p>
         )}
       </Disclosure>
-    </div>
-  )
-}
-
-function InterfacePicker({
-  value,
-  onChange,
-}: {
-  value: InterfaceSelector
-  onChange: (value: InterfaceSelector) => void
-}): React.JSX.Element {
-  const t = useT()
-  return (
-    <div className="space-y-3">
-      <Field label={t('network.interface')}>
-        {(id) => (
-          <Select
-            id={id}
-            value={value.kind}
-            onChange={(kind) => {
-              if (kind === 'any') onChange({ kind: 'any' })
-              else if (kind === 'name') onChange({ kind: 'name', name: '' })
-              else onChange({ kind: 'mac', macaddress: '' })
-            }}
-            options={[
-              { value: 'any', label: t('network.interfaceAny') },
-              { value: 'name', label: t('network.interfaceByName') },
-              { value: 'mac', label: t('network.interfaceByMac') },
-            ]}
-          />
-        )}
-      </Field>
-      {value.kind === 'name' && (
-        <Field label={t('network.interfaceName')} hint={t('network.interfaceNameHint')}>
-          {(id) => (
-            <TextInput
-              id={id}
-              value={value.name}
-              spellCheck={false}
-              placeholder="enp0s3"
-              onChange={(e) => onChange({ kind: 'name', name: e.target.value })}
-            />
-          )}
-        </Field>
-      )}
-      {value.kind === 'mac' && (
-        <Field label={t('network.macAddress')} hint={t('network.macAddressHint')}>
-          {(id) => (
-            <TextInput
-              id={id}
-              value={value.macaddress}
-              spellCheck={false}
-              placeholder="52:54:00:12:34:56"
-              onChange={(e) => onChange({ kind: 'mac', macaddress: e.target.value.toLowerCase() })}
-            />
-          )}
-        </Field>
-      )}
     </div>
   )
 }

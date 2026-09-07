@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanupTempDirs, makeTempDir } from './test-support/temp-files.js'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   createDefaultProfile,
@@ -19,6 +19,7 @@ const h = vi.hoisted(() => ({
   /** 直近に開いたネイティブダイアログの options（タイトルと種別を検査する） */
   dialogs: [] as Record<string, unknown>[],
   openDialogResult: { canceled: true, filePaths: [] as string[] },
+  saveDialogResult: { canceled: true, filePath: '' },
   settings: null as AppSettings | null,
   devices: [] as unknown[],
 }))
@@ -42,7 +43,7 @@ vi.mock('electron', () => ({
     },
     showSaveDialog: (_w: unknown, options: Record<string, unknown>) => {
       h.dialogs.push(options)
-      return Promise.resolve({ canceled: true, filePath: '' })
+      return Promise.resolve(h.saveDialogResult)
     },
   },
   shell: { openPath: () => Promise.resolve(''), openExternal: () => Promise.resolve() },
@@ -128,6 +129,7 @@ function writeRequest(profile: AutoinstallProfile, isoPath = 'C:/fake.iso'): unk
 beforeEach(() => {
   h.dialogs = []
   h.openDialogResult = { canceled: true, filePaths: [] }
+  h.saveDialogResult = { canceled: true, filePath: '' }
   h.settings = defaultSettings()
   h.devices = [DEVICE]
 })
@@ -222,6 +224,7 @@ describe('OS ネイティブのダイアログは main が訳す', () => {
     ['exportBundle', [createDefaultProfile()]],
     ['pickPayloadFile', []],
     ['readTextFile', []],
+    ['chooseImagePath', ['web-server']],
   ]
 
   it('locale=en ではタイトルにも種別にも日本語が出ない', async () => {
@@ -263,6 +266,149 @@ describe('書き出す README は生成物のコメント言語に従う', () =>
     h.openDialogResult = { canceled: false, filePaths: [dir] }
     await call('exportBundle', createDefaultProfile())
     expect(readFileSync(join(dir, 'README.txt'), 'utf8')).not.toMatch(/[ぁ-んァ-ヶ一-龠]/u)
+  })
+})
+
+// イメージファイル (.img) への書き出しは、実デバイスへの書き込みと同じ厳しさで
+// 入力を検証する。**片方だけ緩いと、緩いほうが抜け道になる。**
+// 実際に書く部分（実 ISO が要る）は smoke / e2e に任せ、ここでは入口だけを見る。
+describe('イメージ書き出しの入口', () => {
+  const imageDir = makeTempDir('image-ipc-')
+
+  function imageRequest(overrides: Record<string, unknown> = {}): unknown {
+    return {
+      isoPath: 'C:/fake.iso',
+      imagePath: join(imageDir, 'out.img'),
+      profile: createDefaultProfile(),
+      verify: false,
+      cidataSizeBytes: 64 * 1024 * 1024,
+      auditRecord: false,
+      ...overrides,
+    }
+  }
+
+  /** 保存ダイアログを通して許可リストに入れる（唯一の入口）。 */
+  async function chooseImage(path: string): Promise<{ path: string; fileName: string; freeBytes: number | null }> {
+    h.saveDialogResult = { canceled: false, filePath: path }
+    const r = await call<{ path: string; fileName: string; freeBytes: number | null } | null>(
+      'chooseImagePath',
+      'web-server',
+    )
+    expect(r).not.toBeNull()
+    return r!
+  }
+
+  it('保存ダイアログの結果を返し、既定のファイル名はプロファイル名から作る', async () => {
+    const target = join(imageDir, 'chosen.img')
+    const r = await chooseImage(target)
+    expect(r.path).toBe(target)
+    expect(r.fileName).toBe('chosen.img')
+    // 空き容量は取れないことがある（ネットワークドライブ等）。取れなければ null。
+    expect(r.freeBytes === null || typeof r.freeBytes === 'number').toBe(true)
+    const options = h.dialogs.at(-1)!
+    expect(options.defaultPath).toBe('web-server.img')
+  })
+
+  it('キャンセルしたら null を返し、そのパスは許可されない', async () => {
+    h.saveDialogResult = { canceled: true, filePath: join(imageDir, 'cancelled.img') }
+    expect(await call('chooseImagePath', 'x')).toBeNull()
+    await call('openIso', 'C:/fake.iso')
+    const r = await call<StartResult>(
+      'startImageWrite',
+      imageRequest({ imagePath: join(imageDir, 'cancelled.img') }),
+    )
+    expect(r.message).toEqual({ key: 'image.pathNotChosen' })
+  })
+
+  it('ダイアログを通っていないパスは拒否し、ファイルも作らない（落とし穴 55）', async () => {
+    await call('openIso', 'C:/fake.iso')
+    const never = join(imageDir, 'never-chosen.img')
+    const r = await call<StartResult>('startImageWrite', imageRequest({ imagePath: never }))
+    expect(r.started).toBe(false)
+    expect(r.message).toEqual({ key: 'image.pathNotChosen' })
+    expect(existsSync(never)).toBe(false)
+    // 英語でも日本語が混ざらない
+    expect(formatLocalized('en', r.message!)).not.toMatch(/[ぁ-んァ-ヶ一-龠]/u)
+  })
+
+  it('選ばれていない ISO は実デバイスと同じキーで断る', async () => {
+    await chooseImage(join(imageDir, 'iso-check.img'))
+    const r = await call<StartResult>(
+      'startImageWrite',
+      imageRequest({ isoPath: 'C:/never-chosen-for-image.iso' }),
+    )
+    expect(r.message).toEqual({ key: 'write.isoNotSelected' })
+  })
+
+  it('選んだ ISO そのものには書き出せない（自分の入力を壊す）', async () => {
+    await call('openIso', 'C:/fake.iso')
+    // 保存ダイアログで ISO を選んでしまった、という状況。許可リストは通る。
+    await chooseImage('C:/fake.iso')
+    const r = await call<StartResult>('startImageWrite', imageRequest({ imagePath: 'C:/fake.iso' }))
+    expect(r.message).toEqual({ key: 'image.sameAsIso' })
+  })
+
+  it('展開するファイルには書き出せない', async () => {
+    await call('openIso', 'C:/fake.iso')
+    const payload = join(imageDir, 'myapp.tar.gz')
+    writeFileSync(payload, 'payload')
+    h.openDialogResult = { canceled: false, filePaths: [payload] }
+    await call('pickPayloadFile')
+    await chooseImage(payload)
+    const r = await call<StartResult>('startImageWrite', imageRequest({ imagePath: payload }))
+    expect(r.message).toEqual({
+      key: 'image.overwritesPayload',
+      params: { path: 'myapp.tar.gz' },
+    })
+    // 元のファイルは無事
+    expect(readFileSync(payload, 'utf8')).toBe('payload')
+  })
+
+  it('設定にエラーがあれば、実デバイスと同じキーで断る', async () => {
+    await call('openIso', 'C:/fake.iso')
+    await chooseImage(join(imageDir, 'invalid-config.img'))
+    // 既定のプロファイルはパスワード未設定なので検証を通らない
+    const r = await call<StartResult>(
+      'startImageWrite',
+      imageRequest({ imagePath: join(imageDir, 'invalid-config.img') }),
+    )
+    expect(r.message).toEqual({ key: 'write.configInvalidBody' })
+  })
+
+  it('選び直しが要るペイロードは、実デバイスと同じキーで断る', async () => {
+    await call('openIso', 'C:/fake.iso')
+    const target = join(imageDir, 'payload-missing.img')
+    await chooseImage(target)
+    const base = createDefaultProfile()
+    const profile: AutoinstallProfile = {
+      ...base,
+      postInstall: {
+        ...base.postInstall,
+        deployments: [
+          {
+            id: 'd1',
+            kind: 'archive',
+            name: 'other.tar.gz',
+            source: { kind: 'host-file', path: 'C:/not-chosen-either.tar.gz', sizeBytes: 1 },
+            targetPath: '/opt/app',
+            owner: 'root',
+            group: 'root',
+            mode: '0644',
+            archiveFormat: 'tar.gz',
+            postCommand: '',
+            chownRecursive: false,
+          },
+        ],
+      },
+    }
+    const r = await call<StartResult>(
+      'startImageWrite',
+      imageRequest({ imagePath: target, profile }),
+    )
+    expect(r.message).toEqual({
+      key: 'write.payloadNotSelected',
+      params: { name: 'other.tar.gz' },
+    })
   })
 })
 

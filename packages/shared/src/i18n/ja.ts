@@ -26,6 +26,8 @@ export const ja = {
   'common.show': '表示',
   'common.hide': '隠す',
   'common.edit': '編集',
+  'common.moveUp': '上へ移動',
+  'common.moveDown': '下へ移動',
 
   // --- 書式 ---
   'format.etaMinutesSeconds': '約 {minutes} 分 {seconds} 秒',
@@ -244,6 +246,47 @@ export const ja = {
   'network.detailsInactive':
     '上で「netplan の YAML を直接書く」を選ぶと、ここに編集欄が出ます。',
 
+  // --- ネットワーク: bond（NIC の束ね） ---
+  'network.modeBond': '複数のネットワークカードを束ねる (bond)',
+  'network.modeBondHint':
+    '2 枚以上の NIC を 1 本の回線として扱います。冗長化（片方が切れても通信が続く）や帯域の合算に使います。',
+  'network.bondTitle': 'bond の設定',
+  'network.bondName': 'bond の名前',
+  'network.bondNameHint': '例: bond0。netplan のデバイス名になります。',
+  'network.bondMembers': '束ねるネットワークカード',
+  'network.bondMembersHint': '2 枚以上を指定します。ここに挙げた NIC には IP を付けません。',
+  'network.bondMember': 'ネットワークカード {n}',
+  'network.bondAddMember': 'ネットワークカードを追加',
+  'network.bondRemoveMember': 'この行を削除',
+  'network.bondParameters': '束ね方',
+  'network.bondMode': 'モード',
+  'network.bondModeHint': 'スイッチ側の設定が要るかどうかが変わります。',
+  'network.bondModeActiveBackup': 'active-backup（片方を待機。スイッチの設定不要）',
+  'network.bondMode8023ad': '802.3ad（LACP。スイッチ側の設定が必要）',
+  'network.bondModeBalanceRr': 'balance-rr（順番に振り分け）',
+  'network.bondModeBalanceXor': 'balance-xor（宛先で振り分け）',
+  'network.bondModeBalanceTlb': 'balance-tlb（送信だけ負荷分散）',
+  'network.bondModeBalanceAlb': 'balance-alb（送受信とも負荷分散）',
+  'network.bondModeBroadcast': 'broadcast（全 NIC に同じものを送る）',
+  'network.bondLacpRate': 'LACP の送信間隔 (lacp-rate)',
+  'network.bondLacpRateHint': '802.3ad のときだけ効きます。空欄なら netplan の既定に従います。',
+  'network.bondLacpRateDefault': '指定しない（netplan の既定）',
+  'network.bondLacpRateFast': 'fast（1 秒ごと）',
+  'network.bondLacpRateSlow': 'slow（30 秒ごと）',
+  'network.bondMiiMonitor': 'リンク監視の間隔 (mii-monitor-interval)',
+  'network.bondMiiMonitorHint':
+    'ミリ秒。0 にすると監視しません（ケーブルが抜けても切り替わりません）。実運用では 100 程度にします。',
+  'network.bondHashPolicy': '振り分けの方法 (transmit-hash-policy)',
+  'network.bondHashPolicyHint':
+    'balance-xor と 802.3ad のときだけ効きます。例: layer2, layer3+4。空欄なら netplan の既定に従います。',
+  'network.bondAddressing': 'bond の IP アドレス',
+  'network.bondAddressingHint': 'アドレスは束ねた bond 側に付きます。個々の NIC には付けません。',
+  'network.bondAddressingDhcp': 'DHCP で取得する',
+  'network.bondAddressingStatic': '固定 IP を使う',
+  'network.bondOptional': 'bond が上がらなくても起動を待たない',
+  'network.bondTargetInactive':
+    'この構成では「対象のネットワークカード」は使いません（束ねる NIC を下で指定します）。',
+
   // --- ストレージ ---
   'storage.title': 'ディスクの使い方',
   'storage.warning': '選んだディスクの中身はすべて消去されます。',
@@ -284,6 +327,70 @@ export const ja = {
   'storage.layoutLvmHint':
     'あとから容量を増やしたりスナップショットを取ったりできます。Ubuntu の既定もこれです。',
   'storage.layoutRawHint': 'RAID や複雑なパーティション構成を自分で書く場合に選びます。',
+  // --- RAID + LVM ---
+  'storage.raidLevelRaid0': 'RAID0（ストライプ・冗長性なし・2 台から）',
+  'storage.raidLevelRaid1': 'RAID1（ミラー・2 台から）',
+  'storage.raidLevelRaid5': 'RAID5（パリティ 1 本・3 台から）',
+  'storage.raidLevelRaid6': 'RAID6（パリティ 2 本・4 台から）',
+  'storage.raidLevelRaid10': 'RAID10（ミラー + ストライプ・4 台から）',
+  'storage.raidRoleBoot': '/boot にする',
+  'storage.raidRoleLvmPv': 'LVM の物理ボリュームにする（この上に root を切る）',
+  'storage.raidFstypeExt4': 'ext4',
+  'storage.raidFstypeXfs': 'XFS',
+  'storage.layoutRaid': 'RAID + LVM（複数のディスクをまとめる）',
+  'storage.layoutRaidHint':
+    '複数のディスクで RAID を組み、その上に LVM を作って root を切ります。/boot を RAID1、LVM を RAID10 のように、用途ごとに配列を分けられます。ここに並べたディスクは中身がすべて消去されます。',
+  'storage.warningRaid': '選んだ {count} 台のディスクが、まるごと消去されます。',
+  'storage.raidDisksTitle': 'RAID に使うディスク',
+  'storage.raidDisksHint':
+    '1 行が 1 台です。どのディスクが消えるかを取り違えないよう、シリアル番号かデバイスのパスで 1 台ずつ指定してください。並び順は「1 台目の起動ディスク」を決めます。',
+  'storage.raidDisksEmpty': 'まだ 1 台も登録されていません。',
+  'storage.raidAddDisk': 'ディスクを追加',
+  'storage.raidDiskHeading': 'ディスク #{n}',
+  'storage.raidDiskBoot': 'このディスクから起動できるようにする',
+  'storage.raidDiskBootHint':
+    'EFI システムパーティション (ESP) を作ります。ESP は RAID に置けないので、起動に使うディスクごとに 1 つずつ作られます。',
+  'storage.raidDiskBootBadge': '起動用',
+  'storage.raidDiskIncomplete': 'ディスク未指定',
+  'storage.raidRowUnreadable':
+    'この行は読み取れませんでした（プロファイルを手で編集した可能性があります）。削除してから入れ直してください。',
+  'storage.raidArraysTitle': 'RAID の配列',
+  'storage.raidArraysHint':
+    '配列ごとにレベルと使うディスクを選びます。/boot 用の配列と、LVM の物理ボリュームにする配列（root はこの上に作られます）を分けられます。',
+  'storage.raidArraysEmpty': 'まだ 1 つも定義されていません。',
+  'storage.raidAddArray': '配列を追加',
+  'storage.raidArrayHeading': '配列 #{n}',
+  'storage.raidArrayName': '配列の名前 (md デバイス)',
+  'storage.raidArrayNameHint': '例: md0。/dev/md/md0 として作られます。',
+  'storage.raidArrayLevel': 'RAID レベル',
+  'storage.raidArrayRole': 'この配列の使い道',
+  'storage.raidArrayMembers': '使うディスク',
+  'storage.raidArrayMembersHint':
+    'チェックした順に mdadm へ渡されます。スペアは故障時に自動で入れ替わる予備で、最小台数には数えません。',
+  'storage.raidLevelMin': '{need} 台から。いま {have} 台選ばれています。',
+  'storage.raidMemberSpare': 'スペアにする',
+  'storage.raidLvmTitle': 'LVM と root',
+  'storage.raidLvmHint':
+    '「LVM の物理ボリュームにする」配列の上にボリュームグループを作り、その中に root の論理ボリュームを切ります。',
+  'storage.raidVolumeGroup': 'ボリュームグループ名',
+  'storage.raidRootName': 'root の論理ボリューム名',
+  'storage.raidRootSize': 'root の大きさ',
+  'storage.raidRootSizeRest': '残り全部',
+  'storage.raidRootSizeFixed': '大きさを指定する',
+  'storage.raidRootSizeValue': 'root に割り当てる大きさ',
+  'storage.raidRootSizeHint': '例: 100G。残した領域は、あとから lvextend で足せます。',
+  'storage.raidRootFstype': 'root のファイルシステム',
+  'storage.raidBootTitle': '起動まわり',
+  'storage.raidBootHint': 'ESP と /boot の大きさ、2 台目以降の起動ディスクの扱いを決めます。',
+  'storage.raidEspSize': 'EFI システムパーティションの大きさ',
+  'storage.raidEspSizeHint': '起動に使うディスクごとに 1 つずつ作られます。例: 512M。',
+  'storage.raidBootSize': '/boot の大きさ',
+  'storage.raidBootSizeHint': '/boot にする配列があるときだけ使われます。例: 2G。',
+  'storage.raidMirrorBootloader': '2 台目以降の起動ディスクにもブートローダを入れる',
+  'storage.raidMirrorBootloaderHint':
+    'curtin は 1 台にしかブートローダを入れません。1 台目が壊れても起動できるよう、インストールの最後に複製します（この手順はまだ実機で検証していません）。',
+  'storage.raidPtableIgnored':
+    'RAID + LVM ではこの設定は使われません。パーティション形式は GPT に固定されます。',
   'storage.layoutZfsHint':
     'ZFS ルートを使います。スナップショットやデータ整合性チェックが強力です。',
   'storage.modelHint': '例: Samsung SSD*。ワイルドカードが使えます。',
@@ -607,6 +714,46 @@ export const ja = {
   'write.verifyMismatch':
     '書き込んだ内容が読み戻した内容と一致しません（オフセット {offset}）。USB メモリが故障しているか、書き込み中に抜かれた可能性があります。別の USB メモリで作り直してください。',
 
+  // イメージファイル (.img) への書き出し。
+  // デバイスへの書き込みと違い昇格しないので、権限の話は出さない。
+  'image.statusPreparing': 'イメージファイルを準備しています',
+  'image.pathNotChosen':
+    'この保存先は選ばれていません。「保存先を選ぶ」からもう一度選んでください。',
+  'image.sameAsIso':
+    '選んだ ISO ファイルそのものには書き出せません（元のファイルが壊れます）。別の名前を選んでください。',
+  'image.overwritesPayload':
+    '展開するファイルとして使っている {path} には書き出せません（元のファイルが壊れます）。別の名前を選んでください。',
+  'image.noSpace':
+    '保存先の空き容量が足りません。{required} 必要ですが、空きは {free} です。別のドライブを選ぶか、空き容量を作ってから、もう一度実行してください。',
+  'image.createFailed':
+    'イメージファイルを作成できませんでした。保存先のフォルダに書き込めるか確認してください。',
+  'image.cancelledLeftover':
+    '書き出しを中止しましたが、書きかけのイメージファイルを削除できませんでした。{path} を手で削除してください（このファイルは起動しません）。',
+  'image.errorLeftover':
+    '{reason} さらに、書きかけのイメージファイルを削除できませんでした。{path} を手で削除してください（このファイルは起動しません）。',
+  'image.doneSaved': '{path} に書き出しました。',
+
+  // 書き込み画面に出す「イメージファイルとして保存」の導線。
+  // 主導線（USB メモリへの書き込み）を弱めないよう、文面でも副次的な出口だと分かるようにする。
+  'image.cardTitle': 'イメージファイル (.img) として保存',
+  'image.cardHint':
+    'USB メモリを挿さずに .img ファイルを作れます。あとから Rufus・balenaEtcher・dd で USB メモリに焼くと、このアプリで直接書いたものと同じになります。',
+  'image.noElevation': '管理者権限は不要',
+  'image.saveButton': 'イメージファイルとして保存…',
+  'image.approxSize': 'できるファイルの大きさ: 約 {size}',
+  'image.destination': '保存先: {path}',
+  'image.needIso': 'ISO を選ぶと、イメージファイルも作れるようになります。',
+  'image.needConfig': '「確認」のステップでエラーを直すと、イメージファイルを作れるようになります。',
+  'image.doneTitle': 'イメージファイルができました',
+  'image.doneBody':
+    'このファイルを Rufus・balenaEtcher・dd で USB メモリに焼いてから、インストールしたいサーバーで起動してください。',
+  'image.next1':
+    'イメージファイルを Rufus・balenaEtcher・dd で USB メモリに焼き、インストールしたいサーバーに挿します。',
+  'image.cancelledBody':
+    '書きかけのイメージファイルは削除しました。もう一度やり直してください。',
+  'write.noDevicesImage':
+    'USB メモリが手元に無いときは、下の「イメージファイル (.img) として保存」で作れます。',
+
   // --- デバイス（列挙と、ワーカー側の再照合） ---
   'device.blockedSystemDisk': 'OS が入っているシステムディスクです',
   'device.blockedReadOnly': '書き込み禁止になっています',
@@ -682,6 +829,8 @@ export const ja = {
   'dialog.exportBundleDir': '設定一式の保存先フォルダを選ぶ',
   'dialog.pickPayload': 'インストール先に展開するファイルを選ぶ',
   'dialog.filterArchive': 'アーカイブ',
+  'dialog.saveImage': 'イメージファイルの保存先を選ぶ',
+  'dialog.filterImage': 'ディスクイメージ',
   'dialog.readTextFile': 'ファイルを選ぶ',
   'dialog.filterPublicKey': '公開鍵',
   'dialog.filterText': 'テキスト',
@@ -1074,6 +1223,17 @@ export const ja = {
   'migrate.category.user': '追加ユーザー',
   'migrate.category.service': 'サービス',
   'migrate.category.deployment': 'アプリ展開',
+  'migrate.category.raidDisk': 'RAID に使うディスク',
+  'migrate.category.raidArray': 'RAID の配列',
+  'migrate.field.raidLevel': 'RAID レベル (storage.raid.arrays[].level)',
+  'migrate.field.raidRole': '配列の用途 (storage.raid.arrays[].role)',
+  'migrate.field.raidRootFstype': 'root のファイルシステム (storage.raid.rootFstype)',
+  'migrate.raidDiskRefDropped':
+    'RAID の配列が指していたディスク {count} 件が見つからなかったため、その参照を外しました。台数が足りなくなっていないか確認してください。',
+  'migrate.category.bondMember': 'bond に束ねるネットワークカード',
+  'migrate.field.bondMode': 'bond のモード (network.parameters.mode)',
+  'migrate.field.bondLacpRate': 'LACP の送信間隔 (network.parameters.lacpRate)',
+  'migrate.field.bondAddressing': 'bond の IP アドレスの決め方 (network.addressing)',
 
 
   // --- 設定の検証（`validate.ts` の指摘） ---
@@ -1206,6 +1366,108 @@ export const ja = {
   'validate.grubMenuHostSelection':
     '起動時に GRUB のメニューからホストを選ぶと、その値が使われます。一覧に無いホストは e キーで引数を編集してください。',
   'validate.diskKernelArgWithRawStorage': 'ディスクをカーネル引数で渡す設定は、curtin の生 YAML と併用できません。',
+  'validate.diskKernelArgWithRaidStorage':
+    'ディスクをカーネル引数で渡す設定は、RAID + LVM の構成と併用できません。RAID は storage.config を出力するので、置換スクリプトが書き換える storage.layout がありません（反映できないためインストールは開始直後に中止されます）。',
+
+  // --- RAID + LVM（落とし穴 65: 危険な設定ほど強い助言を出す） ---
+  // 文の中に差し込む項目名は入れ子の LocalizedText にする（語順の違う言語でも成立させる）。
+  'validate.raidFieldEsp': 'EFI システムパーティション (ESP)',
+  'validate.raidFieldBoot': '/boot',
+  'validate.raidFieldRoot': 'root',
+
+  'validate.raidNoDisks': 'RAID に使うディスクが 1 台も登録されていません。',
+  'validate.raidNeedsTwoDisks': 'RAID を組むにはディスクが 2 台以上必要です（いまは 1 台だけです）。',
+  'validate.raidDiskIdInvalid':
+    'ディスク #{n} の内部 ID が空か、他の行と重複しています。配列がどのディスクを指しているか決まりません。',
+  'validate.raidDiskMatchEmpty':
+    'ディスク #{n} のディスク指定が空か、読み取れませんでした。このままでは一致するディスクが 1 台もなく、インストールはディスクの段階で止まります。',
+  'validate.raidMemberMatchNotSpecific':
+    'ディスク #{n} の指定 ({kind}) では、どのディスクが選ばれるか決まりません。RAID では選んだディスクの中身がすべて消えるので、シリアル番号かデバイスのパスで 1 台ずつ指定してください。',
+  'validate.raidNoBootDisk':
+    '起動に使うディスクが 1 台もありません。EFI システムパーティションが作られないので、インストールしても起動できません。',
+  'validate.raidSingleBootDisk':
+    '起動に使うディスクが 1 台だけです。そのディスクが壊れると、RAID が生きていても起動できません。',
+  'validate.raidNoArrays': 'RAID の配列が 1 つも定義されていません。',
+  'validate.raidNoLvmArray':
+    'LVM の物理ボリュームにする配列がありません。root を作る場所がないのでインストールできません。',
+  'validate.raidMultipleBootArrays':
+    '/boot にする配列が 2 つ以上あります。/boot は 1 か所にしかマウントできません。',
+  'validate.raidNoDedicatedBootArray':
+    '/boot 専用の配列がないので、/boot は LVM の中（root と同じ場所）に置かれます。GRUB は mdraid1x と lvm のモジュールでこれを読めることが多いのですが、この組み合わせは一次資料に記載がありません。確実にしたい場合は /boot 用の RAID1 を別に作ってください。',
+  'validate.raidArrayNameEmpty': '配列 #{n} の名前が空です（md0 のように付けてください）。',
+  'validate.raidArrayNameInvalid':
+    '配列名 "{name}" が不正です（英数字で始まり、英数字と . _ - のみ、32 文字以内）。',
+  'validate.raidArrayNameDuplicated': '配列名 "{name}" が重複しています。',
+  'validate.raidUnknownDiskRef':
+    '配列 "{name}" が、この設定には無いディスクを {count} 件指しています。台数が足りているか確認してください。',
+  'validate.raidDiskDuplicatedInArray':
+    '配列 "{name}" に同じディスクが 2 回入っています（本体とスペアの両方に入れた場合も含みます）。',
+  'validate.raidDiskInTwoArraysOfSameRole':
+    '配列 "{name}" のディスクが、同じ用途の別の配列にも入っています。そのディスクにどちらのパーティションを作るか決まりません。',
+  'validate.raidTooFewDevices':
+    '配列 "{name}" は {level} なのにディスクが {have} 台しかありません（{need} 台以上必要です）。',
+  'validate.raidLevel0NoRedundancy':
+    '配列 "{name}" は RAID0 です。1 台でも壊れると配列全体のデータが失われます。',
+  'validate.raidSparesIgnoredForLevel0':
+    '配列 "{name}" は RAID0 なのでスペアは使われません（無視されます）。',
+  'validate.raidBootArrayMemberNotBootDisk':
+    '配列 "{name}" のメンバーに「起動に使う」を外したディスクがあります。そのディスクには EFI システムパーティションが作られないので、そこからは起動できません。',
+  'validate.raidDiskUnused':
+    'ディスク #{n} はどの配列でも使われず、起動にも使いません。何にも使わないディスクを消さないよう、このディスクには一切書き込みません。',
+  'validate.raidWipesAllMemberDisks':
+    'RAID に使う {count} 台のディスクは、中身がすべて消去されます。台数が多いぶん取り返しがつきません。シリアル番号を 1 台ずつ確認してください。',
+  'validate.raidSizeInvalid':
+    '{field} のサイズ "{value}" が不正です（4G や 512M のように指定してください）。',
+  'validate.raidVolumeGroupNameInvalid':
+    'ボリュームグループ名 "{name}" が不正です（英数字と + _ . - のみ、先頭に - は使えません）。',
+  'validate.raidRootNameInvalid':
+    'root の論理ボリューム名 "{name}" が不正です（英数字と + _ . - のみ、先頭に - は使えません）。',
+  'validate.raidGrubMirrorUnverified':
+    '2 台目以降の起動ディスクへのブートローダの複製は、インストール後に /var/log/autoinstall-raid-esp.log に結果が残ります。この手順はまだ実機で検証していないので、1 台目を抜いた状態で起動できるか必ず確かめてください。',
+  'validate.raidGrubOnlyOnFirstDisk':
+    'ブートローダを入れるのは 1 台目の起動ディスクだけです。そのディスクが壊れると、RAID が生きていても起動できません。',
+  'validate.raidMatchIgnored':
+    'RAID + LVM では「どのディスクにインストールするか」の指定は使われません（無視されます）。使われるのは RAID の設定にあるディスクの一覧です。',
+  'validate.raidResetPartitionIgnored':
+    'リセットパーティションは RAID + LVM では作られません（無視されます）。',
+
+  // --- bond ---
+  'validate.bondNameEmpty': 'bond の名前を入力してください（例: bond0）。',
+  'validate.bondNameInvalid':
+    'bond の名前 "{name}" が不正です（英字で始まり、英数字と _ . - のみ、15 文字以内）。',
+  'validate.bondNeedsTwoMembers':
+    'bond には 2 枚以上のネットワークカードが必要です（いまは {count} 枚）。1 枚では冗長化にも帯域の合算にもなりません。',
+  'validate.bondMemberNameEmpty':
+    'ネットワークカード {n} の名前が空です。束ねる NIC を指定してください。',
+  'validate.bondMemberNameInvalid':
+    'ネットワークカード {n} の名前 "{name}" が不正です（英字で始まり、英数字と _ . - のみ）。',
+  'validate.bondMemberMacInvalid':
+    'ネットワークカード {n} の MAC アドレスが不正です（例: 52:54:00:12:34:56）。',
+  'validate.bondMemberUnreadable':
+    'ネットワークカード {n} の指定を読み取れませんでした。指定し直してください。このままでは、どの NIC にも一致しない設定が出力されます。',
+  'validate.bondMemberDuplicated':
+    'ネットワークカード {n} は同じ NIC を 2 回指しています。netplan は 1 枚として扱うので、2 枚あるつもりの冗長化が 1 枚になります。',
+  'validate.bondMemberAny':
+    'ネットワークカード {n} が「すべての有線 LAN」になっています。どの NIC が束ねられるかは実機まで分からず、管理用に残したい NIC まで巻き込みます。名前か MAC で指定してください。',
+  'validate.bondMemberKeyIsBondName':
+    '束ねるネットワークカードの名前が bond の名前 "{name}" と同じです。netplan のデバイス名は重複できません。',
+  'validate.bondModeInvalid': 'bond のモード "{value}" は使えません。',
+  'validate.bondAddressingInvalid':
+    'bond の IP アドレスの決め方 "{value}" は使えません。このままでは DHCP として扱われます。',
+  'validate.bondModeNeedsSwitchConfig':
+    '{mode} はスイッチ側でも LACP を設定しておく必要があります。設定されていないとリンクが上がらず、インストール後に通信できません。',
+  'validate.bondLacpRateIgnored':
+    'LACP の送信間隔は 802.3ad のときだけ効きます。いまのモード ({mode}) では出力されません。',
+  'validate.bondHashPolicyIgnored':
+    '振り分けの方法 (transmit-hash-policy) は balance-xor と 802.3ad のときだけ効きます。いまのモード ({mode}) では出力されません。',
+  'validate.bondHashPolicyInvalid':
+    '振り分けの方法 "{value}" が不正です（小文字の英数字を + や - でつないだ形。例: layer2, layer3+4）。',
+  'validate.bondMiiMonitorInvalid':
+    'リンク監視の間隔 "{value}" が不正です。0 以上の整数（ミリ秒）を入力してください。',
+  'validate.bondMiiMonitorDisabled':
+    'リンク監視の間隔が 0（監視しない）です。ケーブルが抜けても bond は気づかず、待機側に切り替わりません。実運用では 100 程度にしてください。',
+  'validate.bondTargetIgnored':
+    'bond では「対象のネットワークカード」の指定は使われません（無視されます）。束ねる NIC は bond の設定で指定します。',
   'validate.networkKernelArgWithRawNetplan': 'IP をカーネル引数で渡す設定は、netplan の生 YAML と併用できません。',
   'validate.networkKernelArgNeedsStatic':
     'IP を起動メニューで決める場合は、ネットワークの設定を「固定 IP」にして既定値も入れてください。引数なしで起動されたときに使われます。',

@@ -21,7 +21,10 @@
     "dist:mac": "npm run dist:mac -w @autoinstall/desktop",
     "dist:linux": "npm run dist:linux -w @autoinstall/desktop",
     "e2e": "tsx scripts/e2e-matrix.mts",
+    "e2e:image": "tsx scripts/e2e-image-file.mts",
+    "e2e:raid-bond": "tsx scripts/e2e-raid-bond.mts",
     "e2e:usb": "tsx scripts/e2e-write-usb.mts",
+    "e2e:vm": "tsx scripts/e2e-vm.mts",
     "e2e:verify-usb": "tsx scripts/e2e-verify-usb.mts",
     "e2e:usb-worker": "tsx scripts/e2e-worker-usb.mts"
   },

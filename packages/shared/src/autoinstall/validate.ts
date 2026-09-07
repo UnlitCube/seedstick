@@ -9,6 +9,24 @@ import { getPreset } from './presets.js'
 import { ARCHIVE_REQUIREMENTS } from './provisioning.js'
 import { CUDA_REPO_DISTRO, cudaPackages, isValidServiceName } from './provisioning.js'
 import { isDebLineSource, isPpaSource, isValidSizeSpec } from './advanced.js'
+import { buildRaidPlan, isReadableDiskMatch } from './generate-raid.js'
+import type { BondMember, BondMode, BondNetworkConfig, BondParameters } from './bond.js'
+import {
+  BOND_MODES,
+  bondNeedsSwitchConfig,
+  bondUsesHashPolicy,
+  bondUsesLacpRate,
+  isValidBondHashPolicy,
+  isValidBondMiiInterval,
+  isValidBondName,
+} from './bond.js'
+import type { RaidStorageConfig } from './raid.js'
+import {
+  RAID_MIN_DEVICES,
+  isValidLvmName,
+  isValidRaidArrayName,
+  raidHasRedundancy,
+} from './raid.js'
 import {
   interactiveSectionsFor,
   isSafePresetLabel,
@@ -171,6 +189,376 @@ export function addUniqueIssue(issues: ValidationIssue[], issue: ValidationIssue
   issues.push(issue)
 }
 
+type AddIssue = (severity: IssueSeverity, field: string, key: MsgKey, params?: MsgParams) => void
+
+/**
+ * RAID + LVM の検証。`storage.mode === 'raid'` のときだけ呼ぶ。
+ *
+ * **手で編集された JSON でも例外を投げない**（落とし穴 23）。配列・オブジェクト・
+ * 文字列の型を確かめてから触る。`migrate.ts` を通っていれば形は揃っているが、
+ * このプロファイルは IPC からも来る。
+ */
+function validateRaidStorage(raid: RaidStorageConfig, add: AddIssue): void {
+  const F = 'storage.raid'
+  const disks = Array.isArray(raid.disks) ? raid.disks : []
+  const arrays = Array.isArray(raid.arrays) ? raid.arrays : []
+  const text = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
+
+  // --- ディスク ---
+  if (disks.length === 0) {
+    add('error', `${F}.disks`, 'validate.raidNoDisks')
+  } else if (disks.length === 1) {
+    add('error', `${F}.disks`, 'validate.raidNeedsTwoDisks')
+  }
+
+  // 内部 ID は配列がディスクを指す唯一の手がかり。空や重複があると、
+  // どのディスクを消すのかが決まらない（生成側は先に出てきたほうを採る）。
+  const knownIds = new Set<string>()
+  disks.forEach((d, i) => {
+    const id = text(d?.id)
+    if (!id || knownIds.has(id)) {
+      add('error', `${F}.disks[${i}]`, 'validate.raidDiskIdInvalid', { n: i + 1 })
+      return
+    }
+    knownIds.add(id)
+  })
+
+  disks.forEach((d, i) => {
+    const m = (d?.match ?? {}) as { kind?: string } & Record<string, unknown>
+    const where = `${F}.disks[${i}]`
+    if (
+      !isReadableDiskMatch(d?.match) ||
+      (m.kind === 'serial' && !text(m['serial'])) ||
+      (m.kind === 'path' && !text(m['path'])) ||
+      (m.kind === 'model' && !text(m['model']))
+    ) {
+      add('error', where, 'validate.raidDiskMatchEmpty', { n: i + 1 })
+    } else if (m.kind === 'any' || m.kind === 'largest' || m.kind === 'smallest' || m.kind === 'ssd') {
+      // 「一致するディスクのうち任意の 1 台が割り当てられる」（autoinstall リファレンス）。
+      // RAID では**選んだディスクが全部消える**ので、どれが選ばれるか決められない
+      // 指定は台数のぶんだけ被害が大きい（落とし穴 65）。
+      add('warning', where, 'validate.raidMemberMatchNotSpecific', {
+        n: i + 1,
+        kind: String(m.kind),
+      })
+    }
+  })
+
+  const bootDisks = disks.filter((d) => d?.boot === true)
+  if (disks.length > 0 && bootDisks.length === 0) {
+    add('error', `${F}.disks`, 'validate.raidNoBootDisk')
+  } else if (bootDisks.length === 1 && disks.length > 1) {
+    add('info', `${F}.disks`, 'validate.raidSingleBootDisk')
+  }
+
+  // --- 配列 ---
+  const bootArrays = arrays.filter((a) => a?.role === 'boot')
+  const pvArrays = arrays.filter((a) => a?.role === 'lvm-pv')
+  if (arrays.length === 0) {
+    add('error', `${F}.arrays`, 'validate.raidNoArrays')
+  } else {
+    if (pvArrays.length === 0) add('error', `${F}.arrays`, 'validate.raidNoLvmArray')
+    // `/boot` は 1 か所にしかマウントできない。
+    if (bootArrays.length > 1) add('error', `${F}.arrays`, 'validate.raidMultipleBootArrays')
+    if (bootArrays.length === 0) {
+      // 断定はしない。GRUB は mdraid1x と lvm のモジュールを持っているので
+      // 「LVM on RAID の中の /boot」も読めることが多いが、
+      // 一次資料 (R8) はこの組み合わせについて何も言っていない。
+      add('info', `${F}.arrays`, 'validate.raidNoDedicatedBootArray')
+    }
+  }
+
+  const names = new Set<string>()
+  const usedByRole = new Map<string, Set<string>>()
+  arrays.forEach((a, j) => {
+    const where = `${F}.arrays[${j}]`
+    const name = text(a?.name)
+    const label = name || `#${j + 1}`
+    if (!name) {
+      add('error', `${where}.name`, 'validate.raidArrayNameEmpty', { n: j + 1 })
+    } else if (!isValidRaidArrayName(name)) {
+      add('error', `${where}.name`, 'validate.raidArrayNameInvalid', { name })
+    } else if (names.has(name)) {
+      add('error', `${where}.name`, 'validate.raidArrayNameDuplicated', { name })
+    }
+    if (name) names.add(name)
+
+    const strings = (v: unknown): string[] =>
+      Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
+    const devices = strings(a?.diskIds)
+    const spares = strings(a?.spareDiskIds)
+    const all = [...devices, ...spares]
+
+    const missing = all.filter((id) => !knownIds.has(id))
+    if (missing.length > 0) {
+      add('error', where, 'validate.raidUnknownDiskRef', { name: label, count: missing.length })
+    }
+    // 本体とスペアに同じディスクを入れる場合もここで拾う。
+    if (new Set(all).size !== all.length) {
+      add('error', where, 'validate.raidDiskDuplicatedInArray', { name: label })
+    }
+    // 同じ用途の配列に同じディスクが 2 度出ると、そのディスクのどちらの配列に
+    // パーティションを作ればよいか決まらない（`/boot` 用と PV 用の 2 本に
+    // 同じディスクが入るのは**正常**なので、用途ごとに見る）。
+    const role = typeof a?.role === 'string' ? a.role : 'lvm-pv'
+    const used = usedByRole.get(role) ?? new Set<string>()
+    for (const id of new Set(all)) {
+      if (used.has(id)) {
+        add('error', where, 'validate.raidDiskInTwoArraysOfSameRole', { name: label })
+      }
+      used.add(id)
+    }
+    usedByRole.set(role, used)
+
+    // 最小台数は curtin のドキュメントの数字（R8 の表）。**RAID10 は 4 台から。**
+    const level = a?.level
+    const need = typeof level === 'string' ? RAID_MIN_DEVICES[level as keyof typeof RAID_MIN_DEVICES] : undefined
+    const have = devices.filter((id: string) => knownIds.has(id)).length
+    if (typeof need === 'number' && have < need) {
+      add('error', where, 'validate.raidTooFewDevices', {
+        name: label,
+        level: String(level),
+        need,
+        have,
+      })
+    }
+    if (typeof level === 'string' && RAID_MIN_DEVICES[level as keyof typeof RAID_MIN_DEVICES] !== undefined) {
+      if (!raidHasRedundancy(level as keyof typeof RAID_MIN_DEVICES)) {
+        add('warning', where, 'validate.raidLevel0NoRedundancy', { name: label })
+        if (spares.length > 0) {
+          add('warning', where, 'validate.raidSparesIgnoredForLevel0', { name: label })
+        }
+      }
+    }
+
+    if (a?.role === 'boot') {
+      for (const id of all) {
+        const d = disks.find((x) => text(x?.id) === id)
+        if (d && d.boot !== true) {
+          add('warning', where, 'validate.raidBootArrayMemberNotBootDisk', { name: label })
+          break
+        }
+      }
+    }
+  })
+
+  // --- 使われないディスク・消えるディスク ---
+  // `buildRaidPlan` と同じ計算を 2 度書かない（食い違うと「検証は通るのに
+  // 生成だけ違う」が戻る）。
+  const plan = buildRaidPlan(raid)
+  for (const i of plan.unusedDiskIndexes) {
+    add('warning', `${F}.disks[${i}]`, 'validate.raidDiskUnused', { n: i + 1 })
+  }
+  const wiped = disks.length - plan.unusedDiskIndexes.length
+  if (wiped > 0) {
+    // 危険な設定ほど強い助言を出す（落とし穴 65）。RAID は台数が増えるぶん被害も増える。
+    add('warning', `${F}.disks`, 'validate.raidWipesAllMemberDisks', { count: wiped })
+  }
+
+  // --- 名前とサイズ ---
+  if (!isValidLvmName(text(raid.volumeGroup))) {
+    add('error', `${F}.volumeGroup`, 'validate.raidVolumeGroupNameInvalid', {
+      name: text(raid.volumeGroup),
+    })
+  }
+  if (!isValidLvmName(text(raid.rootName))) {
+    add('error', `${F}.rootName`, 'validate.raidRootNameInvalid', { name: text(raid.rootName) })
+  }
+  // そのサイズが実際に使われるときだけ見る（使われない欄で書き込みを止めない）。
+  if (bootDisks.length > 0 && !isValidSizeSpec(text(raid.espSize))) {
+    add('error', `${F}.espSize`, 'validate.raidSizeInvalid', {
+      field: localized('validate.raidFieldEsp'),
+      value: text(raid.espSize),
+    })
+  }
+  if (bootArrays.length > 0 && !isValidSizeSpec(text(raid.bootSize))) {
+    add('error', `${F}.bootSize`, 'validate.raidSizeInvalid', {
+      field: localized('validate.raidFieldBoot'),
+      value: text(raid.bootSize),
+    })
+  }
+  // root は空なら「残り全部」なので、入っているときだけ見る。
+  if (text(raid.rootSize) && !isValidSizeSpec(text(raid.rootSize))) {
+    add('error', `${F}.rootSize`, 'validate.raidSizeInvalid', {
+      field: localized('validate.raidFieldRoot'),
+      value: text(raid.rootSize),
+    })
+  }
+
+  // --- ブートローダ ---
+  if (bootDisks.length >= 2) {
+    if (raid.mirrorBootloader) {
+      // 「実機で確かめていない」ことを黙らない（落とし穴 72）。
+      add('info', `${F}.mirrorBootloader`, 'validate.raidGrubMirrorUnverified')
+    } else {
+      add('warning', `${F}.mirrorBootloader`, 'validate.raidGrubOnlyOnFirstDisk')
+    }
+  }
+}
+
+/**
+ * 固定 IP の検査。単一 NIC (`mode: 'static'`) と bond (`addressing: 'static'`) で**共有する**。
+ *
+ * 指摘の `field` は両方とも `network.address` / `network.gateway` /
+ * `network.nameservers`。同じ入力欄を指すので、写しを持たずに 1 か所で作る。
+ *
+ * `nameservers` が配列でないことがある（手で編集された JSON。落とし穴 23 / 30）ので
+ * `Array.isArray` を通してから触る。以前は `.entries()` を直接呼んでいて、
+ * `nameservers: null` の JSON では検証そのものが例外で抜けていた。
+ */
+function validateStaticAddressing(
+  net: { address: string; gateway: string; nameservers: readonly string[] },
+  add: AddIssue,
+): void {
+  if (!isValidCidr(net.address)) {
+    add('error', 'network.address', 'validate.networkAddressInvalid')
+  }
+  if (net.gateway && !isValidIPv4(net.gateway)) {
+    add('error', 'network.gateway', 'validate.networkGatewayInvalid')
+  }
+  if (!net.gateway) {
+    add('warning', 'network.gateway', 'validate.networkGatewayMissing')
+  }
+  const nameservers = Array.isArray(net.nameservers) ? net.nameservers : []
+  for (const [i, ns] of nameservers.entries()) {
+    if (typeof ns !== 'string' || !isValidIPv4(ns)) {
+      add('error', `network.nameservers[${i}]`, 'validate.networkNameserverInvalid', { n: i + 1 })
+    }
+  }
+  if (nameservers.length === 0) {
+    add('warning', 'network.nameservers', 'validate.networkNameserversMissing')
+  }
+}
+
+/**
+ * bond の検証。`network.mode === 'bond'` のときだけ呼ぶ。
+ *
+ * **手で編集された JSON でも例外を投げない**（落とし穴 23）。配列・オブジェクト・
+ * 文字列の型を確かめてから触る。`migrate.ts` を通っていれば形は揃っているが、
+ * このプロファイルは IPC からも来る。
+ */
+function validateBondNetwork(net: BondNetworkConfig, add: AddIssue): void {
+  const F = 'network.bond'
+  const text = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
+  const members: readonly BondMember[] = Array.isArray(net.members) ? net.members : []
+
+  // --- bond の名前 ---
+  const name = text(net.name)
+  if (!name) {
+    add('error', `${F}.name`, 'validate.bondNameEmpty')
+  } else if (!isValidBondName(name)) {
+    add('error', `${F}.name`, 'validate.bondNameInvalid', { name })
+  }
+
+  // --- メンバー ---
+  // 1 枚では束ねるものが無い。netplan は通るが、冗長化にも帯域の合算にもならない。
+  if (members.length < 2) {
+    add('error', `${F}.members`, 'validate.bondNeedsTwoMembers', { count: members.length })
+  }
+
+  // 「同じ NIC を 2 回」は netplan が 1 枚として扱うので、**2 枚あるつもりの
+  // 冗長化が実は 1 枚**になる。判別子と値を合わせた文字列で重複を見る。
+  const seen = new Set<string>()
+  members.forEach((m, i) => {
+    const where = `${F}.members[${i}]`
+    const n = i + 1
+    const sel = (m?.selector ?? {}) as { kind?: unknown } & Record<string, unknown>
+    let fingerprint: string | null = null
+    if (sel.kind === 'name') {
+      const value = text(sel['name'])
+      if (!value) {
+        add('error', where, 'validate.bondMemberNameEmpty', { n })
+      } else if (!/^[A-Za-z][A-Za-z0-9_.-]*$/.test(value)) {
+        add('error', where, 'validate.bondMemberNameInvalid', { n, name: value })
+      } else {
+        fingerprint = `name:${value}`
+      }
+    } else if (sel.kind === 'mac') {
+      const value = text(sel['macaddress'])
+      if (!MAC_RE.test(value)) {
+        add('error', where, 'validate.bondMemberMacInvalid', { n })
+      } else {
+        fingerprint = `mac:${value.toLowerCase()}`
+      }
+    } else if (sel.kind === 'any') {
+      // 1 つの netdef が `en*` に一致する全 NIC を拾う。どの NIC が束ねられるかは
+      // 実機まで分からず、管理用に残したい NIC まで巻き込む（落とし穴 65）。
+      add('warning', where, 'validate.bondMemberAny', { n })
+      fingerprint = 'any'
+    } else {
+      // 判別子が読めない。生成側は「一致しない match」を出して netplan に止めさせる。
+      add('error', where, 'validate.bondMemberUnreadable', { n })
+    }
+    if (fingerprint !== null) {
+      if (seen.has(fingerprint)) {
+        add('error', where, 'validate.bondMemberDuplicated', { n })
+      }
+      seen.add(fingerprint)
+    }
+  })
+
+  // netplan のデバイス ID は netdef 全体で一意でなければならない。
+  // メンバー名が bond 名と同じだと、`ethernets` と `bonds` に同じ ID が並ぶ。
+  if (name && members.some((m) => text((m?.selector as { name?: unknown })?.name) === name)) {
+    add('error', `${F}.members`, 'validate.bondMemberKeyIsBondName', { name })
+  }
+
+  // --- パラメータ ---
+  const p = (net.parameters ?? {}) as Partial<BondParameters>
+  const mode = (BOND_MODES as readonly string[]).includes(p.mode as string)
+    ? (p.mode as BondMode)
+    : null
+  if (mode === null) {
+    add('error', `${F}.parameters.mode`, 'validate.bondModeInvalid', { value: String(p.mode) })
+  } else if (bondNeedsSwitchConfig(mode)) {
+    // スイッチ側で LACP を設定していないとリンクが上がらない。
+    // 「冗長化したつもりで疎通しなくなる」のは無人インストールでは致命的。
+    add('info', `${F}.parameters.mode`, 'validate.bondModeNeedsSwitchConfig', { mode })
+  }
+
+  // 効かない設定を黙って捨てない（落とし穴 67）。生成側も出力しない。
+  const lacpRate = text(p.lacpRate)
+  if (lacpRate && mode !== null && !bondUsesLacpRate(mode)) {
+    add('warning', `${F}.parameters.lacpRate`, 'validate.bondLacpRateIgnored', { mode })
+  }
+  const hashPolicy = text(p.transmitHashPolicy)
+  if (hashPolicy && !isValidBondHashPolicy(hashPolicy)) {
+    add('error', `${F}.parameters.transmitHashPolicy`, 'validate.bondHashPolicyInvalid', {
+      value: hashPolicy,
+    })
+  } else if (hashPolicy && mode !== null && !bondUsesHashPolicy(mode)) {
+    add('warning', `${F}.parameters.transmitHashPolicy`, 'validate.bondHashPolicyIgnored', { mode })
+  }
+
+  const mii = p.miiMonitorInterval
+  if (typeof mii !== 'number' || !isValidBondMiiInterval(mii)) {
+    add('error', `${F}.parameters.miiMonitorInterval`, 'validate.bondMiiMonitorInvalid', {
+      value: String(mii),
+    })
+  } else if (mii === 0) {
+    // 既定は 0＝監視しない。リンクが落ちても bond は気づかず、
+    // 切り替わらないまま通信が止まる（R8）。
+    add('warning', `${F}.parameters.miiMonitorInterval`, 'validate.bondMiiMonitorDisabled')
+  }
+
+  // --- アドレスの決め方 ---
+  // 生成側は `static` 以外をすべて DHCP として扱う。知らない値を黙って
+  // DHCP にすると、固定 IP のつもりのサーバーが DHCP で上がる（落とし穴 50）。
+  if (net.addressing !== 'dhcp' && net.addressing !== 'static') {
+    add('error', `${F}.addressing`, 'validate.bondAddressingInvalid', {
+      value: String(net.addressing),
+    })
+  }
+
+  // --- この構成では使われない設定（落とし穴 67） ---
+  // 単一 NIC の選択は bond では意味を持たない。値は残す（bond をやめたら
+  // また使えるようにする・落とし穴 66）が、効かないことは伝える。
+  const targetKind = (net.target as { kind?: unknown } | undefined)?.kind
+  if (targetKind === 'name' || targetKind === 'mac') {
+    add('warning', 'network.target', 'validate.bondTargetIgnored')
+  }
+}
+
 export function validateProfile(profile: AutoinstallProfile): ValidationResult {
   const issues: ValidationIssue[] = []
   const add = (severity: IssueSeverity, field: string, key: MsgKey, params?: MsgParams): void => {
@@ -239,23 +627,14 @@ export function validateProfile(profile: AutoinstallProfile): ValidationResult {
 
   // --- ネットワーク ---
   if (profile.network.mode === 'static') {
-    if (!isValidCidr(profile.network.address)) {
-      add('error', 'network.address', 'validate.networkAddressInvalid')
+    validateStaticAddressing(profile.network, add)
+  } else if (profile.network.mode === 'bond') {
+    // アドレス・経路・DNS は **bond 側**に付く（R8）。固定 IP の検査は
+    // 単一 NIC のときと**同じ関数**を通す（写しを持つと片方だけが直る）。
+    if (profile.network.addressing === 'static') {
+      validateStaticAddressing(profile.network, add)
     }
-    if (profile.network.gateway && !isValidIPv4(profile.network.gateway)) {
-      add('error', 'network.gateway', 'validate.networkGatewayInvalid')
-    }
-    if (!profile.network.gateway) {
-      add('warning', 'network.gateway', 'validate.networkGatewayMissing')
-    }
-    for (const [i, ns] of profile.network.nameservers.entries()) {
-      if (!isValidIPv4(ns)) {
-        add('error', `network.nameservers[${i}]`, 'validate.networkNameserverInvalid', { n: i + 1 })
-      }
-    }
-    if (profile.network.nameservers.length === 0) {
-      add('warning', 'network.nameservers', 'validate.networkNameserversMissing')
-    }
+    validateBondNetwork(profile.network, add)
   } else if (profile.network.mode === 'raw') {
     const doc = parseDocument(profile.network.yaml)
     if (doc.errors.length > 0) {
@@ -302,30 +681,42 @@ export function validateProfile(profile: AutoinstallProfile): ValidationResult {
     // 指定方法を選んだのに中身が空だと、一致するディスクが 1 台も無くなる。
     // 手で編集された JSON ではキー自体が無いことがあるので、必ず型を確かめる
     // （検証が例外で抜けると確認画面が理由なく空になり、書き込みボタンが沈黙する）。
-    const m = profile.storage.match as { kind: string } & Record<string, unknown>
-    const text = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
-    const emptyMatch =
-      (m.kind === 'serial' && !text(m['serial'])) ||
-      (m.kind === 'path' && !text(m['path'])) ||
-      (m.kind === 'model' && !text(m['model']))
-    if (emptyMatch) {
-      add('error', 'storage.match', 'validate.diskMatchEmpty')
-    }
+    if (profile.storage.mode === 'raid') {
+      // RAID では `storage.config` を出すので `layout` は出ない。`storage.match` は
+      // 画面には出たままなのに 1 バイトも使われない（配列ごとのディスク指定が使われる）。
+      // 黙って無視すると「設定したのに効かない」になる（落とし穴 67）。
+      add('warning', 'storage.match', 'validate.raidMatchIgnored')
+      if (profile.storage.resetPartition.enabled) {
+        // reset-partition は `layout` の中のキー。`config` では出力しない。
+        add('warning', 'storage.resetPartition', 'validate.raidResetPartitionIgnored')
+      }
+      validateRaidStorage(profile.storage.raid, add)
+    } else {
+      const m = profile.storage.match as { kind: string } & Record<string, unknown>
+      const text = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
+      const emptyMatch =
+        (m.kind === 'serial' && !text(m['serial'])) ||
+        (m.kind === 'path' && !text(m['path'])) ||
+        (m.kind === 'model' && !text(m['model']))
+      if (emptyMatch) {
+        add('error', 'storage.match', 'validate.diskMatchEmpty')
+      }
 
-    // 実行時にディスクを決める設定なら、ここの match は使われないので助言しない。
-    //
-    // `kind: 'any'` は `match: {}` を出力する。subiquity から見ると
-    // 「どのディスクでもよい」なので、複数ディスク機では**どれを消すか分からない**。
-    // 最も危険な指定なのに、より安全な largest / smallest にだけ注意書きがあり、
-    // ここだけ無言だった（落とし穴 22 と同じ形の事故になる）。
-    if (profile.runtimeValues.disk === 'fixed' && profile.storage.match.kind === 'any') {
-      add('warning', 'storage.match', 'validate.diskMatchAny')
-    }
-    if (
-      profile.runtimeValues.disk === 'fixed' &&
-      (profile.storage.match.kind === 'largest' || profile.storage.match.kind === 'smallest')
-    ) {
-      add('info', 'storage.match', 'validate.diskMatchSizeBased')
+      // 実行時にディスクを決める設定なら、ここの match は使われないので助言しない。
+      //
+      // `kind: 'any'` は `match: {}` を出力する。subiquity から見ると
+      // 「どのディスクでもよい」なので、複数ディスク機では**どれを消すか分からない**。
+      // 最も危険な指定なのに、より安全な largest / smallest にだけ注意書きがあり、
+      // ここだけ無言だった（落とし穴 22 と同じ形の事故になる）。
+      if (profile.runtimeValues.disk === 'fixed' && profile.storage.match.kind === 'any') {
+        add('warning', 'storage.match', 'validate.diskMatchAny')
+      }
+      if (
+        profile.runtimeValues.disk === 'fixed' &&
+        (profile.storage.match.kind === 'largest' || profile.storage.match.kind === 'smallest')
+      ) {
+        add('info', 'storage.match', 'validate.diskMatchSizeBased')
+      }
     }
   }
 
@@ -456,7 +847,11 @@ export function validateProfile(profile: AutoinstallProfile): ValidationResult {
 
   // --- ネットワークカードの指定 ---
   // netplan のキーや match にそのまま入るので、空や不正な形は実機で必ず失敗する。
-  if (profile.network.mode !== 'raw' && profile.network.mode !== 'installer-default') {
+  //
+  // bond はここを通さない。**bond では `target` が使われない**ので、
+  // 直せないうえに効かないエラーを出すことになる（落とし穴 61 / 66）。
+  // 「使われない」ことは `validateBondNetwork` が warning で伝える。
+  if (profile.network.mode === 'dhcp' || profile.network.mode === 'static') {
     const target = profile.network.target
     if (target.kind === 'name') {
       const name = typeof target.name === 'string' ? target.name.trim() : ''
@@ -500,7 +895,14 @@ export function validateProfile(profile: AutoinstallProfile): ValidationResult {
   // --- ソフトウェア / ネットワーク依存 ---
   const packages = collectPackages(profile)
   const needsNetworkPresets = presets.known.filter((id) => getPreset(id).needsNetwork)
-  if ((packages.length > 0 || profile.software.snaps.length > 0 || needsNetworkPresets.length > 0) && profile.network.mode === 'static' && !profile.network.gateway) {
+  // 固定 IP でゲートウェイが無いと外に出られない＝ apt が必ず失敗する。
+  // **bond でも同じ**（アドレスは bond 側に付くので、見る場所が違うだけ）。
+  const staticWithoutGateway =
+    (profile.network.mode === 'static' && !profile.network.gateway) ||
+    (profile.network.mode === 'bond' &&
+      profile.network.addressing === 'static' &&
+      !profile.network.gateway)
+  if ((packages.length > 0 || profile.software.snaps.length > 0 || needsNetworkPresets.length > 0) && staticWithoutGateway) {
     add('error', 'software.packages', 'validate.packagesWithoutGateway')
   }
   if (profile.software.ubuntuProToken && !/^C[1-9A-HJ-NP-Za-km-z]{23,29}$/.test(profile.software.ubuntuProToken)) {
@@ -772,6 +1174,12 @@ export function validateProfile(profile: AutoinstallProfile): ValidationResult {
   if (rv.disk === 'kernel-arg' && profile.storage.mode === 'raw') {
     add('error', 'runtimeValues.disk', 'validate.diskKernelArgWithRawStorage')
   }
+  if (rv.disk === 'kernel-arg' && profile.storage.mode === 'raid') {
+    // 置換スクリプトは `storage.layout.match` を書き換える。RAID は `config` を出すので
+    // `layout` が無く、引数を渡しても反映できない。**反映できなかったら止める**
+    // （落とし穴 27）ので、そのまま作ると全台が起動直後に `exit 1` で止まる。
+    add('error', 'runtimeValues.disk', 'validate.diskKernelArgWithRaidStorage')
+  }
   if (rv.network === 'kernel-arg' && profile.network.mode === 'raw') {
     add('error', 'runtimeValues.network', 'validate.networkKernelArgWithRawNetplan')
   }
@@ -796,6 +1204,9 @@ export function validateProfile(profile: AutoinstallProfile): ValidationResult {
   if (
     rv.disk === 'kernel-arg' &&
     profile.storage.mode !== 'raw' &&
+    // raid には `layout.match` が無いので「シリアルで指定してください」は的外れ
+    // （上の diskKernelArgWithRaidStorage が本当の理由を出している）。
+    profile.storage.mode !== 'raid' &&
     profile.storage.match.kind !== 'serial'
   ) {
     add('error', 'runtimeValues.disk', 'validate.diskKernelArgNeedsSerialMatch')

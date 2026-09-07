@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createDefaultProfile } from './defaults.js'
+import { createDefaultRaidStorage } from './raid.js'
+import { createDefaultBondNetwork } from './bond.js'
 import { validateProfile } from './validate.js'
 import { en, formatLocalized, ja, localized, LOCALES, placeholdersOf } from '../i18n/index.js'
 import type { MsgKey } from '../i18n/index.js'
@@ -119,6 +121,49 @@ function host(over: Record<string, unknown> = {}): unknown {
     disk: 'SERIAL123',
     ...over,
   }
+}
+
+/** RAID の 1 行。判別可能ユニオン (`match`) を含むので、既定に重ねずに毎回書く。 */
+function rdisk(over: Record<string, unknown> = {}): unknown {
+  return { id: 'd1', match: { kind: 'serial', serial: 'S1' }, boot: true, ...over }
+}
+
+function rarray(over: Record<string, unknown> = {}): unknown {
+  return {
+    id: 'a1',
+    name: 'md0',
+    level: 'raid1',
+    role: 'lvm-pv',
+    diskIds: ['d1', 'd2'],
+    spareDiskIds: [],
+    ...over,
+  }
+}
+
+/** `mode: 'bond'` のネットワーク設定。指定しなかったキーは既定のまま。 */
+function bondNetwork(over: Record<string, unknown> = {}): unknown {
+  const base = createDefaultBondNetwork()
+  const params = isRecord(over['parameters']) ? over['parameters'] : {}
+  return {
+    ...base,
+    ...over,
+    parameters: { ...base.parameters, ...params },
+  }
+}
+
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v)
+
+/** bond のメンバー 1 行。判別可能ユニオン (`selector`) を含むので毎回書く。 */
+function bmember(id: string, selector: Record<string, unknown>): unknown {
+  return { id, selector }
+}
+
+/** `mode: 'raid'` のストレージ設定。RAID 以外のキーは既定のまま。 */
+function raidStorage(over: Record<string, unknown> = {}): unknown {
+  const p = createDefaultProfile('24.04')
+  if (p.storage.mode === 'raw') throw new Error('既定が raw になっている')
+  return { ...p.storage, mode: 'raid', raid: { ...createDefaultRaidStorage(), ...over } }
 }
 
 /**
@@ -378,6 +423,193 @@ const MUTATIONS: Record<string, () => AutoinstallProfile> = {
       ...base(),
       behavior: { ...base().behavior, interactiveSections: ['storage'], reporting: { kind: 'rsyslog', destination: '' } },
     }),
+
+  // --- RAID + LVM ---
+  // ここが「どのディスクが消えるか」を決める場所なので、壊し方を多めに置く。
+  'RAID: 何も設定していない': () => broken({ ...base(), storage: raidStorage() }),
+  'RAID: ディスクが 1 台だけ': () =>
+    broken({ ...base(), storage: raidStorage({ disks: [rdisk()] }) }),
+  'RAID: 起動に使うディスクが無い': () =>
+    broken({
+      ...base(),
+      storage: raidStorage({
+        disks: [rdisk({ boot: false }), rdisk({ id: 'd2', boot: false })],
+      }),
+    }),
+  'RAID: 内部 ID が重複': () =>
+    broken({ ...base(), storage: raidStorage({ disks: [rdisk(), rdisk()] }) }),
+  'RAID: 台数不足と曖昧なディスク指定': () =>
+    broken({
+      ...base(),
+      storage: raidStorage({
+        disks: [
+          rdisk({ match: { kind: 'largest' } }),
+          rdisk({ id: 'd2', match: { kind: 'any' } }),
+          rdisk({ id: 'd3', match: { kind: 'serial', serial: '' } }),
+        ],
+        arrays: [rarray({ level: 'raid10', diskIds: ['d1', 'd2', 'd3'] })],
+      }),
+    }),
+  'RAID: 配列の名前と参照が壊れている': () =>
+    broken({
+      ...base(),
+      storage: raidStorage({
+        disks: [rdisk(), rdisk({ id: 'd2' })],
+        arrays: [
+          rarray({ name: '', diskIds: ['d1', 'd1'], spareDiskIds: ['d1'] }),
+          rarray({ id: 'a2', name: 'bad name!', diskIds: ['d1', 'd2'] }),
+          rarray({ id: 'a3', name: 'md1', diskIds: ['d1', 'd2'] }),
+          rarray({ id: 'a4', name: 'md1', diskIds: ['dX'] }),
+        ],
+      }),
+    }),
+  'RAID: /boot 配列が 2 つ・サイズと名前が不正': () =>
+    broken({
+      ...base(),
+      storage: raidStorage({
+        disks: [rdisk(), rdisk({ id: 'd2', boot: false })],
+        arrays: [
+          rarray({ id: 'ab', name: 'md0', role: 'boot' }),
+          rarray({ id: 'ab2', name: 'md1', role: 'boot' }),
+          rarray({ id: 'ap', name: 'md2', role: 'lvm-pv' }),
+        ],
+        espSize: 'nope',
+        bootSize: 'nope',
+        rootSize: 'nope',
+        volumeGroup: '-bad',
+        rootName: '-bad',
+      }),
+    }),
+  'RAID: RAID0 とスペア': () =>
+    broken({
+      ...base(),
+      storage: raidStorage({
+        disks: [rdisk(), rdisk({ id: 'd2' }), rdisk({ id: 'd3' })],
+        arrays: [rarray({ level: 'raid0', spareDiskIds: ['d3'] })],
+      }),
+    }),
+  'RAID: LVM の配列が無い': () =>
+    broken({
+      ...base(),
+      storage: raidStorage({
+        disks: [rdisk(), rdisk({ id: 'd2' })],
+        arrays: [rarray({ role: 'boot' })],
+      }),
+    }),
+  'RAID: ブートローダを複製しない': () =>
+    broken({
+      ...base(),
+      storage: raidStorage({
+        disks: [rdisk(), rdisk({ id: 'd2' })],
+        arrays: [rarray()],
+        mirrorBootloader: false,
+      }),
+    }),
+  // --- bond ---
+  // ここが「どの NIC が束ねられるか」を決める場所なので、壊し方を多めに置く。
+  'bond: 何も設定していない': () => broken({ ...base(), network: bondNetwork() }),
+  'bond: メンバーの指定が壊れている': () =>
+    broken({
+      ...base(),
+      network: bondNetwork({
+        name: '',
+        members: [
+          bmember('m1', { kind: 'name', name: '' }),
+          bmember('m2', { kind: 'name', name: '1bad' }),
+          bmember('m3', { kind: 'mac', macaddress: 'zz' }),
+          bmember('m4', { kind: 'nonsense' }),
+          bmember('m5', { kind: 'any' }),
+        ],
+      }),
+    }),
+  'bond: 同じ NIC を 2 回・パラメータが壊れている': () =>
+    broken({
+      ...base(),
+      network: bondNetwork({
+        target: { kind: 'name', name: 'eno1' },
+        members: [
+          bmember('m1', { kind: 'name', name: 'eth0' }),
+          bmember('m2', { kind: 'name', name: 'eth0' }),
+          bmember('m3', { kind: 'name', name: 'bond0' }),
+        ],
+        addressing: 'magic',
+        parameters: {
+          mode: 'nonsense',
+          transmitHashPolicy: 'BAD POLICY',
+          miiMonitorInterval: 1.5,
+        },
+      }),
+    }),
+  'bond: 効かないパラメータとリンク監視なし': () =>
+    broken({
+      ...base(),
+      network: bondNetwork({
+        name: 'bad name!',
+        members: [
+          bmember('m1', { kind: 'name', name: 'eth0' }),
+          bmember('m2', { kind: 'name', name: 'eth1' }),
+        ],
+        parameters: {
+          mode: 'balance-rr',
+          lacpRate: 'fast',
+          transmitHashPolicy: 'layer3+4',
+          miiMonitorInterval: 0,
+        },
+      }),
+    }),
+  'bond: LACP + 固定 IP': () =>
+    broken({
+      ...base(),
+      network: bondNetwork({
+        members: [
+          bmember('m1', { kind: 'mac', macaddress: '52:54:00:12:34:56' }),
+          bmember('m2', { kind: 'mac', macaddress: '52:54:00:12:34:57' }),
+        ],
+        parameters: {
+          mode: '802.3ad',
+          lacpRate: 'fast',
+          transmitHashPolicy: 'layer3+4',
+          miiMonitorInterval: 100,
+        },
+        addressing: 'static',
+        address: '10.0.0.5/24',
+        gateway: '10.0.0.1',
+        nameservers: ['10.0.0.1'],
+      }),
+    }),
+  'bond: 固定 IP なのにゲートウェイが無い': () =>
+    broken({
+      ...base(),
+      network: bondNetwork({
+        members: [
+          bmember('m1', { kind: 'name', name: 'eth0' }),
+          bmember('m2', { kind: 'name', name: 'eth1' }),
+        ],
+        addressing: 'static',
+        address: '10.0.0.5/24',
+        gateway: '',
+        nameservers: [],
+      }),
+      software: { ...base().software, packages: ['htop'] },
+    }),
+
+  'RAID: 効かない設定とカーネル引数': () =>
+    broken({
+      ...base(),
+      storage: {
+        ...(raidStorage({
+          disks: [rdisk(), rdisk({ id: 'd2' })],
+          arrays: [rarray()],
+        }) as Record<string, unknown>),
+        resetPartition: { enabled: true, size: '' },
+      },
+      runtimeValues: {
+        ...base().runtimeValues,
+        disk: 'kernel-arg',
+        offerInteractiveEntry: false,
+        presets: [host()],
+      },
+    }),
 }
 
 /**
@@ -396,6 +628,10 @@ const NOT_REACHED_BY_BATTERY: Record<string, string> = {
   'validate.hostFieldGateway': '同上',
   'validate.hostFieldNameservers': '同上',
   'validate.hostFieldDisk': '同上',
+  // RAID のサイズ欄の名前。`validate.raidSizeInvalid` の差し込み値。
+  'validate.raidFieldEsp': 'raidSizeInvalid の差し込み値',
+  'validate.raidFieldBoot': '同上',
+  'validate.raidFieldRoot': '同上',
   // GUI 側でしか作れない。実際の grub.cfg のサイズが要るので validateProfile では出せない。
   'validate.grubMenuTooLarge': 'ipc.ts の generateConfig が足す（ISO を開いていないと計れない）',
   // 対応する分岐が現行のリリース定義では成立しない。

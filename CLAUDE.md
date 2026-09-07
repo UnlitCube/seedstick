@@ -572,8 +572,117 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
     ハンドル）を書いたら、**「N 回走らせたらどうなるか」を一度考える**。
     番人を入れたら、同じ漏れが**さらに 4 ファイル**見つかった（落とし穴 73）。
 
+### VM で検証する（WSL2 + QEMU）
+
+88. **`qemu-nbd --connect` は WSL では使えない。** `qemu-img convert -O raw` +
+    `losetup -P` を使う。
+    `qemu-nbd` は接続が rc=0 で返り `blockdev --getsize64` も正しい値を出すのに、
+    **デーモンが直後に死ぬ**ので読むと 0 バイト（`Buffer I/O error`）。
+    「繋がっているのに読めない」ので原因にたどり着きにくい。
+    raw は疎ファイルなので、20 GB の見かけでも実使用は 5〜6 GB。
+
+89. **WSL2 のカーネルは Docker Desktop と共有している。**
+    `losetup -D`（全 loop を外す）や `dmsetup remove_all` は
+    **Docker の loop / dm まで巻き込む**（実測で `loop0` / `loop1` は
+    `docker-desktop.iso` のものだった）。
+    掃除は**自分が作ったものだけを名前で**外す。
+    `wsl --shutdown` も全ディストロを止めるので使わない
+    （止めるなら `wsl -t <distro>`。ただし dm の状態はカーネル側なので消えない）。
+
+90. **WSL では `blkid` が空を返す**（udev が動いていない）。`lsblk -no FSTYPE` を使う。
+    `blkid` に頼った判定は「ext4 があるのに見つからない」になる。
+
+91. **`/dev/mapper/xxx` のリンク経由でマウントしない。**
+    `readlink -f` で `/dev/dm-N` にする。リンクのままだと
+    `already mounted or mount point busy` と言われるが、**実際は空いている**。
+    あわせて、ジャーナル未再生の ext4 は `-o ro,noload` でないと開けない。
+
+92. **「検証の道具が残した状態」で検証結果が変わってはいけない。**
+    手で調べたときのマウントを外し忘れ、次の自動実行が
+    **インストールは成功しているのに 10 件を偽の FAIL** にした。
+    しかもその失敗は実装のバグに見える。
+    検査スクリプトは**始める前に自分で片付ける**。
+
+93. **層を間違えた検証は、正しい実装を「バグだ」と告発する。**
+    「管理ユーザーが作られていない」と出たので実装を疑ったが、
+    subiquity は `/etc/cloud/cloud.cfg.d/99-installer.cfg` に**書くだけ**で、
+    **実際に作るのは初回起動時の cloud-init**だった。
+    インストール直後の `/etc/passwd` を見たのが誤り。
+    「設定が渡ったか」と「実際に作られたか」は**別の層**なので、両方を別々に見る。
+
+### RAID / bond（一次資料 R8 で確かめた制約）
+
+94. **`storage.layout` と `storage.config` は排他。**
+    リファレンスが「layout を使うと config は使われない」と書いている。
+    RAID は `config`（curtin のアクション列）でしか表現できないので、
+    RAID のときは **`layout` を出さない**。両方出すと RAID の指定が黙って無視され、
+    **`layout` のほうのディスクが消える**。
+
+95. **`mount.device` が指すのは `format` の id。** パーティションや RAID の id ではない。
+    取り違えても curtin はエラーを出さず、**黙ってマウントされない**。
+    アクション列を機械で検査するときは「参照が解決するか」だけでなく
+    **「参照先の種類が正しいか」**まで見る（`e2e-raid-bond.mts` がそうしている）。
+
+96. **RAID10 は 4 台から。** curtin のドキュメントの最小台数は
+    `raid0`/`raid1` = 2、`raid5` = 3、`raid6`/`raid10` = 4。
+    **mdadm 自体は 2 台の raid10 を作れる**が、curtin が保証しているのは 4 台以上なので
+    **検証で止める**（2 台で組みたい人は `raw`＝curtin 直書きへ逃がす）。
+    「mdadm で作れる」を根拠に緩めない。
+
+97. **ESP は RAID に置けない。** UEFI ファームウェアは md を組み立てられないので、
+    起動対象のディスクごとに**素の FAT で ESP を作る**。
+    ただし**同じ `/boot/efi` に 2 つはマウントできない**ので、
+    `mount` を出すのは 1 台目だけ。2 台目以降は `format` だけして、
+    中身は late-commands で複製する。
+    GPT では `flag: boot` が **ESP** になる（msdos では bootable）。
+    `flag: bios_grub` は別物（BIOS 起動用の 1 MB 領域。ファイルシステムを作らない）。
+
+98. **`grub_device` は 1 台にしか設定できない**（curtin のドキュメント）。
+    「どちらが壊れても起動する」は curtin が面倒を見てくれないので、
+    **late-commands で 2 台目に `grub-install` する**のはこのアプリの補いであって
+    一次資料の裏付けは無い。**この手順そのものは未検証**（`docs/HANDOFF.md` §3.1）。
+
+99. **アクションは書かれた順に処理される。** だから
+    **前方参照が成立しない**（まだ出ていない id を指せない）し、
+    `mount` は**パスの浅い順**に並べる（`/` より先に `/boot/efi` をマウントしない）。
+    さらに「一致するディスクのうち**任意の 1 台**が割り当てられる」ので、
+    **RAID のメンバーに `largest` / `any` を使うと、どのディスクが消えるか事前に決められない**。
+
+100. **netplan の bond はメンバーを `ethernets:` にも宣言する。**
+    宣言が無いと bond が成立しない。そして
+    **メンバー側にアドレス・経路・DNS を付けない**（付けるのは bond 側）。
+    メンバーのデバイス ID は**互いに違う名前**にする。単一 NIC 用の生成を流用して
+    MAC 指定を同じキーにすると 2 枚目が 1 枚目を上書きし、
+    **「2 枚あるつもりの冗長化が 1 枚」**になる（実機で片方を抜くまで気づけない）。
+
+101. **`lacp-rate` は 802.3ad のときだけ、`transmit-hash-policy` は
+    `balance-xor` / `802.3ad` のときだけ効く。**
+    効かないモードで出すと「設定したのに効かない」になるので**出力せず検証で伝える**。
+    `mii-monitor-interval` の既定は **0＝監視しない**なので、
+    実運用では 100 程度を入れる。ただし **0 は出力しない**
+    （既定と同じ値を出すと「監視を設定した」ように見えるだけ害がある）。
+
+102. **`802.3ad` はスイッチ側にも LACP の設定が要る。**
+    netplan の既定 `balance-rr` も含め、**スイッチが対応していないと壊れる**モードがある。
+    既定にするなら `active-backup`（スイッチ側の設定が要らない唯一の冗長モード）。
+    YAML 上 `802.3ad` は**数に見える形**なので、往復して文字列のまま残るか確かめる。
+
+103. **「スキーマを通る」は「そのとおりに組まれる」ではない。**
+    autoinstall のスキーマは `storage: {type: object}` としか言っていない
+    （4 リリースとも同じ。つまり**リリース差が無い**）。
+    だから **`storage.config` の中身はスキーマ検証を一切通っていない**。
+    中身の正しさを保証するのは curtin であって autoinstall のスキーマではない。
+    スキーマが緑でも「実機で組まれる」証拠にはならない。
+
 ## 検証済みのこと
 
+- **RAID + LVM と bond の生成**を `scripts/e2e-raid-bond.mts` で確かめた（**70 / 70**）。
+  利用者の要望どおりの構成（boot 2 台に ESP + RAID1 `/boot`、data 4 台に RAID10 → LVM → root、
+  NIC 2 枚を 802.3ad で束ねて固定 IP）を組み立て、YAML へ往復させてから
+  **id の参照解決・参照先の種類・依存の順・ESP のマウント数・`grub_device` の台数・
+  メンバーにアドレスが付いていないこと**を機械で検査し、
+  **subiquity 公式スキーマを 4 リリースとも通した**。
+  **ただし実機／VM でインストールを完走させてはいない**（落とし穴 103・`docs/HANDOFF.md` §3.2）。
 - **実 ISO 2 種 (22.04.5 / 24.04.3) × 設定 10 パターン**を `scripts/e2e-matrix.mts` で網羅。
   10 パターンすべてが 生成 → プロファイル検証 → subiquity 公式スキーマ検証 →
   ISO パッチ → レイアウト計画 まで通る。
@@ -628,6 +737,8 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
 | `npm run test:unit` | vitest（実 ISO から抜いた疎なフィクスチャを使う） |
 | `npm run smoke` | **実 ISO ファイル**を読んで `.img` に書き出し、読み戻して検証 |
 | `npm run e2e` | **実 ISO × 設定 10 パターン**を網羅（デバイス列挙・ISO 拒否・スキーマ検証を含む） |
+| `npm run e2e:raid-bond` | **RAID + LVM と bond の生成検証**（ISO も実デバイスも触らない。数秒） |
+| `npm run e2e:image` | **イメージ保存の経路**（`WriteSupervisor.startImageWrite`）を実 ISO で通し、`.img` を作って読み戻す。**昇格不要**。作った `.img` は最後に消す |
 | `npm run e2e:usb` | **実 USB に書く**。管理者権限が必要。書いたあと読み戻して検証する |
 | `npm run e2e:usb-worker` | 同じく実 USB に書くが、**昇格ワーカー + NDJSON 経路**を通す（GUI と同じ経路） |
 | `npm run e2e:verify-usb` | 書き終わった USB を読み戻すだけ（権限が無ければ CIDATA だけ見る） |
@@ -636,6 +747,13 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
 
 `npm run smoke` は `~/images`・`~/Downloads`・`C:/iso`・`/var/lib/iso` から ISO を探す。
 明示するなら `npm run smoke -- <iso のパス>`。ISO が無ければスキップして正常終了する。
+
+`npm run e2e:image` も同じ場所から **live-server の ISO だけ**を探す
+（`npm run e2e:image -- <iso のパス>` で明示。無ければスキップして正常終了）。
+`smoke` が media パッケージを素で並べるのに対し、こちらは **main の経路**
+（保存先の許可 → `buildIsoPatches` → `buildSeedBundle` → 空き容量 →
+`WriteSupervisor.startImageWrite` → `WriteStatus` の購読）を通る。
+ISO 1 本につき数 GB の `.img` を作るが、**終了時に必ず消して解放量を出力する**。
 
 `npm run e2e:usb` / `npm run e2e:usb-worker` は昇格が要るので `npm test` には入れていない。
 実行すると USB の中身は消える。前者は `executeWritePlan` を直接呼び、後者は GUI と同じく

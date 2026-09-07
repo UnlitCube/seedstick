@@ -14,6 +14,7 @@ import {
   buildReporting,
   errorLogToSeedCommands,
 } from './advanced.js'
+import { buildRaidPlan, diskMatchSpec, raidEspMirrorCommand } from './generate-raid.js'
 import {
   SEED_MOUNT_PATH,
   buildProvisioningCommands,
@@ -29,6 +30,7 @@ import {
   type GrubMenuEntry,
   type RuntimeValuesConfig,
 } from './runtime-values.js'
+import { buildBondNetplan } from './generate-bond.js'
 
 // プロファイル → autoinstall YAML の決定的な変換。
 // GUI で作った設定と、実際にインストーラへ渡る YAML が 1 対 1 で対応することが商用ツールの信頼性の要。
@@ -241,6 +243,13 @@ function buildNetwork(net: NetworkConfig, runtime: RuntimeValuesConfig): unknown
     const doc = parseDocument(net.yaml)
     return doc.toJS() ?? {}
   }
+  // bond は `ethernets` に加えて `bonds` を出すので、単一 NIC の組み立てには乗らない。
+  // ここより下（既存の 3 モード）の出力は 1 バイトも変わらない。
+  //
+  // `byKernelArg` との併用は検証がエラーにしている
+  // (`validate.networkKernelArgNeedsStatic`)。early-commands は
+  // `network.ethernets` しか書き換えないので、bond に IP を差し替えることはできない。
+  if (net.mode === 'bond') return buildBondNetplan(net)
   const target = net.mode === 'installer-default' ? { kind: 'any' as const } : net.target
   const { key, match } = interfaceKeyAndMatch(target)
   const iface: Record<string, unknown> = {}
@@ -275,31 +284,19 @@ function buildStorage(
     const doc = parseDocument(storage.yaml)
     return doc.toJS() ?? {}
   }
-  const layout: Record<string, unknown> = { name: storage.mode }
-  switch (storage.match.kind) {
-    case 'largest':
-      layout['match'] = { size: 'largest' }
-      break
-    case 'smallest':
-      layout['match'] = { size: 'smallest' }
-      break
-    case 'ssd':
-      layout['match'] = { ssd: true }
-      break
-    case 'path':
-      layout['match'] = { path: storage.match.path }
-      break
-    case 'serial':
-      layout['match'] = { serial: storage.match.serial }
-      break
-    case 'model':
-      layout['match'] = { model: storage.match.model }
-      break
-    case 'any':
-      // 空の match は「任意の 1 台」を意味する（autoinstall リファレンスに明記）
-      layout['match'] = {}
-      break
+  if (storage.mode === 'raid') {
+    // **`layout` と `config` は排他**（autoinstall リファレンス:
+    // "If the layout feature is used to configure the disks, the config section is not used."）。
+    // RAID は `config`（curtin のアクション列）でしか表現できないので layout は出さない。
+    const out: Record<string, unknown> = {
+      version: 1,
+      config: buildRaidPlan(storage.raid).config,
+    }
+    // `swap` は `config` と併用できる（リファレンスの例がそう書いている）。
+    applySwap(out, storage)
+    return out
   }
+  const layout: Record<string, unknown> = { name: storage.mode, match: diskMatchSpec(storage.match) }
   if (storage.partitionTable !== 'default') layout['ptable'] = storage.partitionTable
   // sizing-policy と password は lvm レイアウト専用
   if (storage.mode === 'lvm') {
@@ -312,7 +309,10 @@ function buildStorage(
   return out
 }
 
-type StructuredStorage = Extract<StorageConfig, { mode: 'lvm' | 'direct' | 'zfs' }>
+// `Extract<StorageConfig, {mode:'lvm'|'direct'|'zfs'}>` は **never** になる
+// （構造化側のメンバーの `mode` は `'lvm'|'direct'|'zfs'|'raid'` なので、
+//   `{mode:'lvm'|'direct'|'zfs'}` には代入できない）。`raw` を除く形で書く。
+type StructuredStorage = Exclude<StorageConfig, { mode: 'raw' }>
 
 /** `swap` は storage の直下（layout の中ではない）。 */
 function applySwap(out: Record<string, unknown>, storage: StructuredStorage): void {
@@ -442,6 +442,9 @@ export function collectEarlyCommands(profile: AutoinstallProfile): string[] {
   const net = profile.network
   // raw の netplan と kernel-arg は併用できない（検証でエラーにしている）ので、
   // ここに来る net は必ず target を持つ。
+  // bond も同じく併用できない (`validate.networkKernelArgNeedsStatic` が
+  // `mode !== 'static'` で必ずエラーにする)。置換スクリプトは
+  // `network.ethernets` しか触らないので、bond のアドレスは差し替えられない。
   const target: InterfaceSelector =
     net.mode === 'installer-default' || net.mode === 'raw' ? { kind: 'any' } : net.target
   return [
@@ -477,6 +480,10 @@ export function collectLateCommands(profile: AutoinstallProfile): string[] {
   const provisioning = buildProvisioningCommands(profile)
   const cmds: string[] = []
 
+  // ブートローダの複製は最初に置く。curtin が GRUB を入れ終わったあと
+  // （late-commands はインストール本体の後）で、他のどの後処理にも依存しない。
+  if (needsRaidEspMirror(profile)) cmds.push(raidEspMirrorCommand())
+
   // 知らない ID は読み飛ばす（検証側でエラーとして知らせる）
   for (const id of profile.postInstall.presets) {
     const preset = findPreset(id)
@@ -490,6 +497,19 @@ export function collectLateCommands(profile: AutoinstallProfile): string[] {
 
   cmds.push(...profile.postInstall.lateCommands)
   return cmds
+}
+
+/**
+ * 2 台目以降の boot ディスクに GRUB を入れる late-command が要るか。
+ *
+ * ESP が 1 つしか無いなら何もしない（複製先が無い）。
+ * `mirrorBootloader` を切ってあるときも出さない。
+ */
+export function needsRaidEspMirror(profile: AutoinstallProfile): boolean {
+  const storage = profile.storage
+  if (storage.mode !== 'raid') return false
+  if (!storage.raid.mirrorBootloader) return false
+  return buildRaidPlan(storage.raid).espCount >= 2
 }
 
 /** 初回起動時に cloud-init が実行するコマンド。 */

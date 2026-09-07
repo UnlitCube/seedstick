@@ -315,7 +315,10 @@ const DRAFT_FIELDS_MIN = 13
 // 数だけでは「A の欄が消えて B の欄が増えた」を見逃す。
 // 下書きが要る画面そのものが素通しへ戻っていないかも見る。
 const DRAFT_FIELD_FILES = [
-  'NetworkStep.tsx', // nameservers / search domains
+  // ネットワークの nameservers / search domains。**単一 NIC と bond で同じ部品**を
+  // 使うので、`NetworkStep.tsx` から `sections/NetworkFields.tsx` へ移した
+  // （写しを 2 つ持つと片方だけ直る）。見張る欄は変わっていない。
+  'NetworkFields.tsx',
   'PostInstallStep.tsx', // late / first-boot / error commands
   'SoftwareStep.tsx', // custom packages / snaps
   'UserStep.tsx', // ssh keys / groups

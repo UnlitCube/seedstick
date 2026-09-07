@@ -7,12 +7,19 @@ import { join } from 'node:path'
 import {
   decodeMessages,
   encodeMessage,
+  executeWritePlan,
+  FileBlockDevice,
   getPlatformOps,
+  inspectIso,
+  minimumDiskSize,
+  planUsbLayout,
   type ControlMessage,
   type WorkerJob,
   type WorkerMessage,
+  type WriteProgress,
 } from '@autoinstall/media'
 import { localized, type LocalizedText, type WriteStatus } from '@autoinstall/shared'
+import { displayTextOf } from './worker-message.js'
 
 // 書き込みの司令塔。
 //
@@ -21,6 +28,44 @@ import { localized, type LocalizedText, type WriteStatus } from '@autoinstall/sh
 // 127.0.0.1 の TCP に NDJSON を流し、1 回限りのトークンで認証する。
 
 export type StatusListener = (status: WriteStatus) => void
+
+/**
+ * `.img` ファイルへの書き出し指示。
+ *
+ * `WorkerJob` と同じ材料（パッチ・seed・CIDATA のサイズ）を使うが、
+ * **書き込み先はデバイスではなくファイル**なので、デバイスの同一性確認
+ * (`deviceSerial` / `deviceSizeBytes`) も昇格も要らない。
+ * ディスクの大きさは容量に合わせず `minimumDiskSize()` で決める。
+ */
+export interface ImageWriteJob {
+  readonly isoPath: string
+  /** 保存先。**`ipc.ts` の許可リストを通ったものだけ**が渡ってくる（落とし穴 55）。 */
+  readonly imagePath: string
+  /** grub.cfg 等のインプレース改変。オフセットと base64 のデータ（`WorkerJob` と同じ形）。 */
+  readonly patches: readonly { readonly offset: number; readonly data: string; readonly label: string }[]
+  /** CIDATA に入れるファイル。内容は base64。 */
+  readonly seedFiles: readonly { readonly name: string; readonly content: string }[]
+  readonly cidataSizeBytes: number
+  readonly hideIsoPartitionFromWindows: boolean
+  /** 読み戻して照合するか。**デバイスへ書くときと同じ手順**で行う。 */
+  readonly verify: boolean
+  readonly timestampIso: string
+}
+
+/**
+ * イメージファイルを作れなかった（保存先に書けない等）。
+ *
+ * `text` を持つので `displayTextOf()` が訳せる形の総括を取り出せる。
+ * `message` は開発者向けの生の理由（EACCES など）で、`detail` に出る。
+ */
+class ImageCreateError extends Error {
+  readonly text: LocalizedText = localized('image.createFailed')
+
+  constructor(cause: Error) {
+    super(cause.message)
+    this.name = 'ImageCreateError'
+  }
+}
 
 export class WriteSupervisor {
   private killTimer: ReturnType<typeof setTimeout> | null = null
@@ -35,6 +80,11 @@ export class WriteSupervisor {
   private jobId = ''
   private jobFile: string | null = null
   private deviceId: string | null = null
+  /**
+   * 走っているファイル書き出し。**昇格していないので子プロセスは無い。**
+   * 中止は `AbortController` で `executeWritePlan` に伝える。
+   */
+  private imageJob: { readonly controller: AbortController; readonly jobId: string } | null = null
 
   onStatus(listener: StatusListener): () => void {
     this.listeners.add(listener)
@@ -103,12 +153,137 @@ export class WriteSupervisor {
     }
   }
 
+  /**
+   * `.img` ファイルへの書き出しを始める。既に走っていれば拒否する。
+   *
+   * **昇格しない。** ファイルに書くだけなので管理者権限が要らず、
+   * 昇格ワーカー + NDJSON の経路（`spawnElevated` / `startReportServer`）は
+   * 一切通らない。書き込み自体は `executeWritePlan` を **デバイスへ書くときと
+   * まったく同じ**呼び方で行う（違うのは `targetDevice` が `FileBlockDevice` なことだけ）。
+   *
+   * 進捗・完了・失敗は既存の `WriteStatus` に流れるので、renderer 側は
+   * `onWriteStatus` を購読したままでよい。中止も既存の `cancel()` が効く。
+   */
+  async startImageWrite(
+    job: ImageWriteJob,
+  ): Promise<{ started: boolean; message?: LocalizedText; detail?: string | null }> {
+    if (this.busy) return { started: false, message: localized('write.errorAlreadyRunning') }
+
+    this.jobId = randomBytes(8).toString('hex')
+    this.resetWorkerPid()
+    const controller = new AbortController()
+    this.imageJob = { controller, jobId: this.jobId }
+    // **「権限を確認しています」は出さない。** 昇格しないのに権限の話をするのは嘘になる。
+    // ファイル用の専用キーを使う（`write.statusCheckingPrivileges` /
+    // `write.statusWaitingElevation` はこの経路には決して出てはいけない）。
+    this.setStatus({ state: 'preparing', message: localized('image.statusPreparing') })
+    // 完了を待たずに返す（デバイス経路と同じ契約）。以降の経過は setStatus だけで伝わる。
+    void this.runImageJob(job, controller)
+    return Promise.resolve({ started: true })
+  }
+
+  /**
+   * 実際に書く。**例外を外に出さない**（呼び出し元は `void` で捨てているので、
+   * ここで漏らすと unhandled rejection になり、画面は 'preparing' のまま固まる）。
+   */
+  private async runImageJob(job: ImageWriteJob, controller: AbortController): Promise<void> {
+    const jobId = this.jobId
+    /** このジョブの状態更新だけを通す（次のジョブが始まっていたら黙って捨てる）。 */
+    const mine = (): boolean => this.jobId === jobId
+    let iso: FileBlockDevice | null = null
+    let target: FileBlockDevice | null = null
+    let fileCreated = false
+    try {
+      iso = await FileBlockDevice.open(job.isoPath, 'r')
+      const inspection = await inspectIso(iso)
+      if (mine()) {
+        this.setStatus({
+          state: 'preparing',
+          message: localized('write.isoRecognized', { volumeId: inspection.volumeId }),
+        })
+      }
+
+      const patches = job.patches.map((p) => ({
+        offset: p.offset,
+        data: Buffer.from(p.data, 'base64'),
+        label: p.label,
+      }))
+
+      // **デバイスの容量に合わせて水増ししない。** ISO + CIDATA + GPT + 余裕だけ。
+      // 31 GB の USB 向けでも、出来上がるのは 3〜4 GB のファイルになる。
+      const diskSizeBytes = minimumDiskSize(inspection.sizeBytes, job.cidataSizeBytes)
+      const plan = await planUsbLayout({
+        isoDevice: iso,
+        diskSizeBytes,
+        patches,
+        seedFiles: job.seedFiles.map((f) => ({ name: f.name, content: Buffer.from(f.content, 'base64') })),
+        cidataSizeBytes: job.cidataSizeBytes,
+        random: (n: number) => randomBytes(n),
+        timestamp: new Date(job.timestampIso),
+        hideIsoPartitionFromWindows: job.hideIsoPartitionFromWindows,
+      })
+
+      // ファイルを作るのは**計画がすべて通ったあと**。ISO が壊れている・容量計算が
+      // 通らないといった理由で落ちたときに、空のファイルだけを残さない。
+      await createEmptyImageFile(job.imagePath)
+      fileCreated = true
+      // 'r+' で開く（'w+' は開いた瞬間にもう一度切り詰めるので、上で立てた疎フラグの
+      // 意味が薄れる）。実デバイスと違い、ここは素の `fs` で正しい（落とし穴 32 の裏返し）。
+      target = await FileBlockDevice.open(job.imagePath, 'r+')
+
+      const result = await executeWritePlan({
+        plan,
+        isoDevice: iso,
+        targetDevice: target,
+        patches,
+        // 読み戻し検証は実デバイスとまったく同じ手順。設定に従う。
+        verify: job.verify,
+        signal: controller.signal,
+        onProgress: (p) => {
+          if (mine()) this.setStatus(toWritingStatus(p))
+        },
+      })
+
+      await target.close()
+      target = null
+      if (mine()) {
+        this.setStatus({
+          state: 'done',
+          digest: result.digest,
+          bytesWritten: result.bytesWritten,
+          verified: result.verified,
+          elapsedMs: result.elapsedMs,
+          // どこに保存したのかを画面に出せるようにする。
+          outputPath: job.imagePath,
+        })
+      }
+    } catch (err) {
+      // 消す前にハンドルを閉じる（Windows は開いているファイルを消せない）。
+      await target?.close().catch(() => undefined)
+      target = null
+      const status = await settleImageFailure(err as Error, job.imagePath, fileCreated)
+      if (mine()) this.setStatus(status)
+    } finally {
+      await target?.close().catch(() => undefined)
+      await iso?.close().catch(() => undefined)
+      if (this.imageJob?.jobId === jobId) this.imageJob = null
+    }
+  }
+
   isBusy(): boolean {
     return this.busy
   }
 
   async cancel(): Promise<void> {
     if (!this.busy) return
+    // ファイルへの書き出しには子プロセスが無い（昇格していない）。
+    // `AbortController` で `executeWritePlan` を止めれば、書きかけのファイルは
+    // `runImageJob` の catch が消し、状態も 'cancelled' / 'error' に落ちる。
+    // taskkill も pid も要らないので、以降のデバイス向けの処理には入らない。
+    if (this.imageJob !== null) {
+      this.imageJob.controller.abort()
+      return
+    }
     // まずワーカーに丁寧に伝える。ワーカーは書き込みループの次の区切りで止まる。
     const msg: ControlMessage = { type: 'cancel', jobId: this.jobId }
     this.clientSocket?.write(encodeMessage(msg, this.token))
@@ -366,8 +541,99 @@ export class WriteSupervisor {
 
   /** アプリ終了時に呼ぶ。走っている子プロセスを片付ける。 */
   async dispose(): Promise<void> {
+    // ファイル書き出しは main の中で走っているので、止めないとウィンドウが
+    // 消えたあとも書き続ける（そして書きかけの .img が残る）。
+    this.imageJob?.controller.abort()
     if (this.child?.pid) killTree(this.child.pid)
     await this.cleanup()
+  }
+}
+
+/** `WriteProgress` を画面の状態に写す。**デバイス経路（`progress` メッセージ）と同じ形。** */
+export function toWritingStatus(p: WriteProgress): WriteStatus {
+  return {
+    state: 'writing',
+    phase: p.phase,
+    bytesDone: p.bytesDone,
+    bytesTotal: p.bytesTotal,
+    label: p.label,
+    bytesPerSecond: p.bytesPerSecond,
+    etaSeconds: p.etaSeconds,
+  }
+}
+
+/**
+ * 書き出しが失敗（または中止）したときの後始末と、そのあとの画面の状態。
+ *
+ * **書きかけの `.img` を残さない。** 中途半端なイメージを焼くと「起動しない USB」が
+ * できるうえ、原因が分からない。消せなかったときは**黙って成功にしない**——
+ * 残ったファイルの場所を必ず伝える（落とし穴 50）。
+ *
+ * ファイルを実際に消すので副作用がある。`runImageJob` から切り出してあるのは、
+ * 数 GB を書かずにこの分岐だけを確かめられるようにするため。
+ */
+export async function settleImageFailure(
+  err: Error,
+  imagePath: string,
+  fileCreated: boolean,
+): Promise<WriteStatus> {
+  // **作っていないファイルには触らない。** 同じ名前の `.img` が前回の実行で
+  // 既に置いてあることは普通にあり、計画が通る前に落ちた場合にそれを消すと
+  // 「失敗しただけなのに、前に作った成果物まで消えた」事故になる。
+  const removed = fileCreated ? await removeImageFile(imagePath) : true
+  if (err.name === 'WriteCancelledError') {
+    if (removed) return { state: 'cancelled' }
+    return {
+      state: 'error',
+      message: localized('image.cancelledLeftover', { path: imagePath }),
+      detail: null,
+    }
+  }
+  const text = displayTextOf(err)
+  return {
+    state: 'error',
+    // 消せなかったときは、元の理由を**入れ子のまま**包む
+    // （どちらの言語でも 1 文にまとまる。`MsgParams` が LocalizedText を許すのはこのため）。
+    message: removed ? text : localized('image.errorLeftover', { reason: text, path: imagePath }),
+    detail: err.stack ?? err.message,
+  }
+}
+
+/**
+ * 空のイメージファイルを作る（既存ファイルは切り詰める。上書きの確認は保存ダイアログ済み）。
+ *
+ * Windows では**大きさを決める前**に疎フラグを立てる（落とし穴 86）。
+ * `executeWritePlan` は隙間 (gap) には一切書かないので、疎にできれば
+ * 実際のディスク使用量はその分だけ小さくなる。立てられなくても書き出しは成立する。
+ */
+export async function createEmptyImageFile(path: string): Promise<void> {
+  try {
+    await writeFile(path, '')
+  } catch (err) {
+    throw new ImageCreateError(err as Error)
+  }
+  if (process.platform !== 'win32') return
+  await new Promise<void>((resolve) => {
+    const child = spawn('fsutil', ['sparse', 'setflag', path], { windowsHide: true, stdio: 'ignore' })
+    // fsutil が無い / 権限が無い / ファイルシステムが対応していない場合は黙って続ける。
+    // 疎にならないだけで、書き出しそのものは成立する。
+    child.on('error', () => resolve())
+    child.on('exit', () => resolve())
+  })
+}
+
+/**
+ * 書きかけのイメージファイルを消す。**消せたかどうかを返す。**
+ *
+ * 「消しました」と嘘をつくと、利用者は起動しないイメージを焼くことになる。
+ * Windows ではウイルス対策ソフトが一瞬掴んでいることがあるので数回だけ待って試す。
+ */
+export async function removeImageFile(path: string): Promise<boolean> {
+  try {
+    await rm(path, { force: true, maxRetries: 3, retryDelay: 200 })
+    return true
+  } catch {
+    return false
   }
 }
 

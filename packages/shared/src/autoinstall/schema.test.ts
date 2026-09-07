@@ -9,6 +9,7 @@ import { createDefaultProfile } from './defaults.js'
 import { buildAutoinstallObject, generateUserData } from './generate.js'
 import type { AutoinstallProfile, UbuntuSeries } from './model.js'
 import type { AdditionalUser, Deployment, SystemdService } from './provisioning.js'
+import { createDefaultRaidStorage } from './raid.js'
 
 // subiquity 公式の autoinstall-schema.json で、生成した設定が実際に受理されるかを確かめる。
 // スキーマは各リリースのタグから取得したもの（docs/research/schema/）。
@@ -133,6 +134,7 @@ function everything(series: UbuntuSeries): AutoinstallProfile {
       swap: { mode: 'size', size: '4G' },
       partitionTable: 'gpt',
       resetPartition: { enabled: true, size: '12G' },
+      raid: createDefaultRaidStorage(),
     },
     software: {
       ...p.software,

@@ -10,6 +10,7 @@ import {
   generateUserData,
 } from './generate.js'
 import type { AutoinstallProfile } from './model.js'
+import { createDefaultRaidStorage } from './raid.js'
 import { validateProfile } from './validate.js'
 
 const HASH =
@@ -82,6 +83,7 @@ describe('buildAutoinstallObject', () => {
           swap: { mode: 'installer-default', size: '' },
           partitionTable: 'default',
           resetPartition: { enabled: false, size: '' },
+          raid: createDefaultRaidStorage(),
         },
       })),
     )

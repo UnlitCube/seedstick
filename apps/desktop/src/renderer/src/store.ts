@@ -8,6 +8,7 @@ import {
   type AutoinstallProfile,
   type DeviceInfo,
   type GeneratedConfig,
+  type ImageTarget,
   type IsoFileInfo,
   type Locale,
   type LocalizedText,
@@ -129,6 +130,15 @@ interface AppState {
   devicesBusy: boolean
   selectedDeviceId: string | null
   writeStatus: WriteStatus
+  /**
+   * 直近の書き出し先（`.img`）。**デバイスへ書いているときは必ず null**。
+   *
+   * `WriteStatus` はデバイスとイメージで同じチャネルを流れるが、
+   * `cancelled` は `state` しか持たないので、どちらを止めたのかが status からは分からない。
+   * 「USB メモリの内容は壊れています」を `.img` の中止に出すと嘘になる
+   * （main は書きかけのファイルを消している）ので、どちらの経路だったかをここで覚える。
+   */
+  imageTarget: ImageTarget | null
   /** 平文パスワードはここにだけ置く。保存もログ出力もしない。 */
   passwordDraft: string
   passwordConfirmDraft: string
@@ -175,6 +185,11 @@ interface AppState {
   refreshDevices(): Promise<void>
   selectDevice(id: string | null): void
   startWrite(): Promise<void>
+  /**
+   * 保存先を選んでから `.img` への書き出しを始める。
+   * ダイアログでキャンセルされたら何もしない（`false` を返す）。
+   */
+  saveAsImage(): Promise<boolean>
   cancelWrite(): Promise<void>
   /** 書き込み結果を消して、もう一本作れる状態に戻す */
   resetWrite(): void
@@ -218,6 +233,7 @@ export const useStore = create<AppState>((set, get) => ({
   devicesBusy: false,
   selectedDeviceId: null,
   writeStatus: { state: 'idle' },
+  imageTarget: null,
   passwordDraft: '',
   passwordConfirmDraft: '',
   profiles: [],
@@ -350,6 +366,9 @@ export const useStore = create<AppState>((set, get) => ({
   async startWrite() {
     const { iso, selectedDeviceId, profile, settings } = get()
     if (!iso || !selectedDeviceId || !settings) return
+    // これはデバイスへの書き込み。前回の `.img` の保存先を残したままにすると、
+    // 中止したときに「イメージファイルを削除しました」と嘘を出す。
+    set({ imageTarget: null })
     const result = await window.autoinstall.startWrite({
       isoPath: iso.path,
       deviceId: selectedDeviceId,
@@ -371,6 +390,43 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
+  /**
+   * `.img` として書き出す。
+   *
+   * デバイスへの書き込みと違い**権限昇格が起きない**ので、USB を挿していなくても
+   * ここまで来られる。保存先は main の保存ダイアログだけが決める
+   * （renderer が組み立てたパスは main が受け付けない。落とし穴 55）。
+   */
+  async saveAsImage() {
+    const { iso, profile, settings } = get()
+    if (!iso || !settings) return false
+    // 既定のファイル名の希望。**安全な名前に直すのは main の仕事**
+    // （`suggestImageFileName` がパス区切りも予約名も落とす）。
+    const target = await window.autoinstall.chooseImagePath(profile.basics.hostname)
+    if (!target) return false
+    set({ imageTarget: target })
+    const result = await window.autoinstall.startImageWrite({
+      isoPath: iso.path,
+      imagePath: target.path,
+      profile,
+      verify: settings.verifyAfterWrite,
+      cidataSizeBytes: settings.cidataSizeBytes,
+      auditRecord: settings.auditRecord,
+    })
+    if (!result.started) {
+      // `startWrite` と同じ扱い。訳さずキーのまま置く。
+      set({
+        writeStatus: {
+          state: 'error',
+          message: result.message ?? localized('store.writeStartFailed'),
+          detail: result.detail ?? null,
+        },
+      })
+      return false
+    }
+    return true
+  },
+
   async cancelWrite() {
     await window.autoinstall.cancelWrite()
   },
@@ -383,7 +439,7 @@ export const useStore = create<AppState>((set, get) => ({
    * 「アプリを再起動しないと 2 本目が作れない」のは実質的な機能欠落だった。
    */
   resetWrite() {
-    set({ writeStatus: { state: 'idle' } })
+    set({ writeStatus: { state: 'idle' }, imageTarget: null })
     void get().refreshDevices()
   },
 

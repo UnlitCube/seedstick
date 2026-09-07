@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import {
   CheckCircle2,
+  FileDown,
   HardDrive,
   Loader2,
   RefreshCw,
@@ -19,7 +20,8 @@ import { Badge, Button, Callout, Card, Modal, ProgressBar, Switch, TextInput } f
 export function WriteStep(): React.JSX.Element {
   const t = useT()
   const tl = useTl()
-  const { devices, devicesBusy, selectedDeviceId, writeStatus, iso, config, settings } = useStore()
+  const { devices, devicesBusy, selectedDeviceId, writeStatus, iso, config, settings, imageTarget } =
+    useStore()
   const refreshDevices = useStore((s) => s.refreshDevices)
   const selectDevice = useStore((s) => s.selectDevice)
   const startWrite = useStore((s) => s.startWrite)
@@ -81,6 +83,14 @@ export function WriteStep(): React.JSX.Element {
               {t('write.noDevices')}
             </p>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('write.noDevicesHint')}</p>
+            {/*
+              USB メモリを持っていない人にとっては、イメージファイルが唯一の出口。
+              「デバイスがありません」で行き止まりに見えないよう、ここから下の
+              カードへ案内する（ボタンを二重に置くと、どちらを押すのか迷わせる）。
+            */}
+            <p className="mt-3 text-xs text-slate-600 dark:text-slate-300">
+              {t('write.noDevicesImage')}
+            </p>
           </div>
         ) : (
           <ul className="space-y-2">
@@ -164,7 +174,13 @@ export function WriteStep(): React.JSX.Element {
       )}
       {writeStatus.state === 'cancelled' && (
         <Callout tone="warning" title={t('write.cancelled')}>
-          {t('write.cancelledBody')}
+          {/*
+            イメージファイルは main が消してから 'cancelled' にする。
+            USB 向けの「内容は壊れています」をそのまま出すと、存在しないファイルの
+            心配をさせることになる（`cancelled` は state しか持たないので、
+            どちらを止めたのかは store の `imageTarget` でしか分からない）。
+          */}
+          {imageTarget !== null ? t('image.cancelledBody') : t('write.cancelledBody')}
         </Callout>
       )}
 
@@ -187,6 +203,15 @@ export function WriteStep(): React.JSX.Element {
           </Button>
         )}
       </div>
+
+      {/*
+        **主導線の下に置く。** このツールの主用途は USB メモリを作ることで、
+        イメージファイルは副次的な出口なので、デバイスの選択・書き込みオプション・
+        「書き込みを開始」の並びに割り込ませない。
+        見た目も分ける: こちらは secondary（枠だけ）で、消去の確認も要らない
+        （ファイルを作るだけで、どのディスクも消さない）。
+      */}
+      <ImageCard busy={busy} />
 
       <Modal
         open={confirmOpen}
@@ -243,6 +268,58 @@ export function WriteStep(): React.JSX.Element {
         </div>
       </Modal>
     </div>
+  )
+}
+
+/**
+ * 「イメージファイル (.img) として保存」の導線。
+ *
+ * デバイスを 1 台も選ばずに使えるのが要点で、**権限昇格も起きない**
+ * （ファイルに書くだけ）。押し間違いで USB を消す心配が無いので
+ * 「消去」と打たせる確認は出さないが、その代わり**実デバイスのボタンと
+ * 見た目を必ず分ける**（あちらは danger の赤、こちらは secondary の枠）。
+ *
+ * 使えないときは隠さずに理由を出す（落とし穴 61）。押せないボタンだけを
+ * 置くと、なぜ押せないのかを画面から知る方法が無くなる。
+ */
+function ImageCard({ busy }: { busy: boolean }): React.JSX.Element {
+  const t = useT()
+  const iso = useStore((s) => s.iso)
+  const config = useStore((s) => s.config)
+  const settings = useStore((s) => s.settings)
+  const imageTarget = useStore((s) => s.imageTarget)
+  const saveAsImage = useStore((s) => s.saveAsImage)
+
+  // 断る理由は 1 つだけ出す（ISO が無ければ設定の話をしても直せない）。
+  const reason =
+    iso === null ? t('image.needIso') : config?.ok === false ? t('image.needConfig') : null
+  const canSave = reason === null && iso !== null && settings !== null && !busy
+
+  return (
+    <Card title={t('image.cardTitle')} description={t('image.cardHint')}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0 space-y-1">
+          <Badge tone="success">{t('image.noElevation')}</Badge>
+          {iso !== null && (
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {t('image.approxSize', { size: formatBytes(iso.minimumDeviceBytes) })}
+            </p>
+          )}
+          {reason !== null && (
+            <p className="text-xs text-amber-700 dark:text-amber-400">{reason}</p>
+          )}
+        </div>
+        <Button variant="secondary" disabled={!canSave} onClick={() => void saveAsImage()}>
+          <FileDown className="size-4" aria-hidden />
+          {t('image.saveButton')}
+        </Button>
+      </div>
+      {imageTarget !== null && (
+        <p className="mt-3 truncate text-xs text-slate-600 dark:text-slate-300">
+          {t('image.destination', { path: imageTarget.path })}
+        </p>
+      )}
+    </Card>
   )
 }
 
@@ -321,6 +398,7 @@ function WriteProgress(): React.JSX.Element {
   const tl = useTl()
   const locale = useStore((s) => s.locale)
   const status = useStore((s) => s.writeStatus)
+  const imageTarget = useStore((s) => s.imageTarget)
 
   if (status.state === 'preparing') {
     return (
@@ -329,9 +407,19 @@ function WriteProgress(): React.JSX.Element {
           <Loader2 className="size-5 animate-spin text-sky-600" aria-hidden />
           <p className="text-sm text-slate-700 dark:text-slate-300">{tl(status.message)}</p>
         </div>
-        <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-          {t('write.elevationNeeded')} — {t('write.elevationAllow')}
-        </p>
+        {/*
+          **イメージファイルでは昇格しない。** ここで権限の話を出すと、
+          出ないはずの UAC ダイアログを待たせることになる。
+        */}
+        {imageTarget === null ? (
+          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+            {t('write.elevationNeeded')} — {t('write.elevationAllow')}
+          </p>
+        ) : (
+          <p className="mt-2 truncate text-xs text-slate-500 dark:text-slate-400">
+            {t('image.destination', { path: imageTarget.path })}
+          </p>
+        )}
       </Card>
     )
   }
@@ -384,14 +472,27 @@ function DoneView(): React.JSX.Element {
   const resetWrite = useStore((s) => s.resetWrite)
   if (status.state !== 'done') return <></>
   const seconds = Math.round(status.elapsedMs / 1000)
+  // `outputPath` はイメージファイルへ書き出したときだけ載る（デバイスへの
+  // 書き込みでは今までどおり無い）。**どこに保存したか分からない**を作らないため、
+  // 完了画面ではパスをそのまま出す。
+  const outputPath = status.outputPath ?? null
 
   return (
     <div className="space-y-5">
       <Card>
         <div className="flex flex-col items-center gap-3 py-6 text-center">
           <CheckCircle2 className="size-14 text-emerald-500" aria-hidden />
-          <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{t('write.done')}</h2>
-          <p className="max-w-md text-sm text-slate-600 dark:text-slate-400">{t('write.doneBody')}</p>
+          <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">
+            {outputPath === null ? t('write.done') : t('image.doneTitle')}
+          </h2>
+          <p className="max-w-md text-sm text-slate-600 dark:text-slate-400">
+            {outputPath === null ? t('write.doneBody') : t('image.doneBody')}
+          </p>
+          {outputPath !== null && (
+            <p className="max-w-full break-all rounded bg-slate-100 px-3 py-2 font-mono text-xs text-slate-700 dark:bg-slate-900 dark:text-slate-300">
+              {t('image.doneSaved', { path: outputPath })}
+            </p>
+          )}
           <div className="mt-2 flex flex-wrap justify-center gap-2 text-xs">
             <Badge tone="success">
               {t('write.badgeWritten', { size: formatBytes(status.bytesWritten) })}
@@ -417,7 +518,12 @@ function DoneView(): React.JSX.Element {
 
       <Card title={t('write.nextTitle')}>
         <ol className="space-y-3 text-sm text-slate-700 dark:text-slate-300">
-          <Step n={1}>{t('write.next1')}</Step>
+          {/*
+            1 番目だけが経路で変わる。イメージファイルは「取り外して挿す」ではなく
+            「焼いてから挿す」で、ここを USB のままにすると
+            「安全な取り外し」をどこですればいいのか分からない案内になる。
+          */}
+          <Step n={1}>{outputPath === null ? t('write.next1') : t('image.next1')}</Step>
           <Step n={2}>{t('write.next2')}</Step>
           <Step n={3}>
             {tx('write.next3', {

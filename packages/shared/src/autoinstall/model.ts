@@ -5,6 +5,8 @@ import type {
   SystemdService,
 } from './provisioning.js'
 import type { RuntimeValuesConfig } from './runtime-values.js'
+import type { RaidStorageConfig } from './raid.js'
+import type { BondNetworkConfig } from './bond.js'
 import type {
   ActiveDirectoryConfig,
   AptFallback,
@@ -160,6 +162,15 @@ export type NetworkConfig =
       readonly searchDomains: readonly string[]
       readonly optional: boolean
     }
+  /**
+   * 複数の NIC を束ねる（netplan の `bonds:`）。
+   *
+   * 形は `bond.ts` の `BondNetworkConfig`。既存の 3 モードは**一切変えていない**。
+   * `target` / `optional` を持たせてあるのは、
+   * `mode !== 'raw' && mode !== 'installer-default'` で絞ってから
+   * これらを読む既存コードを型エラーにしないため（`bond.ts` のコメント）。
+   */
+  | BondNetworkConfig
   /** 上級者向け: netplan v2 の YAML をそのまま渡す */
   | { readonly mode: 'raw'; readonly yaml: string }
 
@@ -181,9 +192,23 @@ export type DiskMatch =
   /** `match: {}`。任意の 1 台。単一ディスク機向け。 */
   | { readonly kind: 'any' }
 
+/**
+ * ディスクの構成方法。
+ *
+ * **`raid` を「別の形の 4 つ目のメンバー」にはしていない。**
+ * そうすると `storage.mode !== 'raw'` で絞ったあとの `storage.match` が
+ * 型エラーになり、renderer と main の既存コードが一斉に壊れる。
+ * 構造化モードは 1 つの形を共有し、`mode` が「どれを出力するか」だけを決める。
+ *
+ * `mode: 'raid'` のときに使われないキー (`match` / `useWholeDisk` /
+ * `encryptionPassphrase` / `resetPartition`) は**残るが出力されない**。
+ * 黙って無視すると「設定したのに効かない」になるので、
+ * `validate.ts` が「この構成では使われません」と伝える（落とし穴 67）。
+ * 逆に `raid` は `lvm` / `direct` / `zfs` のときも残るが、そちらでも出力されない。
+ */
 export type StorageConfig =
   | {
-      readonly mode: 'lvm' | 'direct' | 'zfs'
+      readonly mode: 'lvm' | 'direct' | 'zfs' | 'raid'
       readonly match: DiskMatch
       /**
        * `sizing-policy: all` にすると root LV がディスク全体を使う。
@@ -199,6 +224,11 @@ export type StorageConfig =
       readonly partitionTable: 'default' | 'gpt' | 'msdos'
       /** リセットパーティション（メディア無しで再インストールできるようにする） */
       readonly resetPartition: ResetPartitionConfig
+      /**
+       * RAID + LVM の構成。`mode: 'raid'` のときだけ `storage.config` に出力される。
+       * 他のモードでは残るだけで出力されない（検証で伝える）。
+       */
+      readonly raid: RaidStorageConfig
     }
   /** 上級者向け: curtin の storage config をそのまま渡す */
   | { readonly mode: 'raw'; readonly yaml: string }

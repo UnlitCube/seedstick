@@ -1,5 +1,6 @@
 import type { AutoinstallProfile, UbuntuSeries } from './model.js'
 import { createDefaultRuntimeValues } from './runtime-values.js'
+import { createDefaultRaidStorage } from './raid.js'
 
 /** 何も設定していない状態のプロファイル。GUI の初期値であり、単体テストの基準でもある。 */
 export function createDefaultProfile(
@@ -36,6 +37,7 @@ export function createDefaultProfile(
       swap: { mode: 'installer-default', size: '' },
       partitionTable: 'default',
       resetPartition: { enabled: false, size: '' },
+      raid: createDefaultRaidStorage(),
     },
     software: {
       sourceId: 'ubuntu-server',

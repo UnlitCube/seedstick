@@ -1,5 +1,5 @@
 import { BrowserWindow, dialog, ipcMain, shell, app } from 'electron'
-import { readFile, stat, writeFile } from 'node:fs/promises'
+import { readFile, stat, statfs, writeFile } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { randomBytes, createHash } from 'node:crypto'
 import {
@@ -7,6 +7,7 @@ import {
   buildIsoPatches,
   inspectIso,
   getPlatformOps,
+  minimumDiskSize,
   patchGrubCfg,
   remainingGrubBytes,
   type RemovableDevice,
@@ -29,12 +30,20 @@ import {
   type AutoinstallProfile,
   type DeviceInfo,
   type GeneratedConfig,
+  type ImageTarget,
+  type ImageWriteRequest,
+  type LocalizedText,
   type PickedFile,
   type WriteRequest,
   type GenerateOptions,
 } from '@autoinstall/shared'
 // crypt はバレルに載せていない（renderer に Node の型を持ち込まないため）。main から直接 import する。
 import { sha512Crypt } from '@autoinstall/shared/crypt'
+import {
+  checkFreeSpace,
+  checkImageDestination,
+  suggestImageFileName,
+} from './image-target.js'
 import { computeChecksum, openIso } from './iso-service.js'
 import { rememberChosenPayload, wasChosenByUser } from './payload-allowlist.js'
 import * as profileStore from './profile-store.js'
@@ -75,6 +84,13 @@ async function allowProfilePayloads(profile: AutoinstallProfile): Promise<void> 
 const allowedIsoPaths = new Set<string>()
 /** ペイロードとして読めるパスも、ダイアログで選ばれたものだけに限る。 */
 const allowedPayloadPaths = new Set<string>()
+/**
+ * イメージファイル (.img) の書き出し先も同じ扱い。
+ * **保存ダイアログを通ったパスだけ**が入る（落とし穴 55）。
+ * プロファイル JSON からここに入る経路は作らない——書き出し先は「読む」ではなく
+ * 「上書きする」なので、他人の JSON から指定できると任意のファイルを潰せる。
+ */
+const allowedImagePaths = new Set<string>()
 /** renderer が指定できるデバイス ID は、直近の列挙結果に含まれ、かつ選択可能なものだけ。 */
 let selectableDeviceIds = new Set<string>()
 /** 直近に開いた ISO の grub.cfg 原文。確認画面のプレビューに使う。 */
@@ -182,6 +198,125 @@ async function generate(profile: AutoinstallProfile): Promise<GeneratedConfig> {
     patchedGrubCfg,
     grubFreeBytes,
     grubTooLarge,
+  }
+}
+
+/** 書き込みを始められなかったときに返す形（デバイス・ファイルで共通）。 */
+type StartFailure = { started: false; message: LocalizedText; detail: string | null }
+
+const fail = (message: LocalizedText, detail: string | null = null): StartFailure => ({
+  started: false,
+  message,
+  detail,
+})
+
+/**
+ * プロファイル側の入力を確かめる。**デバイスにもファイルにも触らない。**
+ *
+ * デバイスへの書き込みとイメージ書き出しで**まったく同じ**でなければならない
+ * （片方だけ緩いと、緩いほうが抜け道になる）。
+ */
+function checkProfileInputs(profile: AutoinstallProfile): StartFailure | null {
+  for (const d of profile.postInstall.deployments) {
+    if (d.source.kind === 'host-file' && !allowedPayloadPaths.has(d.source.path)) {
+      return fail(localized('write.payloadNotSelected', { name: d.name }))
+    }
+  }
+  if (!validateProfile(profile).ok) return fail(localized('write.configInvalidBody'))
+  return null
+}
+
+/** ISO のパッチと CIDATA の中身。デバイスへ書くときもファイルへ書き出すときも同じもの。 */
+interface PreparedMedia {
+  readonly patches: { offset: number; data: string; label: string }[]
+  readonly isoFingerprint: string
+  readonly isoSizeBytes: number
+  readonly bundle: Awaited<ReturnType<typeof buildSeedBundle>>
+}
+
+/**
+ * ISO を解析してパッチを作り、CIDATA に載せるファイルを組み立てる。
+ *
+ * ISO のパッチは main 側で作る。画面に見せた内容と、実際に書かれる内容を一致させるため。
+ * ここで投げる例外（grub.cfg が 1 セクタに収まらない、ISO が壊れている等）を
+ * 握らないと `ipcMain.handle` が reject し、GUI 側は理由の分からないまま
+ * ボタンが無反応になる。
+ */
+async function prepareMedia(req: {
+  isoPath: string
+  profile: AutoinstallProfile
+  cidataSizeBytes: number
+  auditRecord: boolean
+}): Promise<{ ok: true; media: PreparedMedia } | { ok: false; failure: StartFailure }> {
+  let patches: { offset: number; data: string; label: string }[]
+  let isoFingerprint = ''
+  let isoSizeBytes = 0
+  try {
+    const isoDev = await FileBlockDevice.open(req.isoPath, 'r')
+    try {
+      const inspection = await inspectIso(isoDev)
+      const grubPlan = buildGrubPlan(req.profile)
+      const plan = buildIsoPatches(inspection, {
+        args: grubPlan.args,
+        markTitle: true,
+        extraEntries: grubPlan.entries,
+      })
+      patches = plan.patches.map((p) => ({
+        offset: p.offset,
+        data: p.data.toString('base64'),
+        label: p.label,
+      }))
+      isoSizeBytes = inspection.sizeBytes
+      // 監査記録用。全体のハッシュは重いので、識別に足る情報だけを使う。
+      isoFingerprint = createHash('sha256')
+        .update(`${inspection.volumeId}|${inspection.sizeBytes}|${inspection.diskInfo ?? ''}`)
+        .digest('hex')
+    } finally {
+      await isoDev.close().catch(() => undefined)
+    }
+  } catch (err) {
+    // ISO の内部構造の話は**開発者向けの診断**。訳した総括文と生の詳細の 2 本立てにする。
+    return { ok: false, failure: fail(localized('write.isoPrepareFailed'), (err as Error).message) }
+  }
+
+  const settings = await getSettings()
+  let bundle
+  try {
+    bundle = await buildSeedBundle({
+      profile: req.profile,
+      generateOptions: { comments: settings.commentLanguage },
+      auditRecord: req.auditRecord,
+      isoFileName: basename(req.isoPath),
+      isoFingerprint,
+      minimumCidataSize: req.cidataSizeBytes || settings.cidataSizeBytes,
+    })
+  } catch (err) {
+    // `err.message`（日本語）はログ用に残してあるが、画面には訳せる `err.text` を出す。
+    if (err instanceof SeedBuildError) return { ok: false, failure: fail(err.text) }
+    throw err
+  }
+  if (bundle.missingSources.length > 0) {
+    return {
+      ok: false,
+      failure: fail(localized('write.payloadMissing', { files: bundle.missingSources.join(', ') })),
+    }
+  }
+  return { ok: true, media: { patches, isoFingerprint, isoSizeBytes, bundle } }
+}
+
+/**
+ * 保存先ボリュームの空き容量。取れなければ null。
+ *
+ * `statfs` は環境によって落ちる（ネットワークドライブ、権限）。**分からないことを
+ * 「足りない」と言わない**ので、取れなかったら判定しない（`checkFreeSpace`）。
+ */
+async function freeSpaceAt(path: string): Promise<number | null> {
+  try {
+    const fs = await statfs(dirname(path))
+    const free = Number(fs.bavail) * Number(fs.bsize)
+    return Number.isFinite(free) && free >= 0 ? free : null
+  } catch {
+    return null
   }
 }
 
@@ -439,19 +574,8 @@ export function registerIpc(): void {
     if (!selectableDeviceIds.has(req.deviceId)) {
       return { started: false, message: localized('write.deviceNotWritable'), detail: null }
     }
-    for (const d of req.profile.postInstall.deployments) {
-      if (d.source.kind === 'host-file' && !allowedPayloadPaths.has(d.source.path)) {
-        return {
-          started: false,
-          message: localized('write.payloadNotSelected', { name: d.name }),
-          detail: null,
-        }
-      }
-    }
-    const validation = validateProfile(req.profile)
-    if (!validation.ok) {
-      return { started: false, message: localized('write.configInvalidBody'), detail: null }
-    }
+    const inputFailure = checkProfileInputs(req.profile)
+    if (inputFailure) return inputFailure
 
     const devices = await getPlatformOps().listDevices()
     const device = devices.find((d) => d.id === req.deviceId)
@@ -459,66 +583,9 @@ export function registerIpc(): void {
       return { started: false, message: localized('write.deviceGone'), detail: null }
     }
 
-    // ISO のパッチは main 側で作る。画面に見せた内容とワーカーが書く内容を一致させるため。
-    // ここで投げる例外（grub.cfg が 1 セクタに収まらない、ISO が壊れている等）を
-    // 握らないと ipcMain.handle が reject し、GUI 側は理由の分からないまま
-    // 「書き込みを開始」が無反応になる。
-    let patches
-    let isoFingerprint = ''
-    try {
-      const isoDev = await FileBlockDevice.open(req.isoPath, 'r')
-      try {
-        const inspection = await inspectIso(isoDev)
-        const grubPlan = buildGrubPlan(req.profile)
-        const plan = buildIsoPatches(inspection, {
-          args: grubPlan.args,
-          markTitle: true,
-          extraEntries: grubPlan.entries,
-        })
-        patches = plan.patches.map((p) => ({
-          offset: p.offset,
-          data: p.data.toString('base64'),
-          label: p.label,
-        }))
-        // 監査記録用。全体のハッシュは重いので、識別に足る情報だけを使う。
-        isoFingerprint = createHash('sha256')
-          .update(`${inspection.volumeId}|${inspection.sizeBytes}|${inspection.diskInfo ?? ''}`)
-          .digest('hex')
-      } finally {
-        await isoDev.close().catch(() => undefined)
-      }
-    } catch (err) {
-      // ISO の内部構造の話は**開発者向けの診断**。訳した総括文と生の詳細の 2 本立てにする。
-      return {
-        started: false,
-        message: localized('write.isoPrepareFailed'),
-        detail: (err as Error).message,
-      }
-    }
-
-    const settings = await getSettings()
-    let bundle
-    try {
-      bundle = await buildSeedBundle({
-        profile: req.profile,
-        generateOptions: { comments: settings.commentLanguage },
-        auditRecord: req.auditRecord,
-        isoFileName: basename(req.isoPath),
-        isoFingerprint,
-        minimumCidataSize: req.cidataSizeBytes || settings.cidataSizeBytes,
-      })
-    } catch (err) {
-      // `err.message`（日本語）はログ用に残してあるが、画面には訳せる `err.text` を出す。
-      if (err instanceof SeedBuildError) return { started: false, message: err.text, detail: null }
-      throw err
-    }
-    if (bundle.missingSources.length > 0) {
-      return {
-        started: false,
-        message: localized('write.payloadMissing', { files: bundle.missingSources.join(', ') }),
-        detail: null,
-      }
-    }
+    const prepared = await prepareMedia(req)
+    if (!prepared.ok) return prepared.failure
+    const { patches, bundle } = prepared.media
 
     return supervisor.start({
       isoPath: req.isoPath,
@@ -534,6 +601,72 @@ export function registerIpc(): void {
       verify: req.verify,
       timestampIso: new Date().toISOString(),
       randomSeedBase64: randomBytes(32).toString('base64'),
+    })
+  })
+
+  // --- イメージファイル (.img) への書き出し ---
+  //
+  // 実デバイスへの書き込みとの違いは 2 つだけ:
+  //   * **昇格しない**（ファイルに書くだけなので管理者権限が要らない）。
+  //   * **大きさをデバイスの容量に合わせない**（ISO + CIDATA + GPT + 余裕）。
+  // 入力の検証は実デバイスとまったく同じ厳しさにする。
+
+  ipcMain.handle('chooseImagePath', async (_e, suggestedName: unknown): Promise<ImageTarget | null> => {
+    const t = await dialogT()
+    const result = await dialog.showSaveDialog(mainWindow(), {
+      title: t('dialog.saveImage'),
+      // 既定のファイル名は利用者の自由入力から作るので、必ず通してから使う。
+      defaultPath: suggestImageFileName(typeof suggestedName === 'string' ? suggestedName : ''),
+      filters: [{ name: t('dialog.filterImage'), extensions: ['img'] }],
+      // 既存ファイルの上書きは OS の確認ダイアログに任せる（macOS では明示が要る）。
+      properties: ['createDirectory', 'showOverwriteConfirmation'],
+    })
+    if (result.canceled || !result.filePath) return null
+    const path = result.filePath
+    // **ここが唯一の入口。** 以後この書き出し先だけが `startImageWrite` を通る。
+    allowedImagePaths.add(path)
+    return { path, fileName: basename(path), freeBytes: await freeSpaceAt(path) }
+  })
+
+  ipcMain.handle('startImageWrite', async (_e, req: ImageWriteRequest) => {
+    if (!allowedIsoPaths.has(req.isoPath)) {
+      return { started: false, message: localized('write.isoNotSelected'), detail: null }
+    }
+    if (typeof req.imagePath !== 'string') {
+      return fail(localized('image.pathNotChosen'))
+    }
+    // ダイアログを通っていないパス・入力を壊すパスをここで断る。
+    const destFailure = checkImageDestination({
+      imagePath: req.imagePath,
+      allowedImagePaths,
+      // 「今回の ISO」だけでなく、開いた実績のある ISO をすべて守る。
+      isoPaths: allowedIsoPaths,
+      payloadPaths: allowedPayloadPaths,
+    })
+    if (destFailure) return fail(destFailure)
+
+    const inputFailure = checkProfileInputs(req.profile)
+    if (inputFailure) return inputFailure
+
+    const prepared = await prepareMedia(req)
+    if (!prepared.ok) return prepared.failure
+    const { patches, bundle, isoSizeBytes } = prepared.media
+
+    // **書き始める前に**空き容量を見る。途中で ENOSPC になると
+    // 中途半端な .img が残り、「焼いたのに起動しない」原因になる。
+    const requiredBytes = minimumDiskSize(isoSizeBytes, bundle.cidataSizeBytes)
+    const spaceFailure = checkFreeSpace(requiredBytes, await freeSpaceAt(req.imagePath))
+    if (spaceFailure) return fail(spaceFailure)
+
+    return supervisor.startImageWrite({
+      isoPath: req.isoPath,
+      imagePath: req.imagePath,
+      patches,
+      seedFiles: bundle.files.map((f) => ({ name: f.name, content: f.content.toString('base64') })),
+      cidataSizeBytes: bundle.cidataSizeBytes,
+      hideIsoPartitionFromWindows: true,
+      verify: req.verify,
+      timestampIso: new Date().toISOString(),
     })
   })
 

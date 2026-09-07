@@ -7,6 +7,15 @@ import type {
   ReportingTarget,
 } from './advanced.js'
 import { UBUNTU_SERIES } from './model.js'
+import type { RaidArray, RaidDisk, RaidStorageConfig } from './raid.js'
+import { RAID_LEVELS, RAID_ROLES, RAID_ROOT_FSTYPES } from './raid.js'
+import type { BondMember, BondNetworkConfig, BondParameters } from './bond.js'
+import {
+  BOND_ADDRESSINGS,
+  BOND_LACP_RATES,
+  BOND_MODES,
+  createDefaultBondNetwork,
+} from './bond.js'
 import { localized, type LocalizedText, type MsgKey } from '../i18n/index.js'
 
 // 保存済みプロファイルの読み込み。
@@ -282,6 +291,83 @@ function readDiskMatch(raw: unknown, fallback: unknown): unknown {
   return fallback
 }
 
+/** RAID のディスク行と配列行のひな型。欠けたキーはここから埋める。 */
+const RAID_DISK_TEMPLATE = { id: '', boot: true }
+const RAID_ARRAY_TEMPLATE = {
+  id: '',
+  name: '',
+  diskIds: [] as string[],
+  spareDiskIds: [] as string[],
+}
+
+/**
+ * RAID + LVM の構成。
+ *
+ * `mergeSection` では読めない:
+ *   - `disks[].match` は判別可能ユニオン（`readDiskMatch` で型ごとに読む・落とし穴 22）
+ *   - `disks` / `arrays` は**レコードの配列**（素通しにすると `[null]` が通る・落とし穴 31）。
+ *     `mergeSection` はレコードの配列を `strList` で文字列だけに潰すので、
+ *     ここを通さないと**行が丸ごと消える**。
+ *   - `level` / `role` / `rootFstype` は列挙値（`oneOf` で既定に戻し、戻したと伝える）
+ *
+ * 配列が参照するディスク id は、**同じ要素オブジェクトから**取る
+ * （`rawList` は非オブジェクトを落として詰め直すので、添字で元配列を引くとずれる・落とし穴 48）。
+ */
+function readRaidStorage(base: RaidStorageConfig, raw: unknown): RaidStorageConfig {
+  if (!isObject(raw)) return base
+  const merged = mergeSection(
+    base as unknown as Record<string, unknown>,
+    raw,
+  ) as unknown as RaidStorageConfig
+
+  const disks = withIds(
+    rawList(raw['disks'], 'migrate.category.raidDisk').map((el) => ({
+      ...mergeSection(RAID_DISK_TEMPLATE, el),
+      // 既定は「シリアル番号で指定（空）」。読めなければ検証が「値を入れてください」と言う。
+      // largest / any に落とすと、**どのディスクが消えるか分からない**指定に
+      // 黙って化ける（落とし穴 22 / 49）。
+      match: readDiskMatch(el['match'], { kind: 'serial', serial: '' }),
+    })),
+  ) as unknown as RaidDisk[]
+
+  const knownDiskIds = new Set(disks.map((d) => d.id))
+  let droppedRefs = 0
+  const keepRefs = (value: unknown): string[] => {
+    const list = strList(value)
+    const kept = list.filter((id) => knownDiskIds.has(id))
+    droppedRefs += list.length - kept.length
+    return kept
+  }
+
+  const arrays = withIds(
+    rawList(raw['arrays'], 'migrate.category.raidArray').map((el) => ({
+      ...mergeSection(RAID_ARRAY_TEMPLATE, el),
+      level: oneOf(el['level'], RAID_LEVELS, 'raid1', 'migrate.field.raidLevel'),
+      role: oneOf(el['role'], RAID_ROLES, 'lvm-pv', 'migrate.field.raidRole'),
+      diskIds: keepRefs(el['diskIds']),
+      spareDiskIds: keepRefs(el['spareDiskIds']),
+    })),
+  ) as unknown as RaidArray[]
+
+  // **黙って落とさない**（落とし穴 50）。参照が外れた配列は台数不足になり、
+  // 検証で止まるが、理由がここにしか無い。
+  if (droppedRefs > 0) {
+    noteDropped(localized('migrate.raidDiskRefDropped', { count: droppedRefs }))
+  }
+
+  return {
+    ...merged,
+    disks,
+    arrays,
+    rootFstype: oneOf(
+      raw['rootFstype'],
+      RAID_ROOT_FSTYPES,
+      base.rootFstype,
+      'migrate.field.raidRootFstype',
+    ),
+  }
+}
+
 /** ネットワークカードの選び方。 */
 function readInterfaceSelector(raw: unknown, fallback: unknown): unknown {
   if (!isObject(raw)) return fallback
@@ -529,16 +615,20 @@ function readStorage(
   if (mode === 'raw') {
     return { mode: 'raw', yaml: typeof raw['yaml'] === 'string' ? raw['yaml'] : '' }
   }
-  if (mode !== 'lvm' && mode !== 'direct' && mode !== 'zfs') {
+  if (mode !== 'lvm' && mode !== 'direct' && mode !== 'zfs' && mode !== 'raid') {
     // mode が読めないからといって match まで既定に戻してはいけない。
     // `{kind:'serial'}` が黙って `{kind:'largest'}` に落ちると、複数ディスク機で
     // 意図と違うディスクを消す（このツールで最も破壊的な失敗・落とし穴 22）。
-    // mode は既定に戻すが、指定されていた match は読めた形のまま残す。
+    // mode は既定に戻すが、指定されていた match と RAID の構成は読めた形のまま残す。
     if (mode !== undefined) {
       noteDropped(localized('migrate.storageModeReset', { mode: String(mode) }))
     }
     if (base.mode === 'raw') return base
-    return { ...base, match: readDiskMatch(raw['match'], base.match) as typeof base.match }
+    return {
+      ...base,
+      match: readDiskMatch(raw['match'], base.match) as typeof base.match,
+      raid: readRaidStorage(base.raid, raw['raid']),
+    }
   }
   const template = base.mode === 'raw' ? null : { ...base, mode }
   if (template === null) return base
@@ -556,6 +646,10 @@ function readStorage(
       AutoinstallProfile['storage'],
       { mode: 'raw' }
     >['match'],
+    // `mergeSection` はレコードの配列を `strList` で潰すので、RAID の行が丸ごと消える。
+    // **どのモードでも読む。** `mode` が `lvm` に戻っていても、構成そのものは
+    // 消さずに残す（`raid` に戻せば使える。落とし穴 61 / 66）。
+    raid: readRaidStorage(template.raid, raw['raid']),
   }
 }
 
@@ -570,6 +664,7 @@ function readNetwork(
   if (mode === 'raw') {
     return { mode: 'raw', yaml: typeof raw['yaml'] === 'string' ? raw['yaml'] : '' }
   }
+  if (mode === 'bond') return readBondNetwork(createDefaultBondNetwork(), raw)
   const template = networkTemplate(typeof mode === 'string' ? mode : '')
   if (!template || (template.mode !== 'dhcp' && template.mode !== 'static')) return base
   const merged = mergeSection(template as unknown as Record<string, unknown>, raw)
@@ -602,10 +697,74 @@ function networkTemplate(mode: string): AutoinstallProfile['network'] | undefine
         searchDomains: [],
         optional: false,
       }
+    case 'bond':
+      return createDefaultBondNetwork()
     case 'raw':
       return { mode: 'raw', yaml: '' }
     default:
       return undefined
+  }
+}
+
+/** bond のメンバー行のひな型。欠けたキーはここから埋める。 */
+const BOND_MEMBER_TEMPLATE = { id: '' }
+
+/**
+ * bond の設定。
+ *
+ * `mergeSection` では読めないところが 3 つある:
+ *   - `members` は**レコードの配列**。`mergeSection` はレコードの配列を `strList` で
+ *     文字列だけに潰すので、通さないと**メンバーの行が丸ごと消える**
+ *     （落とし穴 31 / RAID と同じ）。
+ *   - `members[].selector` と `target` は判別可能ユニオン。
+ *     `readInterfaceSelector` で型ごとに読む（落とし穴 22 / 29）。
+ *     読めない要素は**既定に落とすのではなく `{kind:'name', name:''}`**（＝空欄）にする。
+ *     `any`（すべての有線 LAN）に落とすと、**どの NIC が束ねられるか分からない**
+ *     指定に黙って化ける。空欄なら検証が「値を入れてください」と言う。
+ *   - `parameters.mode` / `lacpRate` / `addressing` は列挙値（`oneOf` で既定に戻し、戻したと伝える）。
+ *
+ * 行とその中のユニオンは**同じ要素オブジェクトから**取る
+ * （`rawList` は非オブジェクトを落として詰め直すので、添字で元配列を引くとずれる・落とし穴 48）。
+ */
+function readBondNetwork(base: BondNetworkConfig, raw: Record<string, unknown>): BondNetworkConfig {
+  const merged = mergeSection(
+    base as unknown as Record<string, unknown>,
+    raw,
+  ) as unknown as BondNetworkConfig
+
+  const members = withIds(
+    rawList(raw['members'], 'migrate.category.bondMember').map((el) => ({
+      ...mergeSection(BOND_MEMBER_TEMPLATE, el),
+      selector: readInterfaceSelector(el['selector'], { kind: 'name', name: '' }),
+    })),
+  ) as unknown as BondMember[]
+
+  const rawParams = isObject(raw['parameters']) ? raw['parameters'] : {}
+  const parameters: BondParameters = {
+    ...(mergeSection(
+      base.parameters as unknown as Record<string, unknown>,
+      rawParams,
+    ) as unknown as BondParameters),
+    mode: oneOf(rawParams['mode'], BOND_MODES, base.parameters.mode, 'migrate.field.bondMode'),
+    lacpRate: oneOf(
+      rawParams['lacpRate'],
+      BOND_LACP_RATES,
+      base.parameters.lacpRate,
+      'migrate.field.bondLacpRate',
+    ),
+  }
+
+  return {
+    ...merged,
+    members,
+    parameters,
+    target: readInterfaceSelector(raw['target'], base.target) as BondNetworkConfig['target'],
+    addressing: oneOf(
+      raw['addressing'],
+      BOND_ADDRESSINGS,
+      base.addressing,
+      'migrate.field.bondAddressing',
+    ),
   }
 }
 

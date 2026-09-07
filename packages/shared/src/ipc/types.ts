@@ -100,6 +100,36 @@ export interface WriteRequest {
   readonly auditRecord: boolean
 }
 
+/**
+ * イメージファイル (`.img`) の保存先を選んだ結果。
+ *
+ * **このパスを renderer が作ってはいけない。** main は
+ * `chooseImagePath` が返したパスだけを書き出し先として受け入れる（落とし穴 55）。
+ */
+export interface ImageTarget {
+  readonly path: string
+  readonly fileName: string
+  /** 保存先ボリュームの空き容量。取得できなければ null（判定は書き出し時にもう一度行う）。 */
+  readonly freeBytes: number | null
+}
+
+/**
+ * `.img` ファイルへの書き出し要求。
+ *
+ * デバイスへの書き込み (`WriteRequest`) と違い、**権限昇格は起きない**
+ * （ファイルに書くだけなので管理者権限が要らない）。USB を挿していなくても作れる。
+ */
+export interface ImageWriteRequest {
+  readonly isoPath: string
+  /** `chooseImagePath` が返したパスだけが通る。 */
+  readonly imagePath: string
+  readonly profile: AutoinstallProfile
+  readonly verify: boolean
+  readonly cidataSizeBytes: number
+  /** 作成記録 (autoinstall-usb.json) を CIDATA に残す */
+  readonly auditRecord: boolean
+}
+
 export type WriteStatus =
   | { readonly state: 'idle' }
   | { readonly state: 'preparing'; readonly message: LocalizedText }
@@ -118,6 +148,12 @@ export type WriteStatus =
       readonly bytesWritten: number
       readonly verified: boolean
       readonly elapsedMs: number
+      /**
+       * 書き出したイメージファイルのパス。**デバイスへ書いた場合は無い**
+       * （既存の経路の `done` は今までどおり 4 つのフィールドだけを持つ）。
+       * 画面に「どこに保存したか」を出すために使う。
+       */
+      readonly outputPath?: string | null
     }
   // message は訳す総括文、detail は開発者向けの生の詳細（訳さない）。
   | { readonly state: 'error'; readonly message: LocalizedText; readonly detail: string | null }
@@ -197,6 +233,22 @@ export interface AutoinstallApi {
   cancelWrite(): Promise<void>
   onWriteStatus(cb: (s: WriteStatus) => void): () => void
   getWriteStatus(): Promise<WriteStatus>
+
+  // --- イメージファイル (.img) への書き出し ---
+  /**
+   * 保存先を選ぶ（main が OS の保存ダイアログを出す）。
+   * `suggestedName` は既定のファイル名の希望。main が安全な名前に直してから使う。
+   * キャンセルされたら null。
+   */
+  chooseImagePath(suggestedName: string): Promise<ImageTarget | null>
+  /**
+   * `.img` への書き出しを開始する。進捗・完了・失敗は `onWriteStatus` に流れる
+   * （デバイスへの書き込みと同じチャネル。同時には 1 つしか走らない）。
+   * 中止は `cancelWrite()`。
+   */
+  startImageWrite(
+    req: ImageWriteRequest,
+  ): Promise<{ started: boolean; message?: LocalizedText; detail?: string | null }>
 
   // --- 設定 ---
   getSettings(): Promise<AppSettings>
