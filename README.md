@@ -98,7 +98,12 @@ npm install
 npm run dev        # 開発起動（Windows なら start-dev.bat をダブルクリックでも可）
 npm test           # typecheck + 単体テスト + 実 ISO スモークテスト
 npm run dist:win   # パッケージ（macOS は dist:mac、Linux は dist:linux）
+npm run dist:installer  # Windows 向けの Electron 製インストーラを 1 本の exe に
 ```
+
+`dist:installer` は `apps/desktop/release/Autoinstall USB Creator Setup-<version>.exe`
+を作る（5〜6 分）。**このユーザーにだけ**インストールするので管理者権限は要らない。
+削除は Windows の「アプリと機能」から。
 
 | ドキュメント | 内容 |
 |---|---|

@@ -1,0 +1,23 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": [
+      "DOM",
+      "DOM.Iterable",
+      "ES2022"
+    ],
+    "jsx": "react-jsx",
+    "types": [
+      "vite/client"
+    ]
+  },
+  "include": [
+    "installer/renderer/**/*.ts",
+    "installer/renderer/**/*.tsx",
+    "installer/shared/**/*.ts"
+  ],
+  "exclude": [
+    "installer/**/*.test.ts",
+    "installer/**/*.test.tsx"
+  ]
+}

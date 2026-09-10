@@ -12,7 +12,8 @@
     "preview": "electron-vite preview",
     "dist:win": "node scripts/dist.mjs --win",
     "dist:mac": "node scripts/dist.mjs --mac",
-    "dist:linux": "node scripts/dist.mjs --linux"
+    "dist:linux": "node scripts/dist.mjs --linux",
+    "dist:installer": "node scripts/build-installer.mjs"
   },
   "dependencies": {
     "@autoinstall/media": "*",
@@ -27,6 +28,7 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "7zip-bin": "^5.2.0",
     "electron": "^44.0.0",
     "electron-builder": "^26.0.0",
     "electron-vite": "^5.0.0",

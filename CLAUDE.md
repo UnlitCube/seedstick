@@ -27,7 +27,16 @@ autoinstall-ui/
 │   ├── platform/      デバイス列挙・アンマウント（win32 / darwin / linux）
 │   └── worker/        昇格ワーカー本体と NDJSON プロトコル
 └── apps/desktop/      @autoinstall/desktop — electron-vite + React 19 + Tailwind 4 + zustand
+    └── installer/    **配布用インストーラ（別の Electron アプリ）**
+        ├── shared/   protocol.ts（main ⇄ renderer の契約）/ labels.ts（ja・en の辞書）
+        ├── main/     展開・ショートカット・レジストリ・片付け（Windows 専用）
+        ├── preload/  window.installer
+        └── renderer/ ウィザードの UI（アプリ本体とは別の root・別の辞書）
 ```
+
+**インストーラはアプリ本体のコードを 1 行も読み込まない。** 読み込むと同じものが
+payload とインストーラの両方に入る。文言も専用の辞書を持ち、
+`installer/shared/labels.test.ts` が「日本語の直書きが無いこと」を機械で数える。
 
 **データフロー**: GUI（プロファイル編集）→ `generateUserData()` → CIDATA の `user-data`。
 ISO は `inspectIso()` で解析 → `buildIsoPatches()` で 4 か所のパッチ → `planUsbLayout()` で
@@ -1074,8 +1083,102 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
     16〜256 の 7 枚が入っていることを確認）。
     落とし穴 133 と同じで、**作れたことと、入っていることと、見えることは別**。
 
+### Electron 製インストーラ
+
+138. **アンインストーラに Setup.exe を複製しない。**
+    参照実装（別の Electron アプリ）の形をそのまま持ってくると、
+    インストール先に **payload を抱えたままの Setup.exe が 196 MB** 置かれる。
+    398 MB のアプリに対して 50% の無駄で、実測で合計 **595 MB** になった。
+    消すのに要るのは**ショートカット 2 つ・レジストリ 1 キー・フォルダ 1 つ**だけなので、
+    **1 KB の `uninstall.ps1`** で足りる（実測で 398.1 MB ちょうどに収まった）。
+    Electron でアンインストーラの UI を持とうとすると、どの形でも
+    **Electron ランタイムぶん（展開後 234 MB）**が必ず乗る
+    ——`--app=<dir>` はパッケージ済みアプリでは効かず（`default_app.asar` が無い）、
+    本体の exe は自分の隣の `resources/app.asar` しか読まないので、
+    **既にあるランタイムを使い回す手は無い**。
+    UI つきの削除は「Setup.exe をもう一度動かす」経路に残す
+    （ようこそ画面に「アンインストール」を出す）。
+
+139. **`-File` で走らせた `.ps1` は、自分の入っているフォルダごと削除できる。**
+    PowerShell はスクリプトを読み終えたらファイルを掴み続けない（**実測で確認**）。
+    ただし**カレントディレクトリがその中だと消せない**ので、先に
+    `Set-Location $env:TEMP` する。
+    「自分を消せないから別のプロセスに任せる」という思い込みで
+    常駐ポーラを噛ませると、無駄に複雑になる。
+
+140. **`UninstallString` は `cmd.exe` を通らない。CreateProcess にそのまま渡る。**
+    検査で `cmd.exe /c <UninstallString>` として実行したら、cmd が入れ子のクォートを
+    畳んで `-File '"C:\...\Autoinstall'` のように**パスの途中で割れ**、
+    「実装は正しいのに検査だけが落ちる」状態になった（落とし穴 93 の再発）。
+    Node なら `windowsVerbatimArguments: true`、PowerShell なら
+    `Start-Process -ArgumentList <1 本の文字列>` が同じ層。
+    しかも**その失敗は終了コード 1 で返る**ので、
+    「消せないファイルが残ったら 1」を見る検査が**間違った理由で緑**になっていた
+    （落とし穴 116）。**残ったものの中身まで数えて、症状が一致するか見る。**
+
+141. **「必要な容量」をコードに直書きしない。ビルド時に実測して持たせる。**
+    本体が太ったときに「空き容量は足ります」と言いながら途中で失敗する。
+    `build-installer.mjs` が展開後の実サイズを測って
+    `installer-resources/payload-meta.json` に書き、`resolveAssets()` が読む。
+    直書きの定数は**読めなかったときの控え**にだけ残す。
+    実測: 表示した 398.1 MB に対して、置かれたのも 398.1 MB。
+
+142. **アプリを 1 つ足したら、番人の走査範囲も足す。**
+    renderer の日本語直書きを数える番人は `apps/desktop/src/renderer/src` しか見ない。
+    インストーラは**別の root・別の辞書**なので、そのままでは
+    「英語表示で日本語が出る」を原理的に検出できない（落とし穴 78 と同じ形）。
+    `installer/shared/labels.test.ts` に同じ検査を置いた。
+    入れた瞬間に **main の診断ログ 24 件**が引っかかったので、
+    画面に出るものは辞書へ、開発者向けのログは英語へ振り分けた。
+    `.e2e/` のキー実在検査も**ファイル名で辞書を選び分ける**形にした
+    （除外ではなく、正しい辞書で見る。落とし穴 81）。
+
+143. **`electron-builder.json` の `files: ["out/**/*"]` はインストーラまで飲み込む。**
+    インストーラの出力を `out/installer/` に分けても、本体の `files` が
+    `out/**/*` のままだと**アプリの asar にインストーラが同梱される**。
+    `"!out/installer/**/*"` を明示する。
+
+### 依存が「宣言されていない」とき
+
+144. **`package.json` に宣言の無いパッケージ (extraneous) は、別の `npm i` で壊れる。**
+    `jsdom` はどの `package.json` にも書かれていないのに `node_modules` にあり、
+    `@vitest-environment jsdom` のテストがそれを使っていた。
+    別件で `npm i -D 7zip-bin` を打った瞬間に npm がツリーを整理し、
+    **宣言の無い jsdom の入れ子 `lru-cache@11` が落ちて**、
+    root に巻き上がっていた `lru-cache@5`（babel 由来）に解決されるようになった。
+    `LRUCache is not a constructor` で **19 ファイルがワーカーごと起動できず**、
+    vitest の出力は
+    `Test Files 1 failed | 46 passed (47)` + `Errors 19` になる。
+    ——**「失敗 1 件」に見えて、実際は 19 ファイルが 1 件も走っていない。**
+    宣言を足したら **66 ファイル / 1297 件**に戻った。
+    `npm ls <pkg>` が `extraneous` と言うものは、**使っているなら宣言する**。
+
 ## 検証済みのこと
 
+- **Electron 製インストーラを、できあがった `Setup.exe` から通しで動かした**
+  （2026-09-11、`Autoinstall USB Creator Setup-0.1.0.exe` 196.1 MB）。
+  CDP で本物のクリックを送り、**ようこそ → 設定 → 展開 → 完了**まで通したうえで:
+  - 進捗が**実際に進む**こと（0% のまま終わっていないこと）
+  - 置かれたもの（本体の exe・`resources/app.asar`・`resources/samples/ip-only.json`・
+    `uninstall.ps1`）と、**置かれてはいけないもの**（Setup.exe の複製）
+  - **インストール先の合計 398.1 MB が、画面に出した「必要な容量」と一致する**
+  - **入れたアプリがそのまま起動する**（本文 949 文字・ボタン 20 個・
+    `window.autoinstall` が生きている・`listDevices()` が 1 台返す・Boundary 無し）
+  - 「プログラムと機能」と同じ層（CreateProcess にコマンド行をそのまま渡す）で
+    `UninstallString` を実行し、**終了コード 0 で、インストール先・レジストリ・
+    ショートカット 2 つがすべて消える**
+  - 使えないインストール先（ドライブのルート）で**理由が 1 対 1 で出て、
+    インストールのボタンが押せない**こと（`.e2e/installer-shots.mjs`）
+  - payload が無い状態では **`payload-missing` として原因つきで止まり**、
+    「何も書き込んでいません」と正しく言う（片付けを走らせていないので）
+  `.e2e/installer-run.mjs` / `.e2e/installer-shots.mjs` で再現できる。
+  アイコンは `Setup.exe` から `RT_ICON` を取り出して 7 枚（16〜256）を確認した（落とし穴 137）。
+- **生成した `uninstall.ps1` を本物の PowerShell で走らせた**
+  (`npm run e2e:uninstall-script`、**13 / 13**)。
+  砂場と専用のレジストリキーだけを使い、構文解析を通ること・
+  消すべきものが消えること・**インストール先の外にあるものが残ること**・
+  掴まれたファイルが残ったら**終了コード 1 で返す**ことを見る。
+  「残ったら 1」は**変異させて確かめた**（判定を潰すと exit 0 になって落ちる。落とし穴 57）。
 - **RAID + LVM と bond の生成**を `scripts/e2e-raid-bond.mts` で確かめた（**77 / 77**）。
   利用者の要望どおりの構成（boot 2 台に ESP + RAID1 `/boot`、data 4 台に RAID10 → LVM → root、
   NIC 2 枚を 802.3ad で束ねて固定 IP）を組み立て、YAML へ往復させてから
@@ -1203,7 +1306,9 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
 | `npm run e2e:vm:ip` | **配布サンプル `samples/ip-only.json` そのもの**で、起動メニューの項目を選んだことにして入れ、**選んだ IP が実際に反映される**ことを確かめる |
 | `npm test` | typecheck + unit + smoke |
 | `python scripts/make-icon.py` | **アイコンを生成**（`apps/desktop/build/icon.ico` と `icon.png`）。Pillow のみ。`dist:*` の前に 1 度走らせれば足りる |
+| `npm run e2e:uninstall-script` | **生成した `uninstall.ps1` を本物の PowerShell で走らせる**（砂場と専用レジストリキーだけを使う。数秒） |
 | `npm run dist:win` / `dist:mac` / `dist:linux` | electron-builder でパッケージ。**Windows は installer (`-Setup.exe`) と portable (`-portable.exe`) の 2 本**が `apps/desktop/release/` に出る。`samples/` は `extraResources` で同梱される（落とし穴 131 / 134） |
+| `npm run dist:installer` | **Electron 製インストーラ**を 1 本の exe にまとめる（`Autoinstall USB Creator Setup-<version>.exe`）。アイコン生成 → 本体を `--dir` → LZMA2 で `payload.7z` → インストーラをビルド → portable で梱包、の 5 段。**5〜6 分** |
 
 `npm run smoke` は `~/images`・`~/Downloads`・`C:/iso`・`/var/lib/iso` から ISO を探す。
 明示するなら `npm run smoke -- <iso のパス>`。ISO が無ければスキップして正常終了する。

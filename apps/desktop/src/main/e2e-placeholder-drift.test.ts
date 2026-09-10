@@ -3,6 +3,8 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { en, ja } from '@autoinstall/shared'
+// インストーラは別の Electron アプリで、辞書も別に持つ。
+import { DICTIONARIES as INSTALLER_LABELS } from '../../installer/shared/labels.js'
 
 // ---------------------------------------------------------------------------
 // **`.e2e/` の入力欄は placeholder の文言で探している。文言が変わると空振りする。**
@@ -447,39 +449,59 @@ describe('.e2e/ が画面の文言を書き写していない', () => {
 // ===========================================================================
 
 /**
- * `.e2e/*.mjs` が `d.t('…')` で引いているキー。
+ * `.e2e/*.mjs` が `t('…')` で引いているキー。
  *
  * 正規表現ではなく上の字句解析を使う。**コメントに書いた `d.t('…')` の説明を
  * 拾ってしまい、実在しないキーとして落ちた**（実際にここで踏んだ）。
+ *
+ * **引く先の辞書はファイルごとに違う。** `installer-*.mjs` は
+ * インストーラ専用の辞書 (`apps/desktop/installer/shared/labels.ts`) を引く
+ * ——インストーラはアプリ本体のコードを 1 行も読み込まない別の Electron アプリで、
+ * 文言も別に持っているため。**除外ではなく、正しい辞書で見る**（落とし穴 81）。
  */
-function requestedKeys(): { file: string; key: string }[] {
-  const out: { file: string; key: string }[] = []
+function requestedKeys(): { file: string; key: string; dict: 'app' | 'installer' }[] {
+  const out: { file: string; key: string; dict: 'app' | 'installer' }[] = []
   for (const { file, src } of e2eSources()) {
+    const dict = file.startsWith('installer-') ? ('installer' as const) : ('app' as const)
     for (const lit of literals(src)) {
-      if (lit.kind === 'string' && lit.callee === 't' && lit.arg === 0) out.push({ file, key: lit.value })
+      if (lit.kind === 'string' && lit.callee === 't' && lit.arg === 0) {
+        out.push({ file, key: lit.value, dict })
+      }
     }
   }
   return out
 }
 
-describe('.e2e/ が d.t() で引くキーは ja / en の両方に実在する', () => {
+describe('.e2e/ が t() で引くキーは ja / en の両方に実在する', () => {
   it('走査対象が空でない（10 個以上のキーを読めている）', () => {
     const keys = requestedKeys()
-    expect(keys.length, '.e2e/ の d.t() を 1 件も読めていない').toBeGreaterThanOrEqual(10)
+    expect(keys.length, '.e2e/ の t() を 1 件も読めていない').toBeGreaterThanOrEqual(10)
     // 1 ファイルだけ読めていて緑、を防ぐ。
     expect(new Set(keys.map((k) => k.file)).size, '1 ファイルしか読めていない').toBeGreaterThan(1)
     expect(keys.map((k) => k.file)).toContain('watch.mjs')
+    // **両方の辞書を実際に踏んでいること。** 片方だけだと、もう片方は
+    // 「0 件を検査して緑」になる。
+    expect(keys.filter((k) => k.dict === 'app').length).toBeGreaterThan(5)
+    expect(keys.filter((k) => k.dict === 'installer').length).toBeGreaterThan(5)
   })
 
   it('引いているキーがすべて辞書にある', () => {
-    const jaDict = ja as Record<string, string>
-    const enDict = en as Record<string, string>
+    const dicts = {
+      app: { ja: ja as Record<string, string>, en: en as Record<string, string> },
+      installer: {
+        ja: INSTALLER_LABELS.ja as Record<string, string>,
+        en: INSTALLER_LABELS.en as Record<string, string>,
+      },
+    }
     const missing = requestedKeys()
-      .filter(({ key }) => typeof jaDict[key] !== 'string' || typeof enDict[key] !== 'string')
+      .filter(({ key, dict }) => {
+        const d = dicts[dict]
+        return typeof d.ja[key] !== 'string' || typeof d.en[key] !== 'string'
+      })
       .map(({ file, key }) => `${file}: ${key}`)
     expect(
       missing,
-      '.e2e/ が辞書に無いキーを引いている（実行すると d.t() が例外を投げる）',
+      '.e2e/ が辞書に無いキーを引いている（実行すると t() が例外を投げる）',
     ).toEqual([])
   })
 })

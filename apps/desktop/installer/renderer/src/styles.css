@@ -1,0 +1,519 @@
+@import "tailwindcss";
+
+/* Tailwind 4 の自動検出は CSS の位置から辿るが、インストーラは
+   アプリ本体とは別の root を持つので、走査範囲を明示しておく。 */
+@source "../";
+
+/* ==========================================================================
+   意匠のトークン
+   --------------------------------------------------------------------------
+   アプリのアイコン (`scripts/make-icon.py`) と同じ色域から取る。
+     背景  slate-900 #0f172a → indigo-700 #4338ca のグラデーション
+     図柄  白の USB メモリ + 下向きの矢印（＝「書き込む」）
+   インストーラはその意匠を全画面に引き伸ばしたもの、という位置づけ。
+
+   **暗い側だけを持つ。** ウィザードは数十秒しか出ないので、
+   利用者のテーマに合わせるより「製品の顔」を出し切るほうが役に立つ。
+   ========================================================================== */
+
+:root {
+  --bg-base: #0b1020;
+  --bg-deep: #070b16;
+
+  --surface: rgba(255, 255, 255, 0.04);
+  --surface-hover: rgba(255, 255, 255, 0.07);
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.18);
+
+  --ink: #f8fafc;
+  --ink-dim: #cbd5e1;
+  --ink-muted: #94a3b8;
+
+  --accent: #818cf8;        /* indigo-400 */
+  --accent-bright: #a5b4fc; /* indigo-300 */
+  --accent-deep: #4338ca;   /* indigo-700 — アイコンの終端色 */
+  --accent-glow: rgba(129, 140, 248, 0.45);
+
+  --sky: #38bdf8;
+  --emerald: #34d399;
+  --rose: #fb7185;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  /* 静止したグラデーションを 3 枚重ねるだけ。**動かさない。**
+     このリポジトリは「大きな面のぼかしと再描画は重い」ことを実測しているので、
+     全画面を毎フレーム塗り直す装飾（conic の回転、粒子）は入れていない。 */
+  background:
+    radial-gradient(120% 85% at 0% 0%, rgba(99, 102, 241, 0.20), transparent 62%),
+    radial-gradient(90% 65% at 100% 100%, rgba(56, 189, 248, 0.13), transparent 60%),
+    linear-gradient(180deg, var(--bg-deep) 0%, var(--bg-base) 100%);
+  color: var(--ink);
+  font-family:
+    "Inter",
+    "Hiragino Sans",
+    "Noto Sans JP",
+    "Yu Gothic UI",
+    ui-sans-serif,
+    system-ui,
+    "Segoe UI",
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  user-select: none;
+}
+
+input,
+textarea {
+  user-select: text;
+}
+
+/* 枠なしウィンドウのドラッグ領域。 */
+.drag {
+  -webkit-app-region: drag;
+}
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+*:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.65);
+  border-radius: 8px;
+}
+
+/* ==========================================================================
+   背景の「気配」
+   --------------------------------------------------------------------------
+   動かすのは **transform と opacity だけ**。どちらも合成だけで済むので、
+   展開中に進捗バーが毎秒何度も更新されても取り合いにならない
+   （`backdrop-filter` と全画面の再描画は使わない。CLAUDE.md の規約）。
+   ========================================================================== */
+.ambient {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.orb {
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(72px);
+  will-change: transform;
+}
+.orb-indigo {
+  width: 380px;
+  height: 380px;
+  left: -110px;
+  top: -140px;
+  background: rgba(99, 102, 241, 0.30);
+  animation: orb-a 19s ease-in-out infinite;
+}
+.orb-sky {
+  width: 300px;
+  height: 300px;
+  right: -90px;
+  bottom: -120px;
+  background: rgba(56, 189, 248, 0.20);
+  animation: orb-b 24s ease-in-out infinite;
+}
+@keyframes orb-a {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50%      { transform: translate3d(46px, 34px, 0) scale(1.10); }
+}
+@keyframes orb-b {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50%      { transform: translate3d(-38px, -26px, 0) scale(1.07); }
+}
+
+/* 目盛りのような点の格子。中央に向かってだけ見える。
+   動かすのは opacity だけ。 */
+.grid-veil {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+  background-size: 26px 26px;
+  mask-image: radial-gradient(ellipse 78% 62% at 50% 42%, black 25%, transparent 82%);
+  -webkit-mask-image: radial-gradient(ellipse 78% 62% at 50% 42%, black 25%, transparent 82%);
+  animation: veil-breath 9s ease-in-out infinite;
+}
+@keyframes veil-breath {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 0.9; }
+}
+
+/* ==========================================================================
+   面
+   ========================================================================== */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  /* **`backdrop-filter` は使わない。** 塗る面積に比例して GPU を食う。 */
+}
+
+.hairline {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--line), transparent);
+}
+
+.gradient-text {
+  background: linear-gradient(118deg, #ffffff 0%, var(--accent-bright) 58%, var(--sky) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ==========================================================================
+   ボタン
+   ========================================================================== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 26px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.btn:disabled {
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--accent-deep) 0%, var(--accent) 100%);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow:
+    0 0 0 1px rgba(99, 102, 241, 0.25),
+    0 12px 30px -10px var(--accent-glow);
+  transition:
+    transform 140ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 240ms ease,
+    filter 240ms ease;
+}
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+  box-shadow:
+    0 0 0 1px rgba(99, 102, 241, 0.4),
+    0 18px 40px -10px var(--accent-glow);
+}
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+}
+.btn-primary:disabled {
+  opacity: 0.45;
+  filter: saturate(0.35);
+  box-shadow: none;
+}
+
+/* 一度だけ光が走る。`::before` は通常フローの子より先に塗られるので、
+   文字とアイコンはこの上に出る。 */
+.btn-primary::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.30) 50%,
+    transparent 70%
+  );
+  transform: translateX(-160%) skewX(-12deg);
+  pointer-events: none;
+  opacity: 0;
+}
+.btn-primary:not(:disabled):hover::before {
+  animation: sheen 1.05s ease-in-out;
+}
+@keyframes sheen {
+  0%   { transform: translateX(-160%) skewX(-12deg); opacity: 0; }
+  18%  { opacity: 1; }
+  82%  { opacity: 1; }
+  100% { transform: translateX(160%) skewX(-12deg); opacity: 0; }
+}
+
+.btn-primary > svg {
+  transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.btn-primary:not(:disabled):hover > svg {
+  transform: translateX(2px);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--ink-dim);
+  border: 1px solid var(--line);
+  transition:
+    background 160ms ease,
+    color 160ms ease,
+    border-color 160ms ease;
+}
+.btn-ghost:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+.btn-ghost:disabled {
+  opacity: 0.4;
+}
+
+.btn-danger {
+  background: linear-gradient(135deg, #9f1239 0%, #e11d48 100%);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 12px 30px -12px rgba(244, 63, 94, 0.55);
+  transition: transform 140ms cubic-bezier(0.22, 1, 0.36, 1), filter 240ms ease;
+}
+.btn-danger:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+}
+
+/* ==========================================================================
+   入力
+   ========================================================================== */
+.field {
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 13px;
+  font-family: ui-monospace, "Cascadia Mono", "Consolas", monospace;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+.field:hover {
+  background: var(--surface-hover);
+}
+.field:focus {
+  border-color: rgba(129, 140, 248, 0.55);
+}
+.field[data-invalid="true"] {
+  border-color: rgba(251, 113, 133, 0.55);
+}
+
+input[type="checkbox"].box {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  display: inline-block;
+  vertical-align: middle;
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+input[type="checkbox"].box:checked {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-deep) 100%);
+  border-color: transparent;
+}
+input[type="checkbox"].box:checked::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 1px;
+  width: 5px;
+  height: 10px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+/* ==========================================================================
+   左の段
+   ========================================================================== */
+.rail-dot {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-weight: 600;
+  transition: background 200ms ease, color 200ms ease, border-color 200ms ease;
+}
+.rail-dot[data-state="active"] {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-deep) 100%);
+  color: #fff;
+  border-color: transparent;
+  animation: rail-pulse 2.4s ease-out infinite;
+}
+.rail-dot[data-state="done"] {
+  background: rgba(52, 211, 153, 0.15);
+  color: var(--emerald);
+  border-color: rgba(52, 211, 153, 0.4);
+}
+@keyframes rail-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(129, 140, 248, 0.45); }
+  70%  { box-shadow: 0 0 0 10px rgba(129, 140, 248, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(129, 140, 248, 0); }
+}
+.rail-line {
+  width: 1px;
+  flex: 1;
+  background: var(--line);
+  margin: 4px 0;
+}
+.rail-line[data-state="done"] {
+  background: linear-gradient(180deg, rgba(52, 211, 153, 0.4), var(--line));
+}
+
+/* ==========================================================================
+   進捗
+   ========================================================================== */
+.track {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+  position: relative;
+}
+.fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent-deep) 0%, var(--accent) 52%, var(--sky) 100%);
+  box-shadow: 0 0 18px var(--accent-glow);
+  transition: width 220ms ease;
+}
+.fill[data-indeterminate="true"] {
+  width: 42% !important;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-top-color: var(--accent-bright);
+  animation: spin 800ms linear infinite;
+  display: inline-block;
+  flex-shrink: 0;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ==========================================================================
+   画面の切り替え
+   ========================================================================== */
+@keyframes step-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.step {
+  animation: step-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes element-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.stagger > * {
+  animation: element-in 440ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.stagger > *:nth-child(1) { animation-delay: 50ms; }
+.stagger > *:nth-child(2) { animation-delay: 120ms; }
+.stagger > *:nth-child(3) { animation-delay: 190ms; }
+.stagger > *:nth-child(4) { animation-delay: 260ms; }
+.stagger > *:nth-child(5) { animation-delay: 330ms; }
+.stagger > *:nth-child(6) { animation-delay: 400ms; }
+
+/* ロゴ。飾りは光だけ。図形そのものは動かさない
+   （USB は「刺さっているもの」なので、揺れると意味が変わる）。 */
+@keyframes mark-glow {
+  0%, 100% { filter: drop-shadow(0 0 10px rgba(129, 140, 248, 0.32)); }
+  50%      { filter: drop-shadow(0 0 24px rgba(129, 140, 248, 0.66)); }
+}
+.mark-glow {
+  animation: mark-glow 4.4s ease-in-out infinite;
+}
+/* 書き込む向き（下）へ、矢印だけがゆっくり落ちる。 */
+@keyframes mark-arrow {
+  0%, 100% { transform: translateY(0); opacity: 1; }
+  50%      { transform: translateY(2.5px); opacity: 0.72; }
+}
+.mark-arrow {
+  animation: mark-arrow 2.6s ease-in-out infinite;
+}
+
+/* 覆い（確認ダイアログ）。**ぼかすのはここだけ。** */
+@keyframes overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.overlay {
+  animation: overlay-in 160ms ease both;
+  backdrop-filter: blur(3px);
+}
+.modal {
+  animation: modal-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* 「動きを減らす」設定を尊重する。飾りの動きだけを止める。 */
+@media (prefers-reduced-motion: reduce) {
+  .orb,
+  .grid-veil,
+  .mark-glow,
+  .mark-arrow,
+  .rail-dot[data-state="active"],
+  .btn-primary::before,
+  .fill[data-indeterminate="true"] {
+    animation: none !important;
+  }
+  .step,
+  .stagger > *,
+  .overlay,
+  .modal {
+    animation-duration: 1ms !important;
+  }
+}

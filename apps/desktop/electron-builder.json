@@ -7,7 +7,7 @@
     "output": "release",
     "buildResources": "build"
   },
-  "files": ["out/**/*", "package.json"],
+  "files": ["out/**/*", "!out/installer/**/*", "package.json"],
   "extraResources": [{ "from": "../../samples", "to": "samples", "filter": ["**/*"] }],
   "asarUnpack": [],
   "npmRebuild": false,
