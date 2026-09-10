@@ -113,6 +113,9 @@ const moved = [...seen].filter((p) => p > 0 && p < 100)
 if (moved.length < 2) note(`進捗が進んでいない（見えた値: ${[...seen].sort((a, b) => a - b).join(',')}）`)
 if (!shotTaken) console.log('  （進捗の途中を捉えられなかった）')
 
+// 段の入りは 320ms + 子の遅延 400ms。**落ち着いてから撮る**
+// （画面が出た瞬間に撮ると、透明度の途中が写って「文字が無い」ように見える）。
+await wait(1200)
 await shot('run-04-done')
 const done = await body()
 if (!done.includes(t('done.ok.title'))) note(`完了画面が成功ではない: ${done.slice(0, 300)}`)
