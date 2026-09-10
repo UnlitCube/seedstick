@@ -1,6 +1,18 @@
 # サンプルのプロファイル
 
 GUI の「プロファイルを開く」からそのまま読める JSON を置いてある。
+
+**インストーラ版には同梱される。** 配布物の `resources\samples\` に入る。
+
+| 形態 | サンプルの場所 |
+|---|---|
+| インストーラ版 | インストール先の `resources\samples\`（既定は `%LOCALAPPDATA%\Programs\Autoinstall USB Creator\`。インストール時に変更できる） |
+| portable 版 | **実行のたびに一時ディレクトリへ展開されるので、置き場所として当てにしない** |
+| このリポジトリ | `samples/` |
+
+GUI の「プロファイルを開く」でそのパスの JSON を指定する。
+portable 版を使うなら、このリポジトリから JSON をコピーしておくのが確実。
+
 **どれも `npm run test:unit` が読み込んで検証しているので、壊れたまま残ることはない**
 （`packages/shared/src/autoinstall/samples.test.ts`）。
 

@@ -8,6 +8,7 @@
     "buildResources": "build"
   },
   "files": ["out/**/*", "package.json"],
+  "extraResources": [{ "from": "../../samples", "to": "samples", "filter": ["**/*"] }],
   "asarUnpack": [],
   "npmRebuild": false,
   "win": {
@@ -23,7 +24,11 @@
     "allowToChangeInstallationDirectory": true,
     "perMachine": false,
     "createDesktopShortcut": true,
-    "shortcutName": "Autoinstall USB Creator"
+    "shortcutName": "Autoinstall USB Creator",
+    "artifactName": "${productName}-${version}-win-${arch}-Setup.${ext}"
+  },
+  "portable": {
+    "artifactName": "${productName}-${version}-win-${arch}-portable.${ext}"
   },
   "mac": {
     "target": [

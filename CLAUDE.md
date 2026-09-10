@@ -1013,6 +1013,46 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
     「配ったサンプルの既定パスワードのまま焼いた」を捕まえる仕組みが無くなる。
     空にしておけば error 1 件で止まり、`ipc.ts` が書き込み自体を拒む。
 
+### 配布パッケージ
+
+131. **同じ拡張子の target を 2 つ出すなら、`artifactName` を target ごとに書く。**
+    `win.artifactName` に `${productName}-${version}-win-${arch}.${ext}` と書いてあり、
+    `nsis` と `portable` は**どちらも `.exe`** なので同じファイル名になる。
+    electron-builder は**警告を出さずに後から作った方で上書きする**ので、
+    2 つ作ったつもりが**成果物が 1 つしか残らない**（しかも
+    先に作られた nsis の `.blockmap` だけが取り残される）。
+    初版から入っていて、ビルドログを 1 行ずつ読むまで気づかなかった:
+
+    ```
+    building target=nsis     file=release\...-win-x64.exe
+    building target=portable file=release\...-win-x64.exe   ← 同じ名前
+    ```
+
+    `nsis.artifactName` と `portable.artifactName` に分ける。
+    mac (dmg/zip) と linux (AppImage/deb) は拡張子が違うので衝突しない
+    ——**Windows だけの問題**なので、他を見て「大丈夫」と判断しない。
+
+132. **`electron-builder.json` に `//` のコメントキーを書けない。**
+    スキーマ検証が未知のプロパティを拒否して
+    `configuration has an unknown property '//extraResources'` で落ちる。
+    JSON にコメントを足したくなったら、設定ではなく
+    **コード側かドキュメントに書く**（この落とし穴がその置き場所）。
+
+133. **配布パッケージは「起動するところまで」確かめる。**
+    `.exe` ができたことと、それが動くことは別。
+    `win-unpacked` の実体を `--remote-debugging-port` 付きで起動し、CDP で
+    **画面が描画されたか / preload の橋渡しが生きているか / IPC が応答するか /
+    Error Boundary が出ていないか**を見る（`npm run dev` と違い、
+    パッケージ版は asar の中から読むので、`files` の指定漏れはここでしか出ない）。
+    実測（0.1.0）: 見出し・本文 949 文字・ボタン 20 個・
+    `typeof window.autoinstall === 'object'`・`listDevices()` が 1 台返す・Boundary 無し。
+
+134. **`files` に入れ忘れたものは、パッケージにだけ入らない。**
+    `samples/` は `files: ["out/**/*", "package.json"]` の外なので、
+    開発中は普通に読めるのに**インストールした人には存在しない**。
+    リポジトリの外に出す物（サンプル・テンプレート）を足したら、
+    **`extraResources` に入れて、展開後のディレクトリで実在を確かめる**。
+
 ## 検証済みのこと
 
 - **RAID + LVM と bond の生成**を `scripts/e2e-raid-bond.mts` で確かめた（**77 / 77**）。
@@ -1141,7 +1181,7 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
 | `npm run e2e:vm:mirror` | **ESP を 2 台に置き、NIC 2 枚を bond で束ねる**（2 台目への grub-install と bond の検証） |
 | `npm run e2e:vm:ip` | **配布サンプル `samples/ip-only.json` そのもの**で、起動メニューの項目を選んだことにして入れ、**選んだ IP が実際に反映される**ことを確かめる |
 | `npm test` | typecheck + unit + smoke |
-| `npm run dist:win` / `dist:mac` / `dist:linux` | electron-builder でパッケージ |
+| `npm run dist:win` / `dist:mac` / `dist:linux` | electron-builder でパッケージ。**Windows は installer (`-Setup.exe`) と portable (`-portable.exe`) の 2 本**が `apps/desktop/release/` に出る。`samples/` は `extraResources` で同梱される（落とし穴 131 / 134） |
 
 `npm run smoke` は `~/images`・`~/Downloads`・`C:/iso`・`/var/lib/iso` から ISO を探す。
 明示するなら `npm run smoke -- <iso のパス>`。ISO が無ければスキップして正常終了する。
