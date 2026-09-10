@@ -56,7 +56,22 @@ function checkUserData(userData: string, where: string): void {
   // 置換に失敗した YAML が残る設計自体が成立しない。
   // いまは既定値をそのまま書き、early-commands が python + PyYAML で上書きする。
   check(`${where}: プレースホルダが残っていない`, !/@@AI_[A-Z0-9_]+@@/.test(userData))
-  check(`${where}: early-commands で置換する`, userData.includes('ai.hostname='))
+  // **実装の形ではなく、성立していなければならない性質を見る**（落とし穴 56）。
+  // 以前は `userData.includes('ai.hostname=')` だったが、
+  // **その literal はもう出力に存在しない**——値をシェルに連結せず
+  // base64 の JSON (`AI_DATA=`) で渡し、Python 側は `args["ai.hostname"]` と
+  // 辞書で引く形になったため（落とし穴 19）。
+  // 実装は正しいのに 1 件だけ FAIL していた（実 USB の読み戻しで判明）。
+  check(
+    `${where}: early-commands が起動時の指定を読む`,
+    userData.includes('/proc/cmdline') && userData.includes('AI_DATA='),
+  )
+  // **落とし穴 27**: 反映できなかった指定があれば止める。
+  // 黙って続けると全台が同じ IP / 同じディスクを掴む。
+  check(
+    `${where}: 反映できなかった指定があれば止める`,
+    userData.includes('applied') && userData.includes('sys.exit'),
+  )
   check(
     `${where}: early-commands が python で YAML を読み書きする`,
     userData.includes('yaml.safe_load'),

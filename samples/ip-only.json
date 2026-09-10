@@ -1,0 +1,174 @@
+{
+  "profileVersion": 4,
+  "meta": {
+    "name": "ip-only",
+    "createdAt": "2026-09-10T00:00:00.000Z",
+    "toolVersion": "autoinstall-ui/0.1.0"
+  },
+  "series": "24.04",
+  "basics": {
+    "locale": "en_US.UTF-8",
+    "keyboard": {
+      "layout": "us",
+      "variant": "",
+      "toggle": null
+    },
+    "timezone": "UTC",
+    "hostname": "ubuntu-node"
+  },
+  "user": {
+    "realname": "System Operator",
+    "username": "sysop",
+    "passwordHash": "",
+    "sudoNoPassword": false,
+    "groups": {
+      "mode": "default"
+    }
+  },
+  "ssh": {
+    "installServer": true,
+    "authorizedKeys": [],
+    "allowPasswordAuth": true
+  },
+  "network": {
+    "mode": "static",
+    "target": {
+      "kind": "any"
+    },
+    "address": "10.0.2.90/24",
+    "gateway": "10.0.2.2",
+    "nameservers": [
+      "10.0.2.3"
+    ],
+    "searchDomains": [],
+    "optional": false
+  },
+  "storage": {
+    "mode": "lvm",
+    "match": {
+      "kind": "largest"
+    },
+    "useWholeDisk": false,
+    "encryptionPassphrase": "",
+    "swap": {
+      "mode": "installer-default",
+      "size": ""
+    },
+    "partitionTable": "default",
+    "resetPartition": {
+      "enabled": false,
+      "size": ""
+    },
+    "raid": {
+      "disks": [],
+      "arrays": [],
+      "volumeGroup": "vg0",
+      "rootName": "root",
+      "rootSize": "",
+      "rootFstype": "ext4",
+      "espSize": "512M",
+      "bootSize": "2G",
+      "mirrorBootloader": true
+    }
+  },
+  "software": {
+    "sourceId": "ubuntu-server",
+    "packages": [],
+    "snaps": [],
+    "updates": "security",
+    "installDrivers": false,
+    "kernelCrashDumps": null,
+    "ubuntuProToken": "",
+    "gpu": {
+      "enabled": false,
+      "driver": "open",
+      "toolkit": "latest",
+      "setupPath": true,
+      "containerToolkit": false
+    },
+    "kernel": {
+      "mode": "default"
+    },
+    "searchDrivers": null,
+    "codecs": false,
+    "oem": "auto"
+  },
+  "apt": {
+    "mode": "default",
+    "countryCode": "",
+    "primaryUri": "",
+    "proxy": "",
+    "disableComponents": [],
+    "sources": [],
+    "preserveSourcesList": false,
+    "fallback": "abort"
+  },
+  "postInstall": {
+    "presets": [],
+    "lateCommands": [],
+    "firstBootCommands": [],
+    "files": [],
+    "additionalUsers": [],
+    "deployments": [],
+    "services": [],
+    "aptFullUpgrade": false,
+    "errorCommands": [],
+    "collectLogsOnError": true,
+    "debconfSelections": ""
+  },
+  "activeDirectory": {
+    "enabled": false,
+    "adminName": "",
+    "domainName": ""
+  },
+  "runtimeValues": {
+    "hostname": "fixed",
+    "network": "kernel-arg",
+    "disk": "fixed",
+    "presets": [
+      {
+        "id": "ip-100",
+        "label": "ip-100",
+        "hostname": "",
+        "ipv4": "10.0.2.100/24",
+        "gateway": "10.0.2.2",
+        "nameservers": "10.0.2.3",
+        "disk": ""
+      },
+      {
+        "id": "ip-101",
+        "label": "ip-101",
+        "hostname": "",
+        "ipv4": "10.0.2.101/24",
+        "gateway": "10.0.2.2",
+        "nameservers": "10.0.2.3",
+        "disk": ""
+      },
+      {
+        "id": "ip-102",
+        "label": "ip-102",
+        "hostname": "",
+        "ipv4": "10.0.2.102/24",
+        "gateway": "10.0.2.2",
+        "nameservers": "10.0.2.3",
+        "disk": ""
+      }
+    ],
+    "offerInteractiveEntry": true
+  },
+  "behavior": {
+    "interactiveSections": [],
+    "shutdown": "reboot",
+    "refreshInstaller": false,
+    "reportToConsole": true,
+    "interactiveAll": false,
+    "reporting": {
+      "kind": "console"
+    },
+    "refreshInstallerChannel": ""
+  },
+  "advanced": {
+    "rawOverlayYaml": "",
+    "extraKernelArgs": ""
+  }
+}

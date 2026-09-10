@@ -225,6 +225,35 @@ const MUTATIONS: Record<string, () => AutoinstallProfile> = {
       network: { mode: 'raw', yaml: 'a: [' },
       storage: { ...base().storage, mode: 'raw', yaml: 'b: [' },
     }),
+  // **数として書かれた MAC**（どの方言で読んでも誤り）。
+  // 文字列で書かれた MAC は解析側が 60 進数タグを外しているのでもう数にならない
+  // （`yaml.ts`）。だから battery も**数で書く**——
+  // 例外表に足すのではなく、実際に踏める形にする（落とし穴 81）。
+  // curtin のディスク選択子が数になる軸（落とし穴 82 / 83）。**踏ませる**（落とし穴 81）。
+  '生 storage YAML のディスク選択子が数値になる': () =>
+    broken({
+      ...base(),
+      storage: {
+        ...base().storage,
+        mode: 'raw',
+        yaml: `config:
+  - type: disk
+    id: d0
+    serial: 20250101
+`,
+      },
+    }),
+  '生 YAML の MAC が数値で書かれている': () =>
+    broken({
+      ...base(),
+      network: {
+        mode: 'raw',
+        yaml: `ethernets:
+  n0:
+    match: {macaddress: 41135085296}
+`,
+      },
+    }),
   'ディスク指定が空': () =>
     broken({ ...base(), storage: { ...base().storage, match: { kind: 'serial' } } }),
   'どのディスクでもよい': () =>

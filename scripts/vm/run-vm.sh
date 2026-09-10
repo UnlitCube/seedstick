@@ -58,13 +58,25 @@ fi
 : "${VM_CPUS:=4}"
 : "${VM_TIMEOUT:=3600}"
 
-echo "=== QEMU 起動 ($MODE) mem=${VM_MEM}M cpus=${VM_CPUS} timeout=${VM_TIMEOUT}s ==="
+# --- NIC。既定は 1 枚。`VM_NICS=2` で 2 枚にする（bond の検証用）。
+#
+# **MAC を固定する。** bond のメンバーを `match: {macaddress: ...}` で選ぶので、
+# QEMU が毎回ランダムに振ると一致しなくなる。
+# ここに書いた値は `e2e-vm.mts` の bond の設定と**同じものを見ている**ので、
+# 片方だけ変えると「2 枚あるのにメンバーが 0 枚の bond」になる。
+: "${VM_NICS:=1}"
+NIC_ARGS=(-netdev user,id=net0 -device "virtio-net-pci,netdev=net0,mac=52:54:00:12:34:56")
+if [ "$VM_NICS" -ge 2 ]; then
+  NIC_ARGS+=(-netdev user,id=net1 -device "virtio-net-pci,netdev=net1,mac=52:54:00:12:34:57")
+fi
+
+echo "=== QEMU 起動 ($MODE) mem=${VM_MEM}M cpus=${VM_CPUS} nics=${VM_NICS} timeout=${VM_TIMEOUT}s ==="
 timeout "$VM_TIMEOUT" qemu-system-x86_64 \
   -accel kvm -cpu host -smp "$VM_CPUS" -m "$VM_MEM" \
   -machine q35 \
   -drive "if=pflash,format=raw,unit=0,readonly=on,file=$OVMF_CODE" \
   -drive "if=pflash,format=raw,unit=1,file=OVMF_VARS.fd" \
-  -netdev user,id=net0 -device virtio-net-pci,netdev=net0 \
+  "${NIC_ARGS[@]}" \
   "${DISK_ARGS[@]}" "${BOOT_ARGS[@]}" \
   -display none -serial mon:stdio -no-reboot
 RC=$?

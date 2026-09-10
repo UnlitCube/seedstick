@@ -414,9 +414,18 @@ export const RAID_ESP_MIRROR_LOG = '/var/log/autoinstall-raid-esp.log'
  * 「どちらが壊れても起動する」を作る手順そのものは curtin にも
  * autoinstall リファレンスにも書かれていない。ここは
  * `grub-install --efi-directory=<2 台目の ESP> --no-nvram` を試し、
- * 失敗したら 1 台目の ESP の中身を複製する、という組み立てで、
- * **実機でも VM でも走らせていない**（落とし穴 72: 「〜済み」と書く前に数えるか実行する）。
+ * 失敗したら 1 台目の ESP の中身を複製する、という組み立てである。
  * `x86_64-efi` 決め打ちなので arm64 では効かない。
+ *
+ * **どこまで確かめたか**（落とし穴 72: 「〜済み」と書く前に数えるか実行する）:
+ * - **VM で走らせた** (`npm run e2e:vm:mirror`)。`RESULT: ok` になり、
+ *   2 台の ESP の両方に起動できるものが入ることまで確認した。
+ *   この経路で**インストーラ USB の ESP を壊しに行く実バグ**が見つかっている（落とし穴 114）。
+ * - **デバイスの選別は `npm run e2e:esp-mirror` が `sh` で実行して確かめている**
+ *   （インストーラ USB / 別の OS のディスクを混ぜた機械で、どちらにも触らないこと）。
+ * - **1 台目を外して 2 台目だけで起動する試験はしていない。** つまり
+ *   「どちらが壊れても起動する」という目的そのものは**まだ確かめていない**。
+ * - `cp -a` のフォールバック（grub-install が失敗したとき）は VM でも走っていない。
  *
  * 失敗してもインストール全体は止めない。ただし **`|| true` で握り潰さない**:
  * 何が起きたかを {@link RAID_ESP_MIRROR_LOG} に残し、最後に成否を 1 行で書く。
@@ -435,10 +444,45 @@ export function raidEspMirrorCommand(): string {
     'date || true',
     'primary=$(findmnt -n -o SOURCE --target /target/boot/efi 2>/dev/null || true)',
     'echo "primary ESP: ${primary:-unknown}"',
+    // **インストール先が実際に使っているディスクだけを対象にする。**
+    // これが無いと、ESP を持つ「関係の無いディスク」まで書き換える。
+    // VM で実際に踏んだのは**インストーラ USB 自身の ESP**（5 MiB しかないので
+    // `No space left on device` で失敗し、結果が `incomplete` になった）。
+    // もっと悪いのは**別の OS が入った既存ディスクの ESP** で、
+    // そちらは容量があるぶん**黙って他の OS のブートローダを上書きする**。
+    // 見るのは**起動チェーンの 3 か所だけ**（`/` `/boot` `/boot/efi`）。
+    // `findmnt -R /target`（配下のマウントを全部）にすると、
+    // **curtin が ISO のパッケージプールのために `/target/cdrom` へ bind した
+    // インストーラ USB まで「インストール先のディスク」に入る**（VM で実測）。
+    // `--target` は「そのパスを含むいちばん近いマウント」を返すので、
+    // `/boot` が独立していない構成でも root の SOURCE が返って正しく動く。
+    // md も LVM も `lsblk -s` が物理ディスクまで展開する。
+    // `lsblk` はブロックデバイスでない `SOURCE`（tmpfs・bind マウント元など）を
+    // エラーにして何も出さないので、**こちらで `-b` を見る必要は無い**
+    // （見ようとすると `[` はシェル組み込みで、検査から差し替えられない）。
+    'target_disks=$(for m in /target /target/boot /target/boot/efi; do ' +
+      'findmnt -rn -o SOURCE --target "$m" 2>/dev/null; done | ' +
+      'while read -r src; do [ -n "$src" ] || continue; ' +
+      'lsblk -rnpo NAME,TYPE -s "$src" 2>/dev/null | awk \'$2 == "disk" { print $1 }\'; ' +
+      "done | sort -u | tr '\\n' ' ')",
+    'echo "target disks: ${target_disks:-unknown}"',
     'found=0',
     'failed=0',
+    'skipped=0',
     'for dev in $(lsblk -rnpo NAME,PARTTYPE 2>/dev/null | awk -v t="$ESP_TYPE" \'tolower($2) == t { print $1 }\'); do',
     '  if [ "$dev" = "$primary" ]; then continue; fi',
+    // 親ディスクが「インストール先」でなければ触らない。
+    // `target_disks` が空（`findmnt` が何も返さない）ときは**1 台も触らない**
+    // ——判断材料が無いまま他人のディスクに書きに行くほうが危ない。
+    '  pk=$(lsblk -rndo PKNAME "$dev" 2>/dev/null)',
+    '  case " $target_disks " in',
+    '    *" /dev/$pk "*) ;;',
+    '    *)',
+    '      echo "--- $dev (skipped: /dev/${pk:-?} is not a disk this install uses)"',
+    '      skipped=$((skipped + 1))',
+    '      continue',
+    '      ;;',
+    '  esac',
     '  found=$((found + 1))',
     '  echo "--- $dev"',
     '  mkdir -p /target/boot/efi-mirror',
@@ -458,20 +502,42 @@ export function raidEspMirrorCommand(): string {
     // NVRAM に項目が無いファームウェアでも拾えるよう、取り外し可能メディア用の
     // 既定パス (EFI/BOOT/BOOTX64.EFI) を用意する。1 台目が壊れて外されると
     // NVRAM の項目は残っていても指す先が消えるため、ここが最後の綱になる。
+    // **shim は「自分が読み込まれたディレクトリ」から `grubx64.efi` を探す。**
+    // 以前はここで最初に見つかった 1 ファイル（＝ shim）だけを `BOOTX64.EFI` に
+    // 写して `break` していたので、`EFI/BOOT/grubx64.efi` が作られず、
+    // **この経路で起動すると shim が GRUB に渡せずに止まる**。
+    // shim を置くなら、shim が探すものも一緒に置く。
+    // （24.04 の `grub-install` は `EFI/BOOT/` を自分で作るので、この分岐は
+    //   grub-install が作らなかったとき——古いリリースや失敗時——にだけ走る。）
     '  if [ ! -f /target/boot/efi-mirror/EFI/BOOT/BOOTX64.EFI ]; then',
     '    mkdir -p /target/boot/efi-mirror/EFI/BOOT',
-    '    for f in shimx64.efi grubx64.efi; do',
-    '      if [ -f "/target/boot/efi-mirror/EFI/ubuntu/$f" ]; then',
-    '        cp "/target/boot/efi-mirror/EFI/ubuntu/$f" /target/boot/efi-mirror/EFI/BOOT/BOOTX64.EFI && break',
-    '      fi',
-    '    done',
+    '    src=/target/boot/efi-mirror/EFI/ubuntu',
+    '    dst=/target/boot/efi-mirror/EFI/BOOT',
+    '    if [ -f "$src/shimx64.efi" ]; then',
+    '      cp "$src/shimx64.efi" "$dst/BOOTX64.EFI" || echo "WARNING: could not place shim at the removable path"',
+    // grubx64.efi が無いと shim は次に fbx64.efi を探す。両方置く。
+    '      for f in grubx64.efi mmx64.efi fbx64.efi grub.cfg BOOTX64.CSV; do',
+    '        [ -f "$src/$f" ] && cp "$src/$f" "$dst/$f"',
+    '      done',
+    '    elif [ -f "$src/grubx64.efi" ]; then',
+    // セキュアブートを使っていない機械では shim が無い。GRUB を直接置く。
+    '      cp "$src/grubx64.efi" "$dst/BOOTX64.EFI" || echo "WARNING: could not place grub at the removable path"',
+    '      [ -f "$src/grub.cfg" ] && cp "$src/grub.cfg" "$dst/grub.cfg"',
+    '    else',
+    '      echo "WARNING: neither shimx64.efi nor grubx64.efi is present; the removable path is empty"',
+    '    fi',
     '  fi',
     '  umount /target/boot/efi-mirror || echo "WARNING: could not unmount $dev"',
     '  rmdir /target/boot/efi-mirror 2>/dev/null || true',
     'done',
-    'echo "mirrored: $found, failures: $failed"',
+    'echo "mirrored: $found, failures: $failed, skipped: $skipped"',
     'if [ "$failed" -ne 0 ]; then',
     '  echo "RESULT: incomplete - the first disk boots, the others may not"',
+    'elif [ "$found" -eq 0 ] && [ "$skipped" -ne 0 ]; then',
+    // **「見つからなかった」と「見つけたが対象外だった」は別。**
+    // 一緒くたにすると、絞り込みが効きすぎて正当な 2 台目を落としたときに
+    // 「そもそも 2 台目が無かった」と読めてしまい、原因にたどり着けない。
+    '  echo "RESULT: skipped - EFI system partitions exist, but none of them is on a disk this install uses"',
     'elif [ "$found" -eq 0 ]; then',
     '  echo "RESULT: nothing to do - no second EFI system partition was found"',
     'else',

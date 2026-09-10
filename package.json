@@ -23,9 +23,12 @@
     "e2e": "tsx scripts/e2e-matrix.mts",
     "e2e:image": "tsx scripts/e2e-image-file.mts",
     "e2e:raid-bond": "tsx scripts/e2e-raid-bond.mts",
+    "e2e:esp-mirror": "tsx scripts/e2e-esp-mirror.mts",
     "e2e:usb": "tsx scripts/e2e-write-usb.mts",
     "e2e:vm": "tsx scripts/e2e-vm.mts",
     "e2e:vm:raid": "tsx scripts/e2e-vm.mts --raid",
+    "e2e:vm:mirror": "tsx scripts/e2e-vm.mts --mirror",
+    "e2e:vm:ip": "tsx scripts/e2e-vm.mts --ip",
     "e2e:verify-usb": "tsx scripts/e2e-verify-usb.mts",
     "e2e:usb-worker": "tsx scripts/e2e-worker-usb.mts"
   },

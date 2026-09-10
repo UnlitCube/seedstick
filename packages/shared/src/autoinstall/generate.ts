@@ -1,5 +1,6 @@
-import { Document, Scalar, parseDocument, isMap, type Node } from 'yaml'
-import { localized, type LocalizedText } from '../i18n/index.js'
+import { Scalar, isMap, type Document, type Node } from 'yaml'
+import { createAutoinstallDocument, parseAutoinstallYaml } from './yaml.js'
+import { localized, type LocalizedText, type MsgKey } from '../i18n/index.js'
 import type {
   AutoinstallProfile,
   InterfaceSelector,
@@ -240,8 +241,7 @@ function buildNetwork(net: NetworkConfig, runtime: RuntimeValuesConfig): unknown
   // 既定は「eth*/en* に一致する全 NIC で DHCPv4、アドレスを取れなかった NIC は無効化」。
   if (net.mode === 'installer-default' && !byKernelArg) return undefined
   if (net.mode === 'raw') {
-    const doc = parseDocument(net.yaml)
-    return doc.toJS() ?? {}
+    return rawYamlToJs(net.yaml, 'network.yaml', 'validate.networkYamlSyntax')
   }
   // bond は `ethernets` に加えて `bonds` を出すので、単一 NIC の組み立てには乗らない。
   // ここより下（既存の 3 モード）の出力は 1 バイトも変わらない。
@@ -275,14 +275,32 @@ function buildNetwork(net: NetworkConfig, runtime: RuntimeValuesConfig): unknown
   return { version: 2, ethernets: { [key]: iface } }
 }
 
+/**
+ * 生の YAML を JS の値にする。**素の例外を外へ出さない。**
+ *
+ * `toJS()` は構文が正しい YAML でも投げる: エイリアスを入れ子で増やした YAML は
+ * `ReferenceError: Excessive alias count`（`yaml` パッケージの資源枯渇対策）になる。
+ * そのまま外へ出すと画面には「予期しないエラーが発生しました」しか出ず、
+ * **どの入力欄を直せばよいか分からない**（落とし穴 23 / 77）。
+ * `GenerateError` に包んで、`field` で入力欄へ飛べるようにする。
+ */
+function rawYamlToJs(yaml: string, field: string, key: MsgKey): unknown {
+  const doc = parseAutoinstallYaml(yaml)
+  try {
+    return doc.toJS() ?? {}
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    throw new GenerateError(`生の YAML を読めない (${field}): ${detail}`, localized(key, { detail }), field)
+  }
+}
+
 function buildStorage(
   storage: StorageConfig,
   runtime: RuntimeValuesConfig,
   features: SeriesFeatures,
 ): unknown {
   if (storage.mode === 'raw') {
-    const doc = parseDocument(storage.yaml)
-    return doc.toJS() ?? {}
+    return rawYamlToJs(storage.yaml, 'storage.yaml', 'validate.storageYamlSyntax')
   }
   if (storage.mode === 'raid') {
     // **`layout` と `config` は排他**（autoinstall リファレンス:
@@ -687,7 +705,7 @@ function buildUserData(profile: AutoinstallProfile): Record<string, unknown> | u
 export function parseOverlay(yaml: string): Record<string, unknown> | undefined {
   const trimmed = yaml.trim()
   if (!trimmed) return undefined
-  const doc = parseDocument(trimmed)
+  const doc = parseAutoinstallYaml(trimmed)
   if (doc.errors.length > 0) {
     const detail = doc.errors[0]!.message
     throw new GenerateError(
@@ -699,7 +717,21 @@ export function parseOverlay(yaml: string): Record<string, unknown> | undefined 
       'advanced.rawOverlayYaml',
     )
   }
-  const js: unknown = doc.toJS()
+  // **`toJS()` は構文が正しくても投げる。**
+  // エイリアスを入れ子で増やした YAML は `ReferenceError: Excessive alias count`
+  // になり、素で外へ出すと画面には「予期しないエラー」しか出ない（落とし穴 23）。
+  // 生の network / storage と**同じ形**で `GenerateError` に包む。
+  let js: unknown
+  try {
+    js = doc.toJS()
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    throw new GenerateError(
+      `上書き YAML を読めない: ${detail}`,
+      localized('generate.overlaySyntax', { detail }),
+      'advanced.rawOverlayYaml',
+    )
+  }
   // コメントだけ / `~` だけの上書きは「上書き無し」。エラーにしない。
   if (js === null || js === undefined) return undefined
   if (typeof js !== 'object' || Array.isArray(js)) {
@@ -806,7 +838,7 @@ export function generateUserData(
   options: GenerateOptions = DEFAULT_OPTIONS,
 ): string {
   const autoinstall = buildAutoinstallObject(profile, options)
-  const doc = new Document({ autoinstall })
+  const doc = createAutoinstallDocument({ autoinstall })
   attachComments(doc, options.comments)
   const header =
     options.comments === 'none'
@@ -842,7 +874,7 @@ export function generateAutoinstallYaml(
   options: GenerateOptions = DEFAULT_OPTIONS,
 ): string {
   const autoinstall = buildAutoinstallObject(profile, options)
-  const doc = new Document(autoinstall)
+  const doc = createAutoinstallDocument(autoinstall)
   attachComments(doc, options.comments)
   return doc.toString(YAML_STRINGIFY_OPTIONS)
 }

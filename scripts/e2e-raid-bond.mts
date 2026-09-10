@@ -21,7 +21,19 @@
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { parse } from 'yaml'
+// **`parse` を素で使わない。** 既定は YAML 1.2 で、消費者（PyYAML / libyaml）の 1.1 と
+// 方言が違う。1.2 で読むと `52:54:00:12:34:56` が文字列に見えるので、
+// **クォート漏れの MAC を検査が素通りする**（実際に 73/73 が緑のまま VM で落ちた。落とし穴 108）。
+import {
+  parseAutoinstallYaml,
+  yamlDialectDiffs as dialectMismatch,
+} from '../packages/shared/src/autoinstall/yaml.js'
+// **番人専用に、両方の方言をここで固定して import する。**
+// 片側を `yaml.ts` の設定（`AUTOINSTALL_YAML_VERSION`）に連動させると、
+// その設定を 1.2 に戻したときに**比較が 1.2 対 1.2 になって緑のままになる**
+// （変異させて確かめたときに実際にそうなった。落とし穴 57）。
+// 見ているのは「出力されたテキストが両方の方言で同じ意味か」であって、
+// こちらの設定値ではない。
 import Ajv2020, { type ErrorObject } from 'ajv'
 import addFormats from 'ajv-formats'
 import {
@@ -201,7 +213,7 @@ type Action = Record<string, unknown>
 function autoinstallOf(profile: AutoinstallProfile): Record<string, unknown> {
   // **YAML を実際に往復させる**。オブジェクトのまま見ると、YAML にしたときだけ
   // 壊れる形（`802.3ad` が数に見える等）を取り逃がす。
-  const doc = parse(generateUserData(profile, { comments: 'ja' })) as { autoinstall?: Record<string, unknown> }
+  const doc = parseAutoinstallYaml(generateUserData(profile, { comments: 'ja' })).toJS() as { autoinstall?: Record<string, unknown> }
   return doc.autoinstall ?? {}
 }
 
@@ -573,6 +585,70 @@ for (const mode of ['lvm', 'direct', 'zfs'] as const) {
   }
   const s = autoinstallOf(p)['storage'] as Record<string, unknown>
   check(`${mode}: layout を出し config を出さない`, 'layout' in s && !('config' in s))
+}
+
+// --- 11. YAML の方言差で意味が変わる値を出していない ------------------------
+//
+// **これが落とし穴 108 を捕まえる番人。** 生成物を 1.1（消費者＝PyYAML / libyaml）と
+// 1.2（`yaml` パッケージの既定）の両方で読み、**結果が完全に一致する**ことを見る。
+// 一致しない値があるなら、それは「こちらが思っている型」と
+// 「subiquity が読む型」が違う値であり、クォートが要る。
+//
+// MAC の 60 進数だけでなく、`yes` / `no` / `on` / `off`（1.1 だけ真偽値）や
+// 先頭 0 の八進数も、この 1 本で捕まる。個別の値を列挙しないので、
+// 将来 UI から入る新しい自由入力にも自動で効く。
+
+section('YAML 1.1 と 1.2 で同じ意味になる（消費者は 1.1）')
+
+{
+  // **この検証が実際に踏めることを先に確かめる**（落とし穴 76 / 57）。
+  // クォートを外した MAC を仕込んで、番人が気づくかを見る。
+  const poisoned = [
+    'autoinstall:',
+    '  network:',
+    '    ethernets:',
+    '      n0:',
+    '        match: {macaddress: 52:54:00:12:34:56}',
+    '',
+  ].join('\n')
+  const seeded = dialectMismatch(poisoned)
+  check(
+    '番人自身が踏める（クォート無しの MAC を 60 進数として検出する）',
+    seeded.length > 0 && seeded.join(' ').includes('41135085296'),
+    seeded.join(' / ') || '検出しなかった',
+  )
+}
+
+// MAC で選ぶ経路は bond と単一 NIC の 2 つある。**両方通す**（片方だけ直す事故を防ぐ）。
+const macTargetProfile: AutoinstallProfile = {
+  ...createDefaultProfile('24.04', 'e2e-raid-bond/0.1.0', '2026-09-07T00:00:00.000Z'),
+  network: {
+    mode: 'dhcp',
+    target: { kind: 'mac', macaddress: '52:54:00:12:34:56' },
+    optional: false,
+  },
+}
+
+// bond のメンバーを MAC で選ぶ形（VM の mirror モードと同じ値）。
+// `buildProfile` の bond は**名前**で選んでいるので、この経路は別に作らないと踏めない。
+const macBondProfile: AutoinstallProfile = {
+  ...createDefaultProfile('24.04', 'e2e-raid-bond/0.1.0', '2026-09-07T00:00:00.000Z'),
+  network: {
+    ...createDefaultBondNetwork(),
+    members: [
+      createBondMember('m1', { kind: 'mac', macaddress: '52:54:00:12:34:56' }),
+      createBondMember('m2', { kind: 'mac', macaddress: '52:54:00:12:34:57' }),
+    ],
+  },
+}
+
+for (const [label, p] of [
+  ['bond (メンバーを名前で選ぶ)', profile],
+  ['bond (メンバーを MAC で選ぶ)', macBondProfile],
+  ['単一 NIC を MAC で選ぶ', macTargetProfile],
+] as const) {
+  const diffs = dialectMismatch(generateUserData(p, { comments: 'ja' }))
+  check(`${label}: 1.1 と 1.2 で読んだ結果が同じ`, diffs.length === 0, diffs.join(' / '))
 }
 
 // ---------------------------------------------------------------------------

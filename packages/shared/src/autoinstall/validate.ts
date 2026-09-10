@@ -1,4 +1,4 @@
-import { parseDocument } from 'yaml'
+import { parseAutoinstallYaml } from './yaml.js'
 import type { AutoinstallProfile } from './model.js'
 import { SERIES_FEATURES } from './model.js'
 import { GenerateError, buildAutoinstallObject, collectPackages, parseOverlay } from './generate.js'
@@ -201,6 +201,14 @@ type AddIssue = (severity: IssueSeverity, field: string, key: MsgKey, params?: M
  * 文字列の型を確かめてから触る。`migrate.ts` を通っていれば形は揃っているが、
  * このプロファイルは IPC からも来る。
  */
+/**
+ * 手で編集された JSON から届く「配列のはずのもの」を安全に文字列の配列にする。
+ * **写しを作らない**（落とし穴 74）。以前は検証の中に局所の同名関数があった。
+ */
+function stringList(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
+}
+
 function validateRaidStorage(raid: RaidStorageConfig, add: AddIssue): void {
   const F = 'storage.raid'
   const disks = Array.isArray(raid.disks) ? raid.disks : []
@@ -302,10 +310,8 @@ function validateRaidStorage(raid: RaidStorageConfig, add: AddIssue): void {
     }
     if (name) names.add(name)
 
-    const strings = (v: unknown): string[] =>
-      Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
-    const devices = strings(a?.diskIds)
-    const spares = strings(a?.spareDiskIds)
+    const devices = stringList(a?.diskIds)
+    const spares = stringList(a?.spareDiskIds)
     const all = [...devices, ...spares]
 
     const missing = all.filter((id) => !knownIds.has(id))
@@ -432,9 +438,108 @@ function validateRaidStorage(raid: RaidStorageConfig, add: AddIssue): void {
     if (raid.mirrorBootloader) {
       // 「実機で確かめていない」ことを黙らない（落とし穴 72）。
       add('info', `${F}.mirrorBootloader`, 'validate.raidGrubMirrorUnverified')
+
+      // **複製は「インストール先が使うディスク」にしか届かない。**
+      // late-command は `/target` `/target/boot` `/target/boot/efi` を backing する
+      // ディスクだけを対象にする（そうしないとインストーラ USB や
+      // 別の OS のディスクまで書き換える。落とし穴 114）。
+      // ところが「ESP を作るか」は配列メンバーかどうかと**独立した軸**なので、
+      // **マウントされる FS を 1 つも支えないディスクに ESP を作る**構成が作れてしまう。
+      // そのディスクの ESP は黙って skip され、
+      // 「1 台目が壊れても起動する」という約束だけが残る（落とし穴 82 の軸違い）。
+      const mountedRoles = new Set(['boot', 'lvm-pv'])
+      const diskIdsInMountedArrays = new Set<string>()
+      for (const a of arrays) {
+        if (!mountedRoles.has(String(a?.role))) continue
+        for (const id of [...stringList(a?.diskIds), ...stringList(a?.spareDiskIds)]) {
+          diskIdsInMountedArrays.add(id)
+        }
+      }
+      const unreachable = espDisks.filter(
+        (d, i) => i > 0 && !diskIdsInMountedArrays.has(text((d as Record<string, unknown>)['id'])),
+      )
+      if (unreachable.length > 0) {
+        add('warning', `${F}.mirrorBootloader`, 'validate.raidGrubMirrorUnreachableDisk', {
+          count: unreachable.length,
+        })
+      }
     } else {
       add('warning', `${F}.mirrorBootloader`, 'validate.raidGrubOnlyOnFirstDisk')
     }
+  }
+}
+
+/**
+ * 生の YAML の中で、`macaddress` が**数として読まれてしまった**場所を集める。
+ *
+ * 解析側は 60 進数のタグを外してあるので（`yaml.ts`）、
+ * 文字列で書かれた MAC がここに落ちてくることはもう無い。
+ * 残るのは**利用者が数として書いた場合**（`macaddress: 41135085296`）で、
+ * それは何の方言で読んでも誤りなので伝える。
+ *
+ * **YAML はアンカーで自分自身を指せる。** `ethernets: &e` / `self: *e` と書かれた
+ * プロファイルで素朴な再帰が `RangeError: Maximum call stack size exceeded` になり、
+ * **検証そのものが例外で抜けていた**（落とし穴 23。実際に再現して直した）。
+ * 一度見たオブジェクトは辿らない。
+ */
+function numericKeyPaths(
+  value: unknown,
+  keys: ReadonlySet<string>,
+  path: string,
+  seen = new WeakSet<object>(),
+): string[] {
+  if (!value || typeof value !== 'object') return []
+  if (seen.has(value as object)) return []
+  seen.add(value as object)
+  if (Array.isArray(value)) {
+    return value.flatMap((v, i) => numericKeyPaths(v, keys, `${path}[${i}]`, seen))
+  }
+  const out: string[] = []
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    if (keys.has(k) && typeof v === 'number') {
+      out.push(`${path}.${k}`)
+    } else {
+      out.push(...numericKeyPaths(v, keys, `${path}.${k}`, seen))
+    }
+  }
+  return out
+}
+
+/** netplan で「文字列でなければならない」キー。 */
+const NETWORK_STRING_KEYS: ReadonlySet<string> = new Set(['macaddress'])
+
+/**
+ * curtin が **udev の文字列と比較する**ディスク選択子。
+ *
+ * ここが数になると **どのディスクにも一致しない**。しかも書き方によっては
+ * 値そのものが壊れる（実測）:
+ *
+ * | 書いた値 | 出力される値 |
+ * |---|---|
+ * | `20250101` | `20250101`（数。文字列比較に一致しない） |
+ * | `0x5002538e40a1b2c3` | `5765262343422457000`（**桁が落ちている**。真値は …456515） |
+ * | `0755` | `493`（八進数として読まれた） |
+ * | `1e5` | `100000` |
+ *
+ * MAC を直したときに**同じ性質の軸がここに丸ごと残っていた**（落とし穴 82 / 83）。
+ * `size` は数でも文字列でも正しいので入れない。
+ */
+const STORAGE_STRING_KEYS: ReadonlySet<string> = new Set(['serial', 'wwn', 'path', 'model'])
+
+/**
+ * 生の YAML を JS の値にする。**例外を投げない。**
+ *
+ * `toJS()` は素の YAML でも投げる:
+ * エイリアスを入れ子で増やした YAML は `ReferenceError: Excessive alias count`
+ * （`yaml` パッケージの資源枯渇対策）で落ちる。
+ * 検証が投げると GUI は「理由の分からない空の確認画面」になる（落とし穴 23）ので、
+ * ここで受け止めて `undefined` を返し、呼び出し側が指摘として伝える。
+ */
+function toJsSafe(doc: { toJS: () => unknown }): { ok: true; value: unknown } | { ok: false; detail: string } {
+  try {
+    return { ok: true, value: doc.toJS() }
+  } catch (err) {
+    return { ok: false, detail: err instanceof Error ? err.message : String(err) }
   }
 }
 
@@ -678,17 +783,47 @@ export function validateProfile(profile: AutoinstallProfile): ValidationResult {
     }
     validateBondNetwork(profile.network, add)
   } else if (profile.network.mode === 'raw') {
-    const doc = parseDocument(profile.network.yaml)
+    const doc = parseAutoinstallYaml(profile.network.yaml)
     if (doc.errors.length > 0) {
       add('error', 'network.yaml', 'validate.networkYamlSyntax', { detail: doc.errors[0]!.message })
+    } else {
+      // **数として書かれた MAC は、どの方言で読んでも誤り。**
+      // 文字列で書かれた MAC は解析側が 60 進数を外しているので数にならない
+      // （`yaml.ts`。`00:50:56:...` を数にして誤って止めていたのを直した）。
+      // ここに落ちるのは `macaddress: 41135085296` のように**数で書かれた**場合だけ。
+      // 生成側は 1.1 でクォートするので、文字列でありさえすれば必ず文字列で届く。
+      //
+      // **`toJS()` は投げる。** エイリアスを入れ子で増やした YAML は
+      // `ReferenceError: Excessive alias count` になる。投げさせない（落とし穴 23）。
+      const js = toJsSafe(doc)
+      if (!js.ok) {
+        add('error', 'network.yaml', 'validate.networkYamlSyntax', { detail: js.detail })
+      } else {
+        for (const path of numericKeyPaths(js.value, NETWORK_STRING_KEYS, 'network')) {
+          add('error', 'network.yaml', 'validate.networkYamlUnquotedMac', { path })
+        }
+      }
     }
   }
 
   // --- ストレージ ---
   if (profile.storage.mode === 'raw') {
-    const doc = parseDocument(profile.storage.yaml)
+    const doc = parseAutoinstallYaml(profile.storage.yaml)
     if (doc.errors.length > 0) {
       add('error', 'storage.yaml', 'validate.storageYamlSyntax', { detail: doc.errors[0]!.message })
+    } else {
+      // **ディスク選択子が数になると、どのディスクにも一致しない。**
+      // curtin は `serial` / `wwn` / `path` / `model` を udev の**文字列**と比べる。
+      // `0x5002538e40a1b2c3` は桁が落ちた数になり、`0755` は八進数 493 になる（実測）。
+      // MAC を直したときに**同じ性質の軸がここに残っていた**（落とし穴 82 / 83）。
+      const js = toJsSafe(doc)
+      if (!js.ok) {
+        add('error', 'storage.yaml', 'validate.storageYamlSyntax', { detail: js.detail })
+      } else {
+        for (const path of numericKeyPaths(js.value, STORAGE_STRING_KEYS, 'storage')) {
+          add('error', 'storage.yaml', 'validate.storageYamlNumericSelector', { path })
+        }
+      }
     }
   } else {
     if (profile.storage.mode === 'zfs' && profile.storage.encryptionPassphrase) {
@@ -1333,7 +1468,13 @@ export function validateProfile(profile: AutoinstallProfile): ValidationResult {
   // それより前で別の理由が投げると上書き YAML の指摘が隠れる（field も 'generate' に落ちる）。
   if (profile.advanced.rawOverlayYaml.trim()) {
     try {
-      parseOverlay(profile.advanced.rawOverlayYaml)
+      const overlay = parseOverlay(profile.advanced.rawOverlayYaml)
+      // 上書き YAML も生の netplan と同じ経路で読まれるので、
+      // クォートしていない MAC は同じように数になる（落とし穴 108）。
+      // 生の YAML 側と**同じ判定**を通す（写しを持つと片方だけが直る）。
+      for (const path of numericKeyPaths(overlay, NETWORK_STRING_KEYS, 'overlay')) {
+        add('error', 'advanced.rawOverlayYaml', 'validate.networkYamlUnquotedMac', { path })
+      }
     } catch (err) {
       addUniqueIssue(issues, generateErrorIssue(err))
     }

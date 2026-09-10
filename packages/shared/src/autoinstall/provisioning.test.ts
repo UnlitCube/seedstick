@@ -11,7 +11,10 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { parse } from 'yaml'
+// **生成物は消費者と同じ方言で読み直す。**
+// `yaml` の既定 (1.2) で読むと、クォート漏れが文字列に見えて素通りする
+// （実際に 73/73 が緑のまま VM で落ちた。落とし穴 109）。
+import { parseAutoinstallYamlToJs as parse } from './yaml.js'
 import { createDefaultProfile } from './defaults.js'
 import { formatLocalized } from '../i18n/index.js'
 import { collectFirstBootCommands, collectLateCommands, collectPackages, generateUserData } from './generate.js'

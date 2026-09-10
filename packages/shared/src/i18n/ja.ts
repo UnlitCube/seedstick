@@ -1284,6 +1284,12 @@ export const ja = {
   'validate.networkNameserverInvalid': 'DNS サーバー #{n} の IP アドレスが不正です。',
   'validate.networkNameserversMissing': 'DNS サーバーが未設定です。名前解決ができず apt が失敗します。',
   'validate.networkYamlSyntax': 'ネットワーク YAML の構文エラー: {detail}',
+  // MAC は YAML 1.1 の 60 進数として読まれる。クォートしないと数になる（落とし穴 108）。
+  'validate.networkYamlUnquotedMac':
+    '{path} の MAC アドレスが数値として読まれます。YAML では 52:54:00:12:34:56 のような値は 60 進数と解釈されるため、"52:54:00:12:34:56" のように引用符で囲んでください（囲まないと netplan が失敗し、インストールが 1 バイトも書かずに止まります）。',
+  // curtin は serial / wwn / path / model を udev の文字列と比べる。数だと一致しない（落とし穴 82 / 83）。
+  'validate.storageYamlNumericSelector':
+    '{path} が数値として読まれます。curtin はディスクの serial / wwn / path / model を文字列として比較するため、この指定はどのディスクにも一致しません（0x… は桁が落ち、0 で始まる値は八進数になります）。"…" のように引用符で囲んでください。',
   'validate.storageYamlSyntax': 'ストレージ YAML の構文エラー: {detail}',
   'validate.zfsEncryptionUnverified': 'ZFS レイアウトでの暗号化はインストーラのバージョンによって挙動が異なります。実機で確認してください。',
   'validate.encryptionPassphraseTooShort': 'ディスク暗号化のパスフレーズが短すぎます（8 文字以上）。',
@@ -1444,6 +1450,10 @@ export const ja = {
     'root の論理ボリューム名 "{name}" が不正です（英数字と + _ . - のみ、先頭に - は使えません）。',
   'validate.raidGrubMirrorUnverified':
     '2 台目以降の起動ディスクへのブートローダの複製は、インストール後に /var/log/autoinstall-raid-esp.log に結果が残ります。この手順はまだ実機で検証していないので、1 台目を抜いた状態で起動できるか必ず確かめてください。',
+  // ESP を作るディスクが「マウントされる FS」を 1 つも支えていないと、
+  // late-command の絞り込み（落とし穴 114）から外れて複製が届かない。
+  'validate.raidGrubMirrorUnreachableDisk':
+    'EFI システムパーティションを作るディスクのうち {count} 台が、/ や /boot のどの配列にも入っていません。ブートローダの複製はインストール先が実際に使うディスクにしか行われないため、この {count} 台には複製されません（1 台目が壊れたとき起動できません）。そのディスクを / か /boot の RAID に入れるか、EFI システムパーティションを作らない設定にしてください。',
   'validate.raidGrubOnlyOnFirstDisk':
     'ブートローダを入れるのは 1 台目の起動ディスクだけです。そのディスクが壊れると、RAID が生きていても起動できません。',
   'validate.raidMatchIgnored':

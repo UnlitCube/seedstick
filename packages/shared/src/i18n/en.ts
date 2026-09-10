@@ -1296,6 +1296,10 @@ Date: {date}`,
   'validate.networkNameserverInvalid': 'DNS server #{n} is not a valid IP address.',
   'validate.networkNameserversMissing': 'No DNS server is set; name resolution and apt will fail.',
   'validate.networkYamlSyntax': 'Network YAML syntax error: {detail}',
+  'validate.networkYamlUnquotedMac':
+    'The MAC address at {path} is read as a number. In YAML, a value like 52:54:00:12:34:56 is parsed as a sexagesimal integer, so quote it as "52:54:00:12:34:56" (otherwise netplan fails and the install stops without writing a single byte).',
+  'validate.storageYamlNumericSelector':
+    '{path} is read as a number. curtin matches a disk serial / wwn / path / model as a string, so this selector will not match any disk (0x… loses digits and a leading zero is read as octal). Quote it as "…".',
   'validate.storageYamlSyntax': 'Storage YAML syntax error: {detail}',
   'validate.zfsEncryptionUnverified':
     'Encryption with the ZFS layout behaves differently across installer versions. Verify on real hardware.',
@@ -1487,6 +1491,8 @@ Date: {date}`,
     'The logical volume name "{name}" for root is not valid (letters, digits and + _ . - only, and it cannot start with -).',
   'validate.raidGrubMirrorUnverified':
     'Copying the bootloader to the second and later boot disks writes its result to /var/log/autoinstall-raid-esp.log on the installed system. That step has not been verified on real hardware yet, so confirm that the machine still starts with the first disk removed.',
+  'validate.raidGrubMirrorUnreachableDisk':
+    '{count} of the disks that get an EFI system partition are not members of any array backing / or /boot. The bootloader is only mirrored to disks this install actually uses, so those {count} disks will not receive a copy and cannot boot if the first disk fails. Either add them to the / or /boot RAID, or do not create an EFI system partition on them.',
   'validate.raidGrubOnlyOnFirstDisk':
     'The bootloader is installed only on the first boot disk. If that disk fails, the machine will not start even though the RAID survives.',
   'validate.raidMatchIgnored':

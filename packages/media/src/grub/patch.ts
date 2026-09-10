@@ -24,6 +24,33 @@ export interface GrubPatchOptions {
   readonly timeout?: number | null
   /** ホストごとの menuentry を先頭に追加する */
   readonly extraEntries?: readonly ExtraMenuEntry[]
+  /**
+   * `set default=<n>` を挿して、放置したときに選ばれる項目を変える。
+   *
+   * **製品の書き込み経路では使わない（`undefined` のまま）。**
+   * 既定を「元の項目」から動かすと、タイムアウトまで放置しただけで
+   * 全台が同じホスト名・同じ IP を掴む（落とし穴 51 / 27）。
+   * `buildIsoPatches` を呼ぶ側で意図的に渡したときだけ効く。
+   *
+   * **これは VM 検証のためにある**（`scripts/e2e-vm.mts` の `--ip` モード）。
+   * 「起動メニューで選んだ値が subiquity に届くか」を、
+   * 人が矢印キーを押さずに確かめるのに要る。
+   *
+   * > **メニューをシリアルから操作すること自体はできる。**
+   * > grub.cfg に `terminal_output serial` は無いが、**OVMF が EFI の
+   * > コンソールをシリアルに多重化する**ので、GRUB のメニューは
+   * > ANSI の全画面描画としてシリアルに出る。矢印キーと Enter を流し込めば
+   * > 別の項目を選んで起動させられる（実測。BIOS 起動では 1 バイトも出ない）。
+   * > それでも `set default=` を使うのは、キー入力が
+   * > **「メニューが出るまで何秒待つか」に依存する**からで、
+   * > 負荷で描画が遅れると静かに別の項目を選ぶ。既定を書けば決定的になる。
+   *
+   * 番号ではなく `set default="<タイトル>"` も効く（実測）。
+   * 番号はリリースによって Ubuntu 側の項目数が変わると意味が変わるが、
+   * **追加した項目は必ず最初の menuentry の直後**に入るので、
+   * 追加分を指すぶんには番号で安定する。
+   */
+  readonly defaultEntry?: number | null
 }
 
 export interface GrubPatchResult {
@@ -205,6 +232,27 @@ export function patchGrubCfg(original: string, options: GrubPatchOptions): GrubP
     }
     return line
   })
+
+  // `set default=` は**元の grub.cfg に無い**（実 ISO 4 リリースとも）。
+  // 足すときは `set timeout=` の直後に置く。GRUB は上から順に評価するので、
+  // menuentry より前でありさえすればよい。
+  if (options.defaultEntry !== null && options.defaultEntry !== undefined) {
+    const n = options.defaultEntry
+    // **冪等にする。** 2 回当てると `set default=` が 2 行になり、
+    // GRUB は後勝ちなので挙動は同じでも 2048 バイトの予算を毎回食う。
+    // 既にあるなら書き換え、無ければ `set timeout=` の直後に挿す。
+    const existing = out.findIndex((l) => /^\s*set\s+default=/.test(l))
+    if (existing >= 0) {
+      out[existing] = `set default=${n}`
+    } else {
+      const at = out.findIndex((l) => /^\s*set\s+timeout=/.test(l))
+      if (at >= 0) {
+        out.splice(at + 1, 0, `set default=${n}`)
+      } else {
+        out.unshift(`set default=${n}`)
+      }
+    }
+  }
 
   const extras = options.extraEntries ?? []
   if (extras.length === 0) {

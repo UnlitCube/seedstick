@@ -17,7 +17,13 @@ import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir, homedir } from 'node:os'
 import { join, basename, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { parse } from 'yaml'
+// **`parse` を素で使わない。** 既定は YAML 1.2 で、消費者（PyYAML / libyaml）の 1.1 と
+// 方言が違う。1.2 で読むと `52:54:00:12:34:56` が文字列に見えるので、
+// **クォート漏れの MAC を検査が素通りする**（実際に 73/73 が緑のまま VM で落ちた。落とし穴 109）。
+import {
+  parseAutoinstallYaml,
+  yamlDialectDiffs as dialectDiffs,
+} from '../packages/shared/src/autoinstall/yaml.js'
 import Ajv2020, { type ErrorObject } from 'ajv'
 import addFormats from 'ajv-formats'
 import {
@@ -103,7 +109,7 @@ function validatorFor(series: UbuntuSeries): (d: unknown) => ErrorObject[] | nul
 
 /** 生成した user-data から autoinstall 部分を取り出す（YAML を実際に往復させる）。 */
 function autoinstallFromUserData(userData: string): unknown {
-  const doc = parse(userData) as { autoinstall?: unknown }
+  const doc = parseAutoinstallYaml(userData).toJS() as { autoinstall?: unknown }
   return doc.autoinstall
 }
 
@@ -593,6 +599,10 @@ async function runCase(
   // --- 生成 ---
   const userData = generateUserData(profile, { comments: 'ja' })
   check(`${c.id}: user-data が #cloud-config で始まる`, userData.startsWith('#cloud-config\n'))
+  {
+    const diffs = dialectDiffs(userData)
+    check(`${c.id}: YAML 1.1 と 1.2 で同じ意味になる`, diffs.length === 0, diffs.join(' / '))
+  }
   const ai = autoinstallFromUserData(userData) as Record<string, unknown>
   check(`${c.id}: autoinstall セクションが取り出せる`, ai !== undefined && typeof ai === 'object')
   if (!ai) return

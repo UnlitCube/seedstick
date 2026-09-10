@@ -17,6 +17,8 @@ export * from './autoinstall/generate-raid.js'
 export * from './autoinstall/bond.js'
 export * from './autoinstall/generate-bond.js'
 export * from './autoinstall/validate.js'
+// YAML の方言（1.1）。検証スクリプトも**同じ方言で読む**こと（落とし穴 108）。
+export * from './autoinstall/yaml.js'
 // Node 専用（node:crypto を使う）のでバレルには載せない。main からは
 // '@autoinstall/shared/crypt' を直接 import する。renderer に Node の型を持ち込まないための境界。
 export * from './crypt/validate.js'

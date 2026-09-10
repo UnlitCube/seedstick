@@ -190,6 +190,77 @@ describe('ホストごとの menuentry', () => {
     expect(body).not.toContain('ai.hostname=')
   })
 
+  it('既定を指定しなければ `set default=` を入れない（元の項目のまま）', () => {
+    const r = patchGrubCfg(original, {
+      args: ['autoinstall'],
+      extraEntries: [{ title: 'web01', args: ['ai.hostname=web01'] }],
+    })
+    // **製品の書き込み経路はここを通る。** 既定を動かすと、放置しただけで
+    // 全台が同じホスト名・同じ IP を掴む（落とし穴 51 / 27）。
+    expect(r.text).not.toContain('set default=')
+  })
+
+  it('`defaultEntry` を渡すと `set timeout=` の直後に `set default=` が入る', () => {
+    const r = patchGrubCfg(original, {
+      args: ['autoinstall'],
+      extraEntries: [
+        { title: 'web01', args: ['ai.hostname=web01'] },
+        { title: 'web02', args: ['ai.hostname=web02'] },
+      ],
+      defaultEntry: 2,
+    })
+    const lines = r.text.split('\n')
+    const timeoutAt = lines.findIndex((l) => /^\s*set\s+timeout=/.test(l))
+    expect(timeoutAt).toBeGreaterThanOrEqual(0)
+    expect(lines[timeoutAt + 1]).toBe('set default=2')
+    // **menuentry より前**にあること（GRUB は上から評価する）。
+    const firstEntry = lines.findIndex((l) => /^\s*menuentry\s/.test(l))
+    expect(timeoutAt + 1).toBeLessThan(firstEntry)
+  })
+
+  it('`defaultEntry` が指す番号は、追加した項目の並びと一致する', () => {
+    const r = patchGrubCfg(original, {
+      args: ['autoinstall'],
+      extraEntries: [
+        { title: 'web01', args: ['ai.hostname=web01'] },
+        { title: 'web02', args: ['ai.hostname=web02'] },
+      ],
+      defaultEntry: 2,
+    })
+    const entries = r.text.split('\n').filter((l) => /^\s*menuentry\s/.test(l))
+    // [0] 元の項目 / [1] web01 / [2] web02。**この対応が崩れると別のホストで入る。**
+    expect(entries[0]).not.toContain('web0')
+    expect(entries[1]).toContain('web01')
+    expect(entries[2]).toContain('web02')
+    // 実際に選ばれるのは 2 番＝ web02。その項目のカーネル行に web02 の引数がある。
+    const idx = r.text.split('\n').findIndex((l) => l.includes('menuentry') && l.includes('web02'))
+    const body = r.text.split('\n').slice(idx, idx + 6).join('\n')
+    expect(body).toContain('ai.hostname=web02')
+    expect(body).not.toContain('ai.hostname=web01')
+  })
+
+  it('2 回当てても `set default=` は 1 行のまま（冪等）', () => {
+    // **2 行になると 2048 バイトの予算を毎回 14 バイト食う。**
+    // GRUB は後勝ちなので挙動は同じで、気づきにくい。
+    // 既存の「引数が重複しない」テストは args しか見ていないのでここを守らない。
+    const once = patchGrubCfg(original, { args: ['autoinstall'], defaultEntry: 1 })
+    const twice = patchGrubCfg(once.text, { args: ['autoinstall'], defaultEntry: 1 })
+    const count = twice.text.split('\n').filter((l) => /^\s*set\s+default=/.test(l)).length
+    expect(count).toBe(1)
+    expect(twice.text).toBe(once.text)
+  })
+
+  it('2 回目で別の番号を渡すと書き換わる（増えない）', () => {
+    const once = patchGrubCfg(original, { args: ['autoinstall'], defaultEntry: 1 })
+    const twice = patchGrubCfg(once.text, { args: ['autoinstall'], defaultEntry: 3 })
+    const lines = twice.text.split('\n').filter((l) => /^\s*set\s+default=/.test(l))
+    expect(lines).toEqual(['set default=3'])
+  })
+  it('`set timeout=` が無い grub.cfg でも先頭に入る', () => {
+    const noTimeout = original.split('\n').filter((l) => !/^\s*set\s+timeout=/.test(l)).join('\n')
+    const r = patchGrubCfg(noTimeout, { args: ['autoinstall'], defaultEntry: 0 })
+    expect(r.text.split('\n')[0]).toBe('set default=0')
+  })
   it('追加したエントリのカーネル行が casper を指し、--- の前に引数が入る', () => {
     const r = patchGrubCfg(original, {
       args: ['autoinstall'],

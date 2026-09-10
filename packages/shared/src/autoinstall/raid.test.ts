@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { parse } from 'yaml'
+// **生成物は消費者と同じ方言で読み直す。**
+// `yaml` の既定 (1.2) で読むと、クォート漏れが文字列に見えて素通りする
+// （実際に 73/73 が緑のまま VM で落ちた。落とし穴 109）。
+import { parseAutoinstallYamlToJs as parse } from './yaml.js'
 import Ajv2020, { type ErrorObject } from 'ajv'
 import addFormats from 'ajv-formats'
 import { createDefaultProfile } from './defaults.js'

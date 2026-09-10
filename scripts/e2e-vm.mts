@@ -26,6 +26,7 @@
  */
 import { execFileSync, spawn } from 'node:child_process'
 import { mkdir, readdir, rm, stat } from 'node:fs/promises'
+import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import { randomBytes } from 'node:crypto'
@@ -34,11 +35,16 @@ import {
   createDefaultRaidStorage,
   createRaidArray,
   createRaidDisk,
+  createBondMember,
+  createDefaultBondNetwork,
   generateMetaData,
   generateUserData,
   validateProfile,
   formatLocalized,
   recognizeIso,
+  migrateProfile,
+  buildHostMenuEntries,
+  baseKernelArgs,
 } from '../packages/shared/src/index.js'
 import type { AutoinstallProfile, UbuntuSeries } from '../packages/shared/src/index.js'
 import {
@@ -54,6 +60,8 @@ import { printRevisionBanner } from './lib/git-revision.mts'
 const DISTRO = 'Ubuntu-24.04'
 const LAB = '/root/vmlab'
 const REPO_WSL = '/mnt/c/dev/autoinstall-ui'
+/** このスクリプトから見たリポジトリのルート（`scripts/` の 1 つ上）。 */
+const REPO_ROOT = join(import.meta.dirname, '..')
 
 /**
  * どの構成を組むか。**既定は今までどおり単一ディスク・LVM**。
@@ -62,9 +70,55 @@ const REPO_WSL = '/mnt/c/dev/autoinstall-ui'
  * `VM_MODE=raid tsx ...` の形を cmd.exe に渡すので env の前置きが効かない）。
  * 環境変数も受けるが、それは手で叩くときの都合。
  */
-type VmMode = 'single' | 'raid'
+type VmMode = 'single' | 'raid' | 'mirror' | 'ip'
+const ARGV = process.argv.slice(2)
 const MODE: VmMode =
-  process.argv.slice(2).includes('--raid') || process.env['VM_MODE'] === 'raid' ? 'raid' : 'single'
+  ARGV.includes('--mirror') || process.env['VM_MODE'] === 'mirror'
+    ? 'mirror'
+    : ARGV.includes('--raid') || process.env['VM_MODE'] === 'raid'
+      ? 'raid'
+      : ARGV.includes('--ip') || process.env['VM_MODE'] === 'ip'
+        ? 'ip'
+        : 'single'
+
+/** RAID 系（`raid` / `mirror`）か。ディスクの構成と検査を共有する。 */
+const IS_RAID = MODE === 'raid' || MODE === 'mirror'
+
+/**
+ * `ip` モード: **配布しているサンプルそのもの**から USB を作り、
+ * 起動メニューの項目を 1 つ選んだことにしてインストールし、
+ * **選んだ IP が実際に入る**ことを確かめる。
+ *
+ * ここが確かめるのは、引き継ぎ資料が長く「未検証」と書いてきた連鎖である:
+ * GRUB の menuentry のカーネル引数 → early-commands の python が `/proc/cmdline` を読む
+ * → `/autoinstall.yaml` を PyYAML で書き換える → subiquity が適用する
+ * → cloud-init が `/etc/netplan` に書き出す。
+ *
+ * 選ぶのは **VM のときだけ `set default=<n>` を入れる**形にする。
+ * **実 USB に焼くときは入らない**（`console=ttyS0` と同じ扱い。落とし穴 105）。
+ *
+ * > メニューを**シリアルから操作すること自体はできる**（OVMF が EFI コンソールを
+ * > シリアルに多重化するので、矢印キーと Enter を流し込めば選べる。実測）。
+ * > それでも既定を書くのは、キー入力が**「メニューが出るまで何秒待つか」に依存する**からで、
+ * > 負荷で描画が遅れると静かに別の項目を選ぶ。既定なら決定的になる（落とし穴 127）。
+ */
+const IP_SAMPLE = 'samples/ip-only.json'
+/**
+ * 選ぶ項目。0 は元の項目なので、プリセット i は `1 + i` 番。
+ *
+ * **わざと 1 番目ではなく 2 番目を選ぶ。** 1 番目 (`= 1`) を選ぶと、
+ * 「添え字がずれていて常に先頭のプリセットを指す」壊れ方を見逃す
+ * （どちらでも同じ結果になってしまう）。
+ */
+const IP_PRESET_INDEX = 2
+
+/**
+ * bond のメンバーを選ぶ MAC。**`scripts/vm/run-vm.sh` と同じ値**。
+ *
+ * 片方だけ変えると「NIC は 2 枚あるのにメンバーが 0 枚の bond」になり、
+ * netplan は通るのにリンクが上がらない。**両方を一緒に直すこと。**
+ */
+const NIC_MACS = ['52:54:00:12:34:56', '52:54:00:12:34:57'] as const
 
 /**
  * **利用者の実機構成を、容量だけ縮めて組む。**
@@ -78,6 +132,15 @@ const MODE: VmMode =
  * **3.5TB そのものは試していない**（→ `docs/HANDOFF.md` §3.2）。
  */
 const RAID_DISKS = 'sda:60G sdb:60G nvme0n1:20G nvme1n1:20G'
+
+/**
+ * `mirror` モードのディスク。**2 台だけ**。
+ *
+ * ESP を 2 台に置くことと bond が見たいだけなので、NVMe は要らない
+ *（丸ごとメンバーは `raid` モードで確認済み）。台数を減らすと
+ * `qemu-img convert` の時間がそのまま縮む。
+ */
+const MIRROR_DISKS = 'sda:40G sdb:40G'
 
 /**
  * ディスクの指定。
@@ -122,6 +185,96 @@ function raidProfile(base: AutoinstallProfile): AutoinstallProfile {
   return {
     ...base,
     basics: { ...base.basics, hostname: 'vm-raid' },
+    storage: {
+      ...storage,
+      mode: 'raid',
+      raid: {
+        ...createDefaultRaidStorage(),
+        disks,
+        arrays,
+        volumeGroup: 'vg0',
+        rootName: 'lv-0',
+        rootSize: '',
+        rootFstype: 'ext4',
+        espSize: '1G',
+        bootSize: '2G',
+        mirrorBootloader: true,
+      },
+    },
+  }
+}
+
+/**
+ * 配布サンプル (`samples/ip-only.json`) を読んで、**VM に必要な最小限だけ**を上書きする。
+ *
+ * **サンプルそのものを検証したいので、書き換えるのは 2 つだけ**:
+ *   1. パスワードハッシュ（サンプルは空。空のままだと検証が error を出して先へ進めない）
+ *   2. リリース（ISO と設定を揃える。食い違うとそのリリースに無いキーを出しうる。落とし穴 104）
+ *
+ * **IP・ホスト名・プリセットは 1 文字も変えない。** ここを変えると
+ * 「配布しているものを確かめた」と言えなくなる。
+ */
+function ipSampleProfile(base: AutoinstallProfile): AutoinstallProfile {
+  const raw: unknown = JSON.parse(readFileSync(join(REPO_ROOT, IP_SAMPLE), 'utf8'))
+  const { profile, notes } = migrateProfile(raw)
+  // 移行の note が出るなら、サンプルが古い形式で書かれている。**黙って進めない。**
+  if (notes.length > 0) {
+    console.log(`  （note: サンプルの読み込みで ${notes.length} 件の移行が起きた）`)
+    for (const n of notes) console.log(`    - ${n}`)
+  }
+  return {
+    ...profile,
+    series: base.series,
+    user: { ...profile.user, passwordHash: base.user.passwordHash },
+  }
+}
+
+/** 静的 IP の「予備の値」。選ばなかったときに入るもの。 */
+function addressOf(profile: AutoinstallProfile): string {
+  return profile.network.mode === 'static' ? profile.network.address : '(static ではない)'
+}
+/**
+ * **残っていた 2 つの未検証項目を 1 本で確かめる構成。**
+ *
+ * `raid` モード（利用者の実機構成）は ESP が sda 1 台なので、
+ * `needsRaidEspMirror()` が false になり **`late-commands` が 1 行も出ない**。
+ * つまり「2 台目にも GRUB を入れて、どちらが壊れても起動する」という
+ * このアプリ独自の補い（落とし穴 98）は**一度も走っていなかった**。
+ *
+ * ここでは:
+ *   - **ESP を sda と sdb の両方**に作る → ミラーの late-commands が実際に走る
+ *   - **NIC 2 枚を bond で束ねる** → bond は VM でも実機でも未検証だった
+ *
+ * ディスクは 2 台だけにする（NVMe は `raid` モードで確認済みで、
+ * 台数を増やすと 1 本あたりの時間だけ延びる）。
+ */
+function mirrorProfile(base: AutoinstallProfile): AutoinstallProfile {
+  const storage = base.storage
+  if (storage.mode === 'raw') throw new Error('既定のプロファイルが raw になっている（想定外）')
+  const disks = [
+    { ...createRaidDisk('d-sda', serialGlob('sda')), usage: 'partitions' as const, esp: true },
+    // **ここが `raid` モードとの違い。** 2 台目にも ESP を作る。
+    { ...createRaidDisk('d-sdb', serialGlob('sdb')), usage: 'partitions' as const, esp: true },
+  ]
+  const arrays = [
+    { ...createRaidArray('a-boot', 'md0', 'boot' as const), level: 'raid1' as const, diskIds: ['d-sda', 'd-sdb'] },
+    { ...createRaidArray('a-root', 'md1', 'lvm-pv' as const), level: 'raid1' as const, diskIds: ['d-sda', 'd-sdb'] },
+  ]
+  return {
+    ...base,
+    basics: { ...base.basics, hostname: 'vm-mirror' },
+    network: {
+      ...createDefaultBondNetwork(),
+      members: NIC_MACS.map((mac, i) =>
+        createBondMember(`m-${i}`, { kind: 'mac', macaddress: mac }),
+      ),
+      // **`active-backup` を使う。** QEMU の user-mode networking には
+      // LACP を話す相手が居ないので `802.3ad` は上がらない（落とし穴 102 のとおり
+      // スイッチ側の設定が要るモード）。「VM で確かめられるのは
+      // スイッチを必要としないモードだけ」という制約はそのまま残る。
+      parameters: { mode: 'active-backup', lacpRate: '', miiMonitorInterval: 100, transmitHashPolicy: '' },
+      addressing: 'dhcp',
+    },
     storage: {
       ...storage,
       mode: 'raid',
@@ -261,8 +414,23 @@ async function main(): Promise<void> {
       passwordHash: '$6$vme2e$Qv1sKq4bWbG3hQeYwZ7YyQ0cQ9hQb1s2Y3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S9t0U1v2W3x4Y5z6.',
     },
   }
-  const profile: AutoinstallProfile = MODE === 'raid' ? raidProfile(common) : common
-  if (MODE === 'raid') {
+  const profile: AutoinstallProfile =
+    MODE === 'mirror'
+      ? mirrorProfile(common)
+      : MODE === 'raid'
+        ? raidProfile(common)
+        : MODE === 'ip'
+          ? ipSampleProfile(common)
+          : common
+  if (MODE === 'ip') {
+    const chosen = profile.runtimeValues.presets[IP_PRESET_INDEX - 1]
+    console.log(`構成  : 配布サンプル ${IP_SAMPLE}（IP だけ起動メニューで切り替える）`)
+    console.log(`        起動メニューの ${IP_PRESET_INDEX} 番（${chosen?.label}）を選んだことにして入れる`)
+    console.log(`        期待する IP: ${chosen?.ipv4}（予備の ${addressOf(profile)} ではなく）`)
+  } else if (MODE === 'mirror') {
+    console.log('構成  : ESP を 2 台に置き（GRUB のミラーが走る）、NIC 2 枚を bond で束ねる')
+    console.log('        **残っていた 2 つの未検証項目**（2 台目への grub-install / bond）を 1 本で見る')
+  } else if (MODE === 'raid') {
     console.log('構成  : 利用者の実機構成（sda/sdb = ESP は sda のみ + /boot md0 + LVM md1 / nvme x2 = 丸ごと md2）')
     console.log('        **容量だけ縮めてある**（実機 447.1GB x2 + 3.5TB x2 → 60G x2 + 20G x2）')
   } else {
@@ -274,7 +442,7 @@ async function main(): Promise<void> {
     validation.ok,
     validation.issues.map((i) => formatLocalized('ja', i.text)).join(' / '),
   )
-  if (MODE === 'raid') {
+  if (IS_RAID) {
     // 出した YAML をそのまま残す。**通らなかったときに最初に見る物**。
     console.log('\n--- 生成した user-data（storage 部分の抜粋）---')
     const yaml = generateUserData(profile, { comments: 'none' })
@@ -297,10 +465,53 @@ async function main(): Promise<void> {
     // 「ディスクが 1 バイトも増えないまま無音」になり、
     // **失敗しているのか時間がかかっているのかが区別できない**。
     // 実機の USB に焼くときは付けない（`e2e-vm.mts` だけが足す）。
+    // **`ip` モードだけ、起動メニューの項目を実際に作って 1 つ選ぶ。**
+    // `set default=<n>` を入れて「人が選んだ」状態を**決定的に**再現する
+    // （シリアルから矢印キーで選ぶこともできるが、待ち時間に依存する。落とし穴 127）。
+    // 他のモードでは `extraEntries` も `defaultEntry` も出さない（今までどおり）。
+    const menuEntries = MODE === 'ip' ? buildHostMenuEntries(profile.runtimeValues, []) : []
+    if (MODE === 'ip') {
+      console.log('\n--- 起動メニューに出る項目 ---')
+      console.log('  [0] （元の項目。予備の値で入る）')
+      menuEntries.forEach((e, i) => {
+        const mark = i + 1 === IP_PRESET_INDEX ? ' ← これを選ぶ' : ''
+        console.log(`  [${i + 1}] ${e.title}${mark}`)
+        console.log(`       ${e.args.join(' ') || '(引数なし)'}`)
+      })
+      console.log('--- ここまで ---\n')
+      check(
+        `選ぶ項目 (${IP_PRESET_INDEX}) がメニューに存在する`,
+        menuEntries.length >= IP_PRESET_INDEX,
+        `メニューは ${menuEntries.length + 1} 項目`,
+      )
+    }
     const patchPlan = buildIsoPatches(inspection, {
       args: ['autoinstall', 'console=tty0', 'console=ttyS0,115200n8'],
       markTitle: true,
+      ...(MODE === 'ip'
+        ? {
+            extraEntries: menuEntries.map((e) => ({ title: e.title, args: e.args })),
+            defaultEntry: IP_PRESET_INDEX,
+          }
+        : {}),
     })
+    if (MODE === 'ip') {
+      // **選んだ項目のカーネル行に、期待した引数が入っているか。**
+      // ここが違うと、あとの検査は「反映されなかった」ではなく
+      // 「そもそも渡していなかった」を見ることになる。
+      const grub = patchPlan.newGrubCfg
+      const chosen = profile.runtimeValues.presets[IP_PRESET_INDEX - 1]
+      check(
+        'grub.cfg に `set default=` が入った',
+        new RegExp(`^set default=${IP_PRESET_INDEX}$`, 'm').test(grub),
+        `実際 "${/^set default=.*$/m.exec(grub)?.[0] ?? '(無い)'}"`,
+      )
+      check(
+        '選ぶ項目のカーネル行に期待した IP の引数がある',
+        chosen !== undefined && grub.includes(`ai.ipv4=${chosen.ipv4}`),
+        `期待 ai.ipv4=${chosen?.ipv4}`,
+      )
+    }
     const isoSize = (await stat(isoPath)).size
     const plan = await planUsbLayout({
       isoDevice: iso,
@@ -342,7 +553,9 @@ async function main(): Promise<void> {
   check('WSL 側にイメージがある', wsl(`test -f ${wslImg} && echo yes`).trim() === 'yes')
 
   // --- 4. 無人インストール ------------------------------------------------
-  const disks = process.env['VM_DISKS'] ?? (MODE === 'raid' ? RAID_DISKS : 'sda:20G')
+  const disks =
+    process.env['VM_DISKS'] ??
+    (MODE === 'mirror' ? MIRROR_DISKS : MODE === 'raid' ? RAID_DISKS : 'sda:20G')
   console.log(`\n■ 無人インストールを開始します（ディスク: ${disks}）`)
   console.log('  シリアルの出力で進行を追います。数分〜十数分かかります。\n')
 
@@ -353,7 +566,7 @@ async function main(): Promise<void> {
   let sawComplete = false
   let lastShown = 0
   const rc = await wslStream(
-    `bash ${REPO_WSL}/scripts/vm/run-vm.sh install ${wslImg} ${LAB} ${disks}`,
+    `${MODE === 'mirror' ? 'VM_NICS=2 ' : ''}bash ${REPO_WSL}/scripts/vm/run-vm.sh install ${wslImg} ${LAB} ${disks}`,
     (line) => {
       if (/subiquity|curtin|cloud-init|Ubuntu Server/i.test(line)) sawInstaller = true
       if (/installation complete|subiquity\/Shutdown|Reached target.*ower.?ff/i.test(line)) {
@@ -412,7 +625,18 @@ async function main(): Promise<void> {
   )
   check('sudo グループ指定つきで渡っている', field('CLOUDINIT_SUDO') === 'yes')
   check('autoinstall の user-data が読まれた', field('AUTOINSTALL_USER_DATA') === 'yes')
-  check('ESP と /boot が fstab に載っている', /\/boot\/efi/.test(report))
+  // **レポート全体を grep しない。**
+  // 以前は `/\/boot\/efi/.test(report)` だったが、ESP ミラーのログにも
+  // `/target/boot/efi` の文字列が出るので、**fstab が空でも通る**（偽 PASS）。
+  // 機械可読な `FSTAB_MOUNTS=` だけを見る。
+  {
+    const mounts = field('FSTAB_MOUNTS').split(/\s+/).filter(Boolean)
+    check(
+      'ESP と /boot が fstab に載っている',
+      mounts.includes('/boot/efi') && mounts.includes('/boot'),
+      `実際 "${field('FSTAB_MOUNTS')}"`,
+    )
+  }
 
   // --- 5b. RAID 構成のときだけ見ること ------------------------------------
   // **「Ubuntu が入った」ではなく「この構成が組まれた」を見る。**
@@ -518,6 +742,133 @@ async function main(): Promise<void> {
     )
   }
 
+  // --- 5b-ip. `ip` モードだけ: 起動メニューで選んだ IP が反映されたか ------
+  //
+  // **層を分けて見る**（落とし穴 93 / 112）:
+  //   1. early-commands が「反映した」と記録したか（`RUNTIME_APPLIED`）
+  //   2. その結果が実際に設定に入っているか（`NETPLAN_ADDRESSES`）
+  //   3. **選ばなかった値が入っていないこと**（「たまたま何か入っていた」を排除する）
+  //
+  // 1 を見ないと「プロファイルの既定値がたまたま同じ」でも通ってしまう。
+  // 3 を見ないと「全部の IP が入っている」壊れ方を見逃す。
+  if (MODE === 'ip') {
+    const chosen = profile.runtimeValues.presets[IP_PRESET_INDEX - 1]
+    const notChosen = profile.runtimeValues.presets
+      .filter((_, i) => i !== IP_PRESET_INDEX - 1)
+      .map((p) => p.ipv4)
+    const fallback = addressOf(profile)
+    const addrs = field('NETPLAN_ADDRESSES').split(/\s+/).filter(Boolean)
+    console.log(`    netplan のアドレス: ${addrs.join(' ') || '(空)'}`)
+    console.log(`    early-commands の記録: ${field('RUNTIME_APPLIED_LINE') || '(無い)'}`)
+
+    check(
+      'early-commands が「反映した」と記録している',
+      field('RUNTIME_APPLIED').split(/\s+/).filter(Boolean).includes('ai.ipv4'),
+      `実際 "${field('RUNTIME_APPLIED')}"`,
+    )
+    check(
+      `**選んだ IP (${chosen?.ipv4}) が入っている**`,
+      chosen !== undefined && addrs.includes(chosen.ipv4),
+      `実際 "${addrs.join(' ')}"`,
+    )
+    check(
+      `**予備の値 (${fallback}) は入っていない**`,
+      addrs.length > 0 && !addrs.includes(fallback),
+      '入っていたら、起動メニューの指定が届いていない',
+    )
+    check(
+      '**選ばなかった IP は入っていない**',
+      addrs.length > 0 && notChosen.every((ip) => !addrs.includes(ip)),
+      `選ばなかった: ${notChosen.join(' ')} / 実際: ${addrs.join(' ')}`,
+    )
+    check(
+      'アドレスがちょうど 1 つ',
+      addrs.length === 1,
+      `実際 ${addrs.length} 個: ${addrs.join(' ')}`,
+    )
+    // **「IP だけ別」なので、ホスト名はサンプルのまま**でなければならない。
+    check(
+      'ホスト名はサンプルのまま（IP だけが変わる）',
+      field('HOSTNAME') === profile.basics.hostname,
+      `期待 ${profile.basics.hostname} / 実際 "${field('HOSTNAME')}"`,
+    )
+  }
+
+  // --- 5c. `mirror` モードだけ: ESP のミラーと bond ------------------------
+  // **ここが「残っていた 2 つの未検証項目」そのもの。**
+  if (MODE === 'mirror') {
+    // (1) ESP は 2 台に作られたか
+    check('ESP が 2 つある', field('ESP_PARTS') === '2', `実際 "${field('ESP_PARTS')}"`)
+    check(
+      'ESP が sda と sdb の両方にある',
+      ['sda', 'sdb'].every((d) => field('ESP_DISKS').split(/\s+/).includes(d)),
+      `実際 "${field('ESP_DISKS')}"`,
+    )
+    // (2) **2 台目への GRUB 導入が実際に走ったか。**
+    //     `grub_device` は 1 台目にしか付かないので（落とし穴 98）、
+    //     2 台目は late-commands の複製に頼っている。
+    //     ログが無い＝**コマンドが 1 行も出ていない**（`raid` モードがその状態だった）。
+    check(
+      '2 台目への GRUB 導入が走った（ログがある）',
+      field('ESP_MIRROR_RESULT') !== 'none' && field('ESP_MIRROR_RESULT') !== '',
+      `実際 "${field('ESP_MIRROR_RESULT')}"`,
+    )
+    check(
+      '2 台目への GRUB 導入が成功した',
+      field('ESP_MIRROR_RESULT') === 'ok',
+      `実際 "${field('ESP_MIRROR_RESULT')}"（incomplete なら複製に落ちている）`,
+    )
+    // (3) **ログが ok でも、中身が空なら起動しない。** 実際に開いて確かめる。
+    check(
+      '両方の ESP に起動できるものが入っている',
+      field('ESP_WITH_LOADER') === '2',
+      `実際 "${field('ESP_WITH_LOADER')}" / 2`,
+    )
+
+    // (4) bond の設定が subiquity に渡ったか
+    //
+    // **この時点で見えるのは `/etc/cloud/cloud.cfg.d/90-installer-network.cfg` だけ。**
+    // `/etc/netplan/50-cloud-init.yaml` を書き出すのは**初回起動時の cloud-init** なので、
+    // インストール直後には存在しない。以前ここで `/etc/netplan` だけを見て
+    // 「bonds が無い」と 4 件の偽 FAIL を出した（落とし穴 112。管理ユーザーの
+    // 落とし穴 93 とまったく同じ形）。**実際に描画される層は起動後にもう一度見る**（6b）。
+    console.log(`    netplan の出どころ: ${field('NETPLAN_SOURCE')}`)
+    check(
+      'bond の設定が読める（インストール直後は installer-cfg）',
+      field('NETPLAN_SOURCE') !== 'none' && field('NETPLAN_SOURCE') !== '',
+      `実際 "${field('NETPLAN_SOURCE')}"`,
+    )
+    check('netplan に bonds がある', field('NETPLAN_HAS_BONDS') === 'yes')
+    check(
+      'bond の名前が設定どおり',
+      field('BOND_NAMES').split(/\s+/).includes('bond0'),
+      `実際 "${field('BOND_NAMES')}"`,
+    )
+    check(
+      'bond のメンバーが 2 枚',
+      field('BOND_MEMBERS').split(/\s+/).filter(Boolean).length === 2,
+      `実際 "${field('BOND_MEMBERS')}"`,
+    )
+    check(
+      'bond のモードが active-backup',
+      field('BOND_MODE') === 'active-backup',
+      `実際 "${field('BOND_MODE')}"`,
+    )
+    // **落とし穴 100**: メンバー側にアドレスを付けない（付けるのは bond 側）。
+    //
+    // これは「無いこと」の確認なので、**素直に書くと空文字でも通る**
+    // ——インストールが 1 バイトも書けていないときにこの 1 件だけ ok になり、
+    // 「何かは動いている」ように見える（実際に 24 件中これだけ ok になった）。
+    // **読めた設定に対する判定であること**を前提に付ける。
+    check(
+      'メンバー側にアドレスが付いていない',
+      field('NETPLAN_SOURCE') !== '' &&
+        field('NETPLAN_SOURCE') !== 'none' &&
+        field('ETHERNETS_HAS_ADDRESSES') !== 'yes',
+      `source="${field('NETPLAN_SOURCE')}" addresses="${field('ETHERNETS_HAS_ADDRESSES')}"`,
+    )
+  }
+
   // --- 6. **インストールしたシステムを実際に起動する** --------------------
   // ここまでは「インストールが終わった」ことしか見ていない。
   // **起動するか**は別の話で、引き継ぎ資料が最初から残している項目そのもの。
@@ -527,7 +878,7 @@ async function main(): Promise<void> {
   let sawLogin = false
   let sawKernel = false
   const bootRc = await wslStream(
-    `VM_TIMEOUT=420 bash ${REPO_WSL}/scripts/vm/run-vm.sh boot ${LAB} ${disks}`,
+    `VM_TIMEOUT=420 ${MODE === 'mirror' ? 'VM_NICS=2 ' : ''}bash ${REPO_WSL}/scripts/vm/run-vm.sh boot ${LAB} ${disks}`,
     (line) => {
       if (/Linux version|systemd\[1\]/i.test(line)) sawKernel = true
       // **テンプレートリテラルの中の `\s` は正規表現の `\s` にならない**（`s` 1 文字になる）。
@@ -571,6 +922,92 @@ ${e.message ?? ''}`
     afterField('SUDO').split(',').includes(profile.user.username),
     `実際 "${afterField('SUDO')}"`,
   )
+
+  // --- 7b-ip. 起動後にもう一度、IP を見る --------------------------------
+  // 5b-ip で見たのは **subiquity が書いた設定**（installer-cfg か、
+  // 運が良ければ netplan）。ここで見るのは **cloud-init が初回起動で
+  // 書き出した `/etc/netplan/50-cloud-init.yaml`**。別の層なので両方見る。
+  if (MODE === 'ip') {
+    const chosen = profile.runtimeValues.presets[IP_PRESET_INDEX - 1]
+    const after = afterField('NETPLAN_ADDRESSES').split(/\s+/).filter(Boolean)
+    console.log(`    起動後のアドレス: ${after.join(' ') || '(空)'} (出どころ ${afterField('NETPLAN_SOURCE')})`)
+    check(
+      '初回起動で cloud-init が netplan を書き出した',
+      afterField('NETPLAN_SOURCE') === 'netplan',
+      `実際 "${afterField('NETPLAN_SOURCE')}"`,
+    )
+    check(
+      `**書き出された netplan にも選んだ IP (${chosen?.ipv4}) が入っている**`,
+      chosen !== undefined && after.includes(chosen.ipv4),
+      `実際 "${after.join(' ')}"`,
+    )
+  }
+
+  // --- 7b. bond は「渡ったか」と「描画されたか」を別々に見る --------------
+  // 5c で見たのは subiquity が書いた `90-installer-network.cfg`（＝設定が渡った）。
+  // ここで見るのは **cloud-init が初回起動で書き出した `/etc/netplan/50-cloud-init.yaml`**
+  // （＝実際にその形で描画された）。**別の層なので両方見る**（落とし穴 93 / 112）。
+  // なお cloud-init は値をクォートして書き出す（`mode: "active-backup"`）ので、
+  // 検査側はクォートを落として読む（`inspect-disks.sh`）。
+  if (MODE === 'mirror') {
+    console.log(`    起動後の netplan の出どころ: ${afterField('NETPLAN_SOURCE')}`)
+    check(
+      '初回起動で cloud-init が netplan を書き出した',
+      afterField('NETPLAN_SOURCE') === 'netplan',
+      `実際 "${afterField('NETPLAN_SOURCE')}"`,
+    )
+    check(
+      '書き出された netplan にも bond がある',
+      afterField('NETPLAN_HAS_BONDS') === 'yes' &&
+        afterField('BOND_NAMES').split(/\s+/).includes('bond0'),
+      `bonds="${afterField('NETPLAN_HAS_BONDS')}" names="${afterField('BOND_NAMES')}"`,
+    )
+    check(
+      '書き出された netplan のメンバーが 2 枚でモードが active-backup',
+      afterField('BOND_MEMBERS').split(/\s+/).filter(Boolean).length === 2 &&
+        afterField('BOND_MODE') === 'active-backup',
+      `members="${afterField('BOND_MEMBERS')}" mode="${afterField('BOND_MODE')}"`,
+    )
+
+    // **第 3 の層: 実際にリンクが上がったか。**
+    // ここまでは「そう書かれた」だけで、bond が成立したかは 1 度も見ていない
+    // （引き継ぎ資料が「bond が実際にリンクを上げるか。VM でも実機でも未検証」と
+    // 書き続けてきた項目そのもの）。起動したシステムのログにしか残らない。
+    console.log(
+      `    bond0 のログ: seen=${afterField('BOND_LOG_SEEN')} carrier=${afterField(
+        'BOND_CARRIER',
+      )} address=${afterField('BOND_ADDRESS')}`,
+    )
+    check(
+      'bond0 のログが残っている',
+      afterField('BOND_LOG_SEEN') === 'yes',
+      'rsyslog も journal も読めないと空になる（＝「上がらなかった」ではない）',
+    )
+    check(
+      '**bond0 のリンクが上がった**',
+      afterField('BOND_CARRIER') === 'yes',
+      `実際 "${afterField('BOND_CARRIER')}"`,
+    )
+    check(
+      '**bond0 に IPv4 アドレスが付いた**',
+      /^\d+\.\d+\.\d+\.\d+/.test(afterField('BOND_ADDRESS')),
+      `実際 "${afterField('BOND_ADDRESS')}"`,
+    )
+    // **落とし穴 100 をここで捕まえる。**
+    // netplan に 2 枚と書いてあることと、カーネルが実際に 2 枚束ねたことは別。
+    // 「2 枚あるつもりの冗長化が 1 枚」は実機で片方を抜くまで気づけないので、
+    // カーネルの `Enslaving as ...` の行を数える。
+    check(
+      '**カーネルが 2 枚とも束ねた**（1 枚だけの冗長化になっていない）',
+      afterField('BOND_SLAVES') === '2',
+      `実際 "${afterField('BOND_SLAVES')}" 枚`,
+    )
+    check(
+      'active-backup として active 1 枚 + backup 1 枚になった',
+      afterField('BOND_ACTIVE_SLAVES') === '1' && afterField('BOND_BACKUP_SLAVES') === '1',
+      `active=${afterField('BOND_ACTIVE_SLAVES')} backup=${afterField('BOND_BACKUP_SLAVES')}`,
+    )
+  }
 
   console.log(`\n${pass + fail} 件中 ${pass} 件成功、${fail} 件失敗`)
   console.log(`VM のディスク: \\\\wsl$\\${DISTRO}${LAB.replace(/\//g, '\\')}`)

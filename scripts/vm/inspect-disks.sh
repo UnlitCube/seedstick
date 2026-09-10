@@ -124,6 +124,11 @@ echo
 echo "=== LVM ==="
 # **必ず自分で有効化する。** udev の自動有効化に頼ると環境で結果が変わる。
 vgchange -ay >/dev/null 2>&1 || true
+# WSL には udev が無いので (`落とし穴 90`)、`/dev/mapper/` のノードが
+# 出そろうまでの間がある。**待たずに mount のループへ行くと、
+# インストールは成功しているのに「ルートが見つからない」と報告する**
+# （実際に 1 回出した。落とし穴 92: 道具が不安定だと偽 FAIL になる）。
+sleep 2
 pvs --noheadings -o pv_name,vg_name,pv_size 2>/dev/null || true
 lvs --noheadings -o lv_name,vg_name,lv_size 2>/dev/null || true
 pvs --noheadings -o pv_name,vg_name 2>/dev/null |
@@ -152,23 +157,66 @@ echo
 echo "=== インストールされたシステムの中身 ==="
 mkdir -p "$MNT"
 ROOT_DEV=""
-for cand in /dev/mapper/* /dev/md* "${LOOPS[@]}"p*; do
-  [ -b "$cand" ] || continue
-  lsblk -no FSTYPE "$cand" 2>/dev/null | grep -qE '^ext[234]$' || continue
-  real=$(readlink -f "$cand")
-  if mount -t ext4 -o ro,noload "$real" "$MNT" 2>/dev/null; then
-    if [ -f "$MNT/etc/hostname" ] && [ -d "$MNT/etc/apt" ]; then
-      ROOT_DEV="$cand"
-      break
+
+# **マウントの失敗理由を捨てない。**
+# 以前は `mount ... 2>/dev/null` で握り潰していたので、インストールは成功しているのに
+# 「ルートが見つからない」とだけ出て、**実装のバグに見える偽 FAIL** になった
+# （落とし穴 92 / 117）。理由を出したうえで、1 度だけ落ち着かせて再試行する。
+find_root() {
+  # `/dev/dm-*` も候補に入れる。udev が無い環境では `/dev/mapper/` の
+  # シンボリックリンクが揃わないことがあるが、`dm-N` の実体は必ずある。
+  #
+  # **`"${LOOPS[@]}"p*` と書いてはいけない。**
+  # 配列の展開に接尾辞を付けると **最後の要素にしか付かない**
+  # （`/dev/loop0` `/dev/loop1` `/dev/loop2p*` になる。実測）。
+  # 前のディスクのパーティションが候補から抜け、代わりに
+  # **ディスク丸ごと**が候補に入る。LVM / md が先に見つかるので
+  # これまで表面化していなかっただけ。
+  parts=()
+  for lo in "${LOOPS[@]:-}"; do
+    [ -n "$lo" ] || continue
+    for pp in "$lo"p*; do [ -b "$pp" ] && parts+=("$pp"); done
+  done
+  for cand in /dev/mapper/* /dev/dm-* /dev/md* "${parts[@]:-}"; do
+    [ -b "$cand" ] || continue
+    fstype=$(lsblk -no FSTYPE "$cand" 2>/dev/null | head -1)
+    case "$fstype" in ext2 | ext3 | ext4) ;; *) continue ;; esac
+    real=$(readlink -f "$cand")
+    if err=$(mount -t ext4 -o ro,noload "$real" "$MNT" 2>&1); then
+      if [ -f "$MNT/etc/hostname" ] && [ -d "$MNT/etc/apt" ]; then
+        ROOT_DEV="$cand"
+        return 0
+      fi
+      echo "  ($cand は ext4 だが /etc/hostname が無い — /boot などの別の区画)"
+      umount "$MNT" 2>/dev/null || true
+    else
+      echo "  ($cand をマウントできない: $err)"
     fi
-    umount "$MNT" 2>/dev/null || true
-  fi
-done
+  done
+  return 1
+}
+
+if ! find_root; then
+  # LVM / md がまだ落ち着いていないだけのことがある。**1 度だけ**やり直す。
+  echo "  1 回目で見つからなかった。LVM と md をやり直して再試行する。"
+  umount "$MNT" 2>/dev/null || true
+  mdadm --assemble --scan --readonly >/dev/null 2>&1 || true
+  vgchange -ay >/dev/null 2>&1 || true
+  sleep 5
+  find_root || true
+fi
 
 if [ -z "$ROOT_DEV" ]; then
   echo "!! ルートファイルシステムが見つからない（インストールが終わっていない可能性）"
+  echo "INSPECT_RESULT=no-root"
+  # 何が見えていたのかを残す。次に同じことが起きたときに原因を絞れる。
+  echo "--- 見えていたブロックデバイス ---"
+  lsblk -o NAME,SIZE,FSTYPE,TYPE "${LOOPS[@]}" 2>/dev/null || true
+  echo "--- dm ---"
+  dmsetup ls 2>/dev/null || true
   exit 2
 fi
+echo "INSPECT_RESULT=ok"
 
 echo "ルート: $ROOT_DEV"
 echo "HOSTNAME=$(cat "$MNT/etc/hostname" 2>/dev/null | tr -d '\r\n')"
@@ -196,6 +244,164 @@ if [ -f "$MNT/etc/mdadm/mdadm.conf" ]; then
 else
   echo "MDADM_CONF_ARRAYS=0"
 fi
+# --- bond（netplan）--------------------------------------------------------
+# **ここには層が 3 つある**（落とし穴 93 / 112）:
+#   1. subiquity が `/etc/cloud/cloud.cfg.d/90-installer-network.cfg` に書く
+#      ……インストール直後に**もうある**
+#   2. cloud-init が初回起動で `/etc/netplan/50-cloud-init.yaml` を書き出す
+#      ……**インストール直後にはまだ無い**
+#   3. 実際にリンクが上がる ……起動後のシステムの中でしか分からない
+#
+# インストール直後の検査で 2 を見て「bonds が無い」と報告したことがある
+# ——**正しく組めているのに 4 件の偽 FAIL** を出した（管理ユーザーの件と同じ形）。
+# だから**両方読み、どちらを読んだかを出す**。
+# 3 は `e2e-vm.mts` が起動時のシリアル出力から拾う。
+NP=""
+NETPLAN_SOURCE=none
+if [ -d "$MNT/etc/netplan" ]; then
+  # インストーラが置く netplan は 1 本とは限らない。全部まとめて見る。
+  NP=$(cat "$MNT"/etc/netplan/*.yaml 2>/dev/null)
+  [ -n "$NP" ] && NETPLAN_SOURCE=netplan
+fi
+if [ -z "$NP" ] && [ -f "$MNT/etc/cloud/cloud.cfg.d/90-installer-network.cfg" ]; then
+  NP=$(cat "$MNT/etc/cloud/cloud.cfg.d/90-installer-network.cfg" 2>/dev/null)
+  [ -n "$NP" ] && NETPLAN_SOURCE=installer-cfg
+fi
+echo "NETPLAN_SOURCE=$NETPLAN_SOURCE"
+if [ -n "$NP" ]; then
+  echo "NETPLAN_HAS_BONDS=$(echo "$NP" | grep -qE '^[[:space:]]*bonds:' && echo yes || echo no)"
+  # bond のデバイス名（`bonds:` の直下のキー）
+  echo "BOND_NAMES=$(echo "$NP" | awk '/^[[:space:]]*bonds:/{f=1;next} f&&/^[[:space:]]{4}[a-zA-Z0-9_-]+:/{gsub(/[[:space:]:]/,"");printf "%s ",$0;next} f&&/^[[:space:]]{0,2}[a-zA-Z]/{f=0}')"
+  # メンバー（`interfaces:` の配列）。**2 枚あるはず**。
+  #
+  # **ブロック形式とフロー形式の両方を読む。**
+  #   ブロック: `interfaces:` の次行から `- nic-a` / `- nic-b`
+  #   フロー  : `interfaces: [nic-a, nic-b]`
+  # 実測した 24.04.3 + cloud-init はブロック形式で書き出すが、
+  # **どちらで書き出すかは cloud-init の実装都合**で、こちらが決められない。
+  # 片方しか読めない検査は「正しく組めているのに FAIL」を出す
+  # （落とし穴 106 / 113 と同じ「静かに嘘の FAIL」）。
+  echo "BOND_MEMBERS=$(echo "$NP" | awk '
+    /^[[:space:]]*interfaces:[[:space:]]*\[/ {
+      line = $0
+      sub(/^[^[]*\[/, "", line); sub(/\].*$/, "", line)
+      n = split(line, a, ",")
+      for (i = 1; i <= n; i++) { gsub(/[[:space:]"'"'"']/, "", a[i]); if (a[i] != "") printf "%s ", a[i] }
+      next
+    }
+    /^[[:space:]]*interfaces:[[:space:]]*$/ { f = 1; next }
+    f && /^[[:space:]]*-[[:space:]]*[a-zA-Z0-9_.-]+[[:space:]]*$/ {
+      # **先頭の "- " だけを落とす。** 以前は `gsub(/[-]/,"")` で
+      # 名前の中のハイフンまで消していたので、ブロック形式とフロー形式で
+      # 同じ bond のメンバー名が違って見えた（`nic525400123456` と `nic-525400123456`）。
+      v = $0
+      sub(/^[[:space:]]*-[[:space:]]*/, "", v)
+      gsub(/[[:space:]"'"'"']/, "", v)
+      printf "%s ", v
+      next
+    }
+    f { f = 0 }
+  ')"
+  # **cloud-init が書き出す netplan は値をクォートする**（`mode: "active-backup"`）。
+  # subiquity 側は素で書く。フロー形式 (`parameters: {mode: active-backup, ...}`) もありうる。
+  # どれでも読めるように、`mode:` の後ろを次の区切り (`,` `}` 行末) まで取ってから
+  # クォートと空白を落とす。
+  echo "BOND_MODE=$(echo "$NP" | sed -n 's/.*[^a-z-]mode:[[:space:]]*\([^,}]*\).*/\1/p; s/^mode:[[:space:]]*\([^,}]*\).*/\1/p' | head -1 | tr -d '"'"'"' \r')"
+  # メンバー側にアドレスが付いていないこと（落とし穴 100）。
+  # `ethernets:` 節の中に `addresses:` が出たら誤り。
+  echo "ETHERNETS_HAS_ADDRESSES=$(echo "$NP" | awk '/^[[:space:]]*ethernets:/{f=1;next} f&&/^[[:space:]]*bonds:/{f=0} f&&/addresses:/{print "yes";exit}')"
+  # **実際に入っている IPv4 アドレス。**
+  # 起動メニューで選んだ値が反映されたかを見るのに要る。
+  # ブロック形式（`addresses:` の次行から `- 10.0.2.101/24`）と
+  # フロー形式（`addresses: [10.0.2.101/24]`）の両方を読む
+  # ——どちらで書き出すかは cloud-init の実装都合で、こちらが決められない（落とし穴 113）。
+  # **CIDR（`/` を含むもの）だけを取る。**
+  # `nameservers:` の下にも `addresses:` があり、そちらは DNS サーバの
+  # 素の IP（`10.0.2.3`）なので `/` が無い。これで自然に分かれる
+  # ——インデントを数えて `nameservers` 節を避ける実装より短く、崩れにくい。
+  # クォートの有無も問わない（cloud-init は値をクォートして書き出す。落とし穴 113）。
+  echo "NETPLAN_ADDRESSES=$(echo "$NP" | awk '
+    /^[[:space:]]*addresses:[[:space:]]*\[/ {
+      line = $0
+      sub(/^[^[]*\[/, "", line); sub(/\].*$/, "", line)
+      n = split(line, a, ",")
+      for (i = 1; i <= n; i++) {
+        gsub(/[[:space:]"'"'"']/, "", a[i])
+        if (a[i] ~ /\//) printf "%s ", a[i]
+      }
+      next
+    }
+    /^[[:space:]]*addresses:[[:space:]]*$/ { f = 1; next }
+    f && /^[[:space:]]*-[[:space:]]*["'"'"']?[0-9]/ {
+      v = $0
+      sub(/^[[:space:]]*-[[:space:]]*/, "", v)
+      gsub(/[[:space:]"'"'"']/, "", v)
+      if (v ~ /\//) printf "%s ", v
+      next
+    }
+    f { f = 0 }
+  ')"
+fi
+
+# --- 起動メニューで選んだ値が反映されたか（early-commands の記録）------------
+# **「netplan にその値が入っている」と「early-commands が反映した」は別の層。**
+# 前者だけを見ると、プロファイルの既定値がたまたま同じでも通ってしまう。
+# 置換スクリプトは反映した引数を 1 行にまとめて標準出力へ書き、
+# それがインストーラのログに残る（成功時は `/var/log/installer/` ごと
+# インストール先へ複製される）。
+# **スクリプトの「ソース」と「出力」を取り違えない。**
+# インストーラのログには early-commands の**本文**もそのまま記録される。
+# 本文には `sys.stdout.write("… 反映しました: %s\n" % …)` という行があるので、
+# 素直に grep すると **`%s` を答えとして拾う**（実際に拾って偽 FAIL を出した）。
+# 出力側は必ず `ai.` で始まる引数名が並ぶので、そこで見分ける。
+APPLIED=""
+for f in "$MNT"/var/log/installer/installer-journal.txt \
+         "$MNT"/var/log/installer/*.log* \
+         "$MNT"/var/log/syslog; do
+  [ -f "$f" ] || continue
+  hit=$(grep -a -o '起動時の指定を反映しました: ai\.[a-z0-9., ]*' "$f" 2>/dev/null |
+    grep -v '%s' | tail -1)
+  if [ -n "$hit" ]; then APPLIED="$hit"; break; fi
+done
+if [ -n "$APPLIED" ]; then
+  echo "RUNTIME_APPLIED_LINE=$APPLIED"
+  # 反映された引数の名前だけを並べる（`ai.ipv4 ai.gw ai.dns` のような形）。
+  echo "RUNTIME_APPLIED=$(echo "$APPLIED" | sed 's/.*反映しました:[[:space:]]*//' | tr -d '\r' | tr ',' ' ' | tr -s ' ')"
+else
+  echo "RUNTIME_APPLIED="
+fi
+
+# --- ESP のミラー（2 台目にも GRUB が入ったか）------------------------------
+# `grub_device` は 1 台目の ESP にしか付かないので（落とし穴 98）、
+# 2 台目は **late-commands が複製する**。その結果をここで見る。
+# ログは `raidEspMirrorCommand()` が必ず 1 行 `RESULT:` を書く。
+if [ -f "$MNT/var/log/autoinstall-raid-esp.log" ]; then
+  echo "ESP_MIRROR_RESULT=$(grep -oE '^RESULT: [a-z]+' "$MNT/var/log/autoinstall-raid-esp.log" | tail -1 | awk '{print $2}')"
+  echo "--- /var/log/autoinstall-raid-esp.log ---"
+  tail -20 "$MNT/var/log/autoinstall-raid-esp.log"
+else
+  echo "ESP_MIRROR_RESULT=none"
+fi
+# 2 台目の ESP を実際に開いて、起動に使えるものが入っているかを見る。
+# **ログが ok と書いていても、中身が空なら起動しない。**
+ESP_WITH_LOADER=0
+for lo in "${LOOPS[@]:-}"; do
+  [ -n "$lo" ] || continue
+  for part in "$lo"p*; do
+    [ -b "$part" ] || continue
+    [ "$(lsblk -no FSTYPE "$part" 2>/dev/null)" = "vfat" ] || continue
+    mkdir -p /mnt/vm-esp
+    if mount -o ro "$part" /mnt/vm-esp 2>/dev/null; then
+      # 署名版 shim / GRUB か、フォールバックの BOOTX64.EFI があれば起動できる形。
+      if [ -f /mnt/vm-esp/EFI/BOOT/BOOTX64.EFI ] || [ -d /mnt/vm-esp/EFI/ubuntu ]; then
+        ESP_WITH_LOADER=$((ESP_WITH_LOADER + 1))
+      fi
+      umount /mnt/vm-esp 2>/dev/null || true
+    fi
+  done
+done
+echo "ESP_WITH_LOADER=$ESP_WITH_LOADER"
+
 # **ユーザーはインストール時点では存在しない。**
 # subiquity は cloud-init の設定に書くだけで、実際に作るのは初回起動時。
 # 「設定が渡ったか」と「実際に作られたか」は**別の層**なので、両方出す。
@@ -210,4 +416,38 @@ if [ -f "$CI" ]; then
 fi
 if [ -f "$MNT/var/log/installer/autoinstall-user-data" ]; then
   echo "AUTOINSTALL_USER_DATA=yes"
+fi
+
+# --- bond の第 3 の層: **実際にリンクが上がったか** -------------------------
+# 「netplan に書かれたか」（層 1・2）と「リンクが上がったか」は別（落とし穴 112）。
+# 起動後のシステムのログにしか残らないので、**起動後の検査でだけ**値が出る。
+#
+# 見るのは systemd-networkd の記録。Ubuntu Server は rsyslog を入れるので
+# `/var/log/syslog` に出るが、入っていない構成もあるので
+# **journal のバイナリを `strings` で読む**経路も用意する（どちらも読めなければ空）。
+# 空＝「まだ起動していない」であって「リンクが上がらなかった」ではない。
+BOND_LOG=""
+if [ -f "$MNT/var/log/syslog" ]; then
+  BOND_LOG=$(grep -a -E 'bond0' "$MNT/var/log/syslog" 2>/dev/null | tail -40)
+fi
+if [ -z "$BOND_LOG" ] && [ -d "$MNT/var/log/journal" ]; then
+  BOND_LOG=$(find "$MNT/var/log/journal" -name '*.journal' -exec strings {} + 2>/dev/null |
+    grep -a -E 'bond0' | tail -40)
+fi
+if [ -n "$BOND_LOG" ]; then
+  echo "--- bond0 のログ（末尾）---"
+  echo "$BOND_LOG" | tail -12
+  echo "BOND_LOG_SEEN=yes"
+  # `Gained carrier` = リンクが上がった。`DHCPv4 address` = アドレスが付いた。
+  echo "BOND_CARRIER=$(echo "$BOND_LOG" | grep -qiE 'bond0.*(gained carrier|link.*up)' && echo yes || echo no)"
+  echo "BOND_ADDRESS=$(echo "$BOND_LOG" | grep -aoiE 'bond0: DHCPv4 address [0-9./]+' | tail -1 | awk '{print $NF}')"
+  # **カーネルが何枚 enslave したか。** netplan に 2 枚と書いてあることと、
+  # カーネルが実際に 2 枚束ねたことは別（落とし穴 100:
+  # 「2 枚あるつもりの冗長化が 1 枚」は実機で片方を抜くまで気づけない）。
+  # active-backup なら 1 枚が active、残りが backup になる。
+  echo "BOND_SLAVES=$(echo "$BOND_LOG" | grep -acE 'bond0: \(slave [a-z0-9]+\): Enslaving as')"
+  echo "BOND_ACTIVE_SLAVES=$(echo "$BOND_LOG" | grep -acE 'Enslaving as an active interface')"
+  echo "BOND_BACKUP_SLAVES=$(echo "$BOND_LOG" | grep -acE 'Enslaving as a backup interface')"
+else
+  echo "BOND_LOG_SEEN=no"
 fi
