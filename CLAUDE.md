@@ -1053,6 +1053,27 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
     リポジトリの外に出す物（サンプル・テンプレート）を足したら、
     **`extraResources` に入れて、展開後のディレクトリで実在を確かめる**。
 
+135. **アイコンは画像を置かず、コードから作る。**
+    バイナリだけ置くと、色や形を直したくなったときに元データが無くて作り直せない。
+    `scripts/make-icon.py`（Pillow のみ）が `apps/desktop/build/` に
+    `icon.ico`（16/24/32/48/64/128/256）と `icon.png`（1024）を出す。
+    electron-builder は `buildResources` からこの名前を**自動で拾う**ので、
+    `electron-builder.json` に書き足す必要は無い
+    （書かなくても効くので、「設定に無い＝効いていない」と誤解しないこと）。
+
+136. **ICO は寸法ごとに描き直す。大きい 1 枚を縮小して詰めない。**
+    16px に矢印やコネクタの穴を残すと、つぶれて「白い塊」にしかならない。
+    `draw_icon(size)` の中で `size >= 32` のときだけ細部を描き、
+    16/24px では本体を一回り大きくして輪郭だけで見せる。
+    **縮小だけでは、この「小さいときは省く」判断ができない。**
+
+137. **アイコンが入ったかは、ログではなく成果物から確かめる。**
+    `default Electron icon is used` が消えたことは「既定ではない」しか言わない。
+    PE の `RT_ICON` を実際に取り出して**目で見た**
+    （`win-unpacked` の exe・`-Setup.exe`・`-portable.exe` の 3 つとも
+    16〜256 の 7 枚が入っていることを確認）。
+    落とし穴 133 と同じで、**作れたことと、入っていることと、見えることは別**。
+
 ## 検証済みのこと
 
 - **RAID + LVM と bond の生成**を `scripts/e2e-raid-bond.mts` で確かめた（**77 / 77**）。
@@ -1181,6 +1202,7 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
 | `npm run e2e:vm:mirror` | **ESP を 2 台に置き、NIC 2 枚を bond で束ねる**（2 台目への grub-install と bond の検証） |
 | `npm run e2e:vm:ip` | **配布サンプル `samples/ip-only.json` そのもの**で、起動メニューの項目を選んだことにして入れ、**選んだ IP が実際に反映される**ことを確かめる |
 | `npm test` | typecheck + unit + smoke |
+| `python scripts/make-icon.py` | **アイコンを生成**（`apps/desktop/build/icon.ico` と `icon.png`）。Pillow のみ。`dist:*` の前に 1 度走らせれば足りる |
 | `npm run dist:win` / `dist:mac` / `dist:linux` | electron-builder でパッケージ。**Windows は installer (`-Setup.exe`) と portable (`-portable.exe`) の 2 本**が `apps/desktop/release/` に出る。`samples/` は `extraResources` で同梱される（落とし穴 131 / 134） |
 
 `npm run smoke` は `~/images`・`~/Downloads`・`C:/iso`・`/var/lib/iso` から ISO を探す。
