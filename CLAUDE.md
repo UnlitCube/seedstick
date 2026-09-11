@@ -1153,6 +1153,56 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
     宣言を足したら **66 ファイル / 1297 件**に戻った。
     `npm ls <pkg>` が `extraneous` と言うものは、**使っているなら宣言する**。
 
+### 履歴を書き換えたとき
+
+145. **資料に SHA を書くなら、件名も一緒に書く。**
+    メールの書き換え (`filter-branch`) を 2 回やった結果、
+    `docs/HANDOFF.md` が引用していた **6 件の SHA が全部死んだ**
+    （「`git rev-parse HEAD` = `ee7c558`」で GitHub を開くと 404）。
+    このリポジトリは「ログを残すなら `git rev-parse HEAD` も一緒に出す」
+    （落とし穴 72）を守ってきたぶん、**その記録が丸ごと無効になった**。
+    件名があれば tree から対応づけ直せる（trees は書き換えで変わらない）。
+    実際、6 件とも tree ハッシュで 1 対 1 に復元できた（HANDOFF の冒頭に対応表）。
+
+146. **`filter-branch` は `-- --all` ではなくブランチを名指しする。**
+    `-- --all` は `refs/remotes/origin/*` まで書き換えるので、
+    `--force-with-lease` が `stale info` で弾かれる
+    （そして「`--force` で押し切る」誘惑が生まれる）。
+    ブランチ名指しなら remote-tracking が無傷のまま残るので、
+    **この問題そのものが起きない**。タグも巻き込まない。
+
+147. **トレーラが 0 件なら `--msg-filter` を付けない。**
+    定型の `grep -v … | cat -s` は**空行を潰す**ので、
+    消すものが無いのにコミットメッセージを書き換えうる。
+    先に `git log --branches --format='%B' | grep -c …` で数えて、
+    0 なら env-filter だけにする（本文がバイト単位で保たれる）。
+
+148. **退避用のタグは、中身を数えてから扱う。**
+    `backup/before-email-rewrite` という名前のタグが残っていたが、
+    実体は**1 世代前**の退避で、最新 4 コミットを含まず、
+    **2 回の書き換えが消したはずのもの**を丸ごと抱えていた
+    （`old-personal-address` 10 件、`Co-Authored-By: Claude` 10 行、
+    `Claude-Session:` 2 行）。lightweight タグなので
+    `git push` でも `--follow-tags` でも送られないが、
+    **`--tags` / `--all --tags` / `--mirror` を 1 度打つだけで恒久的に公開される**
+    （リモートのタグは 0 件だった＝それまで 1 件も漏れていなかった）。
+    push は**ブランチを名指し**する。
+    そして**消す前に、退避から本当に戻せることを実証する**
+    （`git clone --mirror <bundle> <dir>` で 19 コミットが戻ることを確認してから消した）。
+
+149. **`refs/original/*` にも旧メールのコミットが残る。**
+    `filter-branch` が作る退避 ref で、今回の書き換え前の姿はここにしか無い
+    （＝消してはいけない）。ただし `--mirror` は `refs/*` を送るので、
+    **これも `--mirror` では漏れる**。148 と同じ理由で push は必ずブランチ名指し。
+
+150. **退避が「3 重」でも、同じディスクの 3 つなら 1 重。**
+    `refs/original` / reflog / bundle を数えて「3 重だから安全」としたが、
+    bundle は `%TEMP%` の中にあり、3 つとも同じ C: ドライブ上だった。
+    **機械の外にある控えはリモートだけ**で、force push はそれを上書きする
+    ——つまり push は「退路を保ったまま試せる操作」ではない。
+    bundle は `%TEMP%` の外へ複製し、**コピー先で `git bundle verify` が通ること**
+    まで確かめてから押す。
+
 ## 検証済みのこと
 
 - **Electron 製インストーラを、できあがった `Setup.exe` から通しで動かした**
