@@ -1203,6 +1203,54 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
     bundle は `%TEMP%` の外へ複製し、**コピー先で `git bundle verify` が通ること**
     まで確かめてから押す。
 
+### CI で配布物を作る
+
+151. **electron-builder 26 は、CI + タグ + `GITHUB_TOKEN` を見ると勝手に publish する。**
+    `publish` を書かないと `PublishManager` が
+    (a) `GITHUB_REF_TYPE=tag` なら `onTag`、(b) タグでなくても `isCI` なら `onTagOrDraft`
+    を立て、`GH_TOKEN` **または `GITHUB_TOKEN`** が env にあれば provider を github に解決する。
+    github だけは `onTagOrDraft` でも素通りするので、**同じバージョンの draft を探しに行って
+    アセットを二重に上げる**。こちらの `gh release create` と食い違う。
+    両方の設定に **`"publish": null`** を書いて止める（26 系固有。v27 で既定が変わる予定）。
+
+152. **GitHub は Release アセット名の空白をドットに置き換える。**
+    `Autoinstall USB Creator Setup-0.1.0.exe` は
+    `Autoinstall.USB.Creator.Setup-0.1.0.exe` として配られるので、
+    ビルドした名前・`SHA256SUMS` の名前・配った名前が三者三様になる。
+    `artifactName` は **`[0-9A-Za-z._-]` だけ**にする
+    （この文字集合は electron-builder 自身が `isSafeGithubName` として持っている）。
+    `${productName}` は空白を含むので **artifactName に使わない**。
+
+153. **Windows ランナーの既定シェル (pwsh) には `sh` が無い。**
+    `provisioning.test.ts` と `runtime-values.test.ts` は生成したシェルを
+    本物の `sh` に食わせて確かめているので、既定のままだと **19 件が落ちる**。
+    しかも悪いことに、そのうち 1 件は「改ざん検知が働く」ことを見るテストの
+    **成功側だけ**が落ち、失敗側は `sh` が無いこと自体で非ゼロになるので
+    **誤った理由で緑のまま通る**（落とし穴 116）。
+    テストのステップには **`shell: bash`** を明示する（`bash` は入っている）。
+
+154. **Apple Silicon は署名の無い実行ファイルを起動しない。**
+    そして **electron-builder 26 は「証明書が無いときの自動 ad-hoc 署名」を廃止した**ので、
+    `mac.identity: null`（＝署名しない）だけだと
+    **arm64 で起動しない .app** が出来上がる。
+    証明書の要らない **ad-hoc 署名** (`codesign --force --deep --sign -`) を
+    `afterPack` フックで自分で当てる（`apps/desktop/scripts/after-pack.cjs`）。
+    `identity: null` にした時点で `hardenedRuntime` も entitlements も読まれない
+    **死に設定**になるので、書いたままにしない（「固めているつもり」になる）。
+    Gatekeeper はこれでも通らない。macOS Sequoia (15) 以降は
+    **Control-クリック →「開く」での回避が廃止された**ので、
+    案内するのは `xattr -dr com.apple.quarantine` かシステム設定からの許可。
+
+155. **タグと `package.json` を突き合わせるだけでは、版番号のずれは見えない。**
+    版番号はソースの **5 か所に直書き**されていて、そのうち
+    `profile.meta.toolVersion` は **作った USB の user-data の先頭コメントに焼かれる**。
+    一方 `seed-builder.ts` の監査記録は `app.getVersion()` を使う。
+    上げ忘れると **同じ USB の中で監査記録が 0.2.0、user-data のコメントが 0.1.0** になり、
+    **どのテストも落ちない**。`version-consistency.test.ts` が数えるようにした。
+    走査に素の `\d+\.\d+\.\d+` を使うと `samples/ip-only.json` の
+    **IP アドレス (`10.0.2.100`) を 20 件拾って落ちる**ので、
+    版番号が実際に現れる形（`autoinstall-ui/<semver>` など）だけを指定する。
+
 ## 検証済みのこと
 
 - **Electron 製インストーラを、できあがった `Setup.exe` から通しで動かした**
@@ -1357,8 +1405,8 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
 | `npm test` | typecheck + unit + smoke |
 | `python scripts/make-icon.py` | **アイコンを生成**（`apps/desktop/build/icon.ico` と `icon.png`）。Pillow のみ。`dist:*` の前に 1 度走らせれば足りる |
 | `npm run e2e:uninstall-script` | **生成した `uninstall.ps1` を本物の PowerShell で走らせる**（砂場と専用レジストリキーだけを使う。数秒） |
-| `npm run dist:win` / `dist:mac` / `dist:linux` | electron-builder でパッケージ。**Windows は installer (`-Setup.exe`) と portable (`-portable.exe`) の 2 本**が `apps/desktop/release/` に出る。`samples/` は `extraResources` で同梱される（落とし穴 131 / 134） |
-| `npm run dist:installer` | **Electron 製インストーラ**を 1 本の exe にまとめる（`Autoinstall USB Creator Setup-<version>.exe`）。アイコン生成 → 本体を `--dir` → LZMA2 で `payload.7z` → インストーラをビルド → portable で梱包、の 5 段。**5〜6 分** |
+| `npm run dist:win` / `dist:mac` / `dist:linux` | electron-builder でパッケージ。**Windows は portable のみ**（インストーラは `dist:installer` が作る）。**macOS は dmg（インストーラ）と zip（ポータブル）を x64 / arm64 で**。`samples/` は `extraResources` で同梱される（落とし穴 131 / 134） |
+| `npm run dist:installer` | **Electron 製インストーラ**を 1 本の exe にまとめる（`AutoinstallUSBCreator-<version>-win-x64-Setup.exe`）。アイコン生成 → 本体を `--dir` → LZMA2 で `payload.7z` → インストーラをビルド → portable で梱包、の 5 段。**5〜6 分**。Windows 専用 |
 
 `npm run smoke` は `~/images`・`~/Downloads`・`C:/iso`・`/var/lib/iso` から ISO を探す。
 明示するなら `npm run smoke -- <iso のパス>`。ISO が無ければスキップして正常終了する。

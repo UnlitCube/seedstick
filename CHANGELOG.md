@@ -4,6 +4,25 @@
 
 ### ✨ 新機能
 
+**リリースの自動化と macOS 対応**
+
+タグ (`v*`) を押すと GitHub Actions が Windows と macOS でビルドし、
+GitHub Release に成果物と `SHA256SUMS.txt` を載せる。
+
+出力物は**インストーラとポータブル版の 2 つ**を両プラットフォームで:
+
+| | インストーラ | ポータブル |
+|---|---|---|
+| Windows | `…-win-x64-Setup.exe` | `…-win-x64-portable.exe` |
+| macOS | `…-mac-{x64,arm64}.dmg` | `…-mac-{x64,arm64}.zip` |
+
+- **NSIS インストーラは廃止**（Electron 製インストーラと役割が重複していた）
+- macOS は **ad-hoc 署名**を当てて Apple Silicon でも起動するようにした
+  （正式な署名は保留。Gatekeeper は通らないので隔離属性を外す手順が要る）
+- `ci.yml` は push / PR ごとに軽い検査と**パッケージのカナリア**（`--dir` まで）を回す。
+  重いビルドはタグのときだけ（Private リポジトリは Actions が課金枠を消費するため）
+- 版番号の直書き 5 か所が `package.json` とずれたらユニットテストが落ちる
+
 **Electron 製インストーラ**
 
 `npm run dist:installer` で `Autoinstall USB Creator Setup-<version>.exe` を 1 本作る。

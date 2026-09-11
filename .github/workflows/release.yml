@@ -1,0 +1,368 @@
+# タグ (`v*`) を押したらビルドして GitHub Release に載せる。
+#
+# 出力物は**インストーラとポータブル版の 2 つ**を、Windows と macOS の両方で:
+#
+#   Windows  AutoinstallUSBCreator-<v>-win-x64-Setup.exe     Electron 製インストーラ
+#            AutoinstallUSBCreator-<v>-win-x64-portable.exe  入れずにそのまま起動
+#   macOS    AutoinstallUSBCreator-<v>-mac-{x64,arm64}.dmg   インストーラ（/Applications へドラッグ）
+#            AutoinstallUSBCreator-<v>-mac-{x64,arm64}.zip   ポータブル（.app をそのまま）
+#
+# **ファイル名に空白を入れない。** GitHub は Release アセット名の空白をドットに
+# 置き換えるので、ビルドした名前と配った名前が食い違い、SHA256SUMS も合わなくなる
+# （`electron-builder.json` の `artifactName` を `[0-9A-Za-z._-]` だけにしてある）。
+#
+# **費用**（Private リポジトリなので課金枠を消費する）
+#   Linux $0.006 / Windows $0.010 / macOS $0.062（1 分・USD）。macOS は arm64 も Intel も同額。
+#   この構成だと 1 リリースで**枠の 7 割以上を macOS が占める**。削るならそこ。
+#   `workflow_dispatch` は**ビルドだけで Release を作らない**ので、試すときはそちらを使う。
+#   `timeout-minutes` は全ジョブに必ず入れる（既定は 6 時間。ハングすると枠を焼き切る）。
+
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch: # 手動実行は「ビルドが通るか」を見るだけ。Release は作らない
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false # リリースの途中で殺さない
+
+jobs:
+  # ------------------------------------------------------------------
+  # 版番号の突き合わせ。**ビルドを始める前に**落とす。
+  # ------------------------------------------------------------------
+  gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - run: npm ci
+
+      - id: check
+        name: タグと package.json を突き合わせる
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=$(node -p "require('./package.json').version")
+          app=$(node -p "require('./apps/desktop/package.json').version")
+          if [ "$root" != "$app" ]; then
+            echo "::error::root ($root) と apps/desktop ($app) の version がずれています"
+            exit 1
+          fi
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            tag="${GITHUB_REF_NAME#v}"
+            if [ "$tag" != "$app" ]; then
+              echo "::error::タグ v$tag と package.json の $app がずれています"
+              exit 1
+            fi
+          fi
+          echo "version=$app" >> "$GITHUB_OUTPUT"
+          echo "version = $app"
+
+      # package.json だけを見るゲートでは、ソースに直書きされた版番号のずれは
+      # **1 つも見えない**（user-data のコメントに焼かれる toolVersion など）。
+      # それを数えるのはこのテスト。
+      - name: 直書きの版番号が package.json と一致するか
+        run: npx vitest run apps/desktop/src/main/version-consistency.test.ts
+
+  # ------------------------------------------------------------------
+  # Windows: インストーラ + ポータブル
+  # ------------------------------------------------------------------
+  windows:
+    needs: gate
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      # electron の zip（約 144 MB）と electron-builder のツールセット。
+      # **`ELECTRON_CACHE` は electron-builder 26 では読まれない**ので、
+      # 既定の置き場所をそのまま保存する。
+      - name: electron のキャッシュを復元
+        id: cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: eb-win-v1-${{ hashFiles('package-lock.json') }}
+          restore-keys: eb-win-v1-
+
+      - run: npm ci
+
+      - name: ユニットテスト
+        shell: bash # sh を要求するテストがある（ci.yml のコメント参照）
+        run: npm run test:unit
+
+      - name: インストーラ（Electron 製）
+        run: npm run dist:installer
+
+      - name: ポータブル
+        run: npm run dist:win
+
+      - name: できたものを数える
+        shell: bash
+        env:
+          # `${{ }}` を run: の本文に直接埋めない（値がそのままシェルの字句になる）。
+          # env 経由なら必ず 1 つの文字列として渡る。
+          V: ${{ needs.gate.outputs.version }}
+        run: |
+          set -euo pipefail
+          v="$V"
+          cd apps/desktop/release
+          ls -la *.exe
+          test -f "AutoinstallUSBCreator-$v-win-x64-Setup.exe"    || { echo "::error::インストーラが無い"; exit 1; }
+          test -f "AutoinstallUSBCreator-$v-win-x64-portable.exe" || { echo "::error::ポータブルが無い"; exit 1; }
+          # 名前に GitHub が置換する文字（空白）が入っていないこと
+          if ls *.exe | grep -q ' '; then
+            echo "::error::ファイル名に空白がある（Release で名前が変わってしまう）"
+            exit 1
+          fi
+
+      - name: electron のキャッシュを保存
+        if: always() && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: eb-win-v1-${{ hashFiles('package-lock.json') }}
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist-windows
+          path: apps/desktop/release/*.exe
+          if-no-files-found: error
+          compression-level: 0 # 中身は LZMA2 済み。zip しても縮まず時間だけ損する
+          retention-days: 7 # 既定 90 日。Private の Artifact 無料枠は 500 MB しかない
+
+  # ------------------------------------------------------------------
+  # macOS: dmg（インストーラ） + zip（ポータブル）、x64 と arm64
+  # ------------------------------------------------------------------
+  macos:
+    needs: gate
+    # `macos-latest` は使わない（指す先が予告なく上がる）。
+    # 上げるときは runner-images の README で生きているラベルを確かめること
+    # （2026-09 時点: macos-15 / macos-26 と、それぞれの -intel が在る）。
+    runs-on: macos-15
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: electron のキャッシュを復元
+        id: cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+          key: eb-mac-v1-${{ hashFiles('package-lock.json') }}
+          restore-keys: eb-mac-v1-
+
+      - run: npm ci
+
+      # **ユニットテストは macOS では回さない。**
+      # `sha256sum` が無い（BSD は shasum）ほか、テストが PATH に置く python3 の
+      # シムが実物を隠すなど、macOS 固有の落ち方をする。
+      # 検査は Windows / Linux のジョブに任せ、ここは型とパッケージだけを見る。
+      - run: npm run typecheck
+
+      - name: dmg と zip（x64 / arm64）
+        run: npm run dist:mac
+
+      # **署名していないことの影響を、推測ではなく実測で残す。**
+      # Apple Silicon は署名の無い実行ファイルを起動しないので、
+      # `afterPack` フックで ad-hoc 署名を当てている。それが効いているかを見る。
+      - name: 署名とアーキを確かめる
+        shell: bash
+        run: |
+          set -euo pipefail
+          ls -la apps/desktop/release
+          found=0
+          for app in apps/desktop/release/mac*/*.app; do
+            [ -d "$app" ] || continue
+            found=$((found + 1))
+            echo "=== $app"
+            # 出力は**そのまま残す**。文言で判定しない（落とし穴 126）。
+            codesign -dv --verbose=4 "$app" 2>&1 || true
+            # 判定は終了コードで行う。ad-hoc でもここは通らなければならない。
+            codesign --verify --deep --strict "$app" \
+              || { echo "::error::$app の署名検証が通らない（Apple Silicon で起動しない）"; exit 1; }
+            # Gatekeeper は通らない想定。**通らないことを記録する**（落とさない）。
+            spctl -a -vv "$app" 2>&1 || echo "  （想定どおり Gatekeeper は通らない: 未署名配布）"
+            bin="$app/Contents/MacOS/Autoinstall USB Creator"
+            test -f "$bin" || { echo "::error::実行ファイルが無い: $bin"; exit 1; }
+            lipo -archs "$bin"
+          done
+          if [ "$found" -eq 0 ]; then
+            echo "::error::.app が 1 つも見つからない（走査が空振りしている）"
+            exit 1
+          fi
+          echo "確認した .app: $found 個"
+
+      # **起動するかは、この初回の実行までどこでも確かめていない。**
+      # ホスト型 macOS ランナーで GUI の Electron が上がるかが未知なので、
+      # いまは**記録するだけ**にして、ビルドは落とさない。
+      # 1 度でも起動を確認できたら、ここを判定に格上げすること。
+      - name: 起動するか（記録のみ・判定には使わない）
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -x
+          app=$(ls -d apps/desktop/release/mac-arm64/*.app 2>/dev/null | head -1 \
+                || ls -d apps/desktop/release/mac/*.app 2>/dev/null | head -1)
+          [ -n "$app" ] || exit 1
+          open "$app" || exit 1
+          sleep 8
+          pgrep -fl "Autoinstall USB Creator" || { echo "起動していない"; exit 1; }
+          pkill -f "Autoinstall USB Creator" || true
+
+      - name: できたものを数える
+        shell: bash
+        env:
+          V: ${{ needs.gate.outputs.version }}
+        run: |
+          set -euo pipefail
+          v="$V"
+          cd apps/desktop/release
+          ls -la *.dmg *.zip
+          for a in x64 arm64; do
+            test -f "AutoinstallUSBCreator-$v-mac-$a.dmg" || { echo "::error::$a の dmg が無い"; exit 1; }
+            test -f "AutoinstallUSBCreator-$v-mac-$a.zip" || { echo "::error::$a の zip が無い"; exit 1; }
+          done
+
+      - name: electron のキャッシュを保存
+        if: always() && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+          key: eb-mac-v1-${{ hashFiles('package-lock.json') }}
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist-macos
+          path: |
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  # ------------------------------------------------------------------
+  # Release を作る。**タグを押したときだけ**（手動実行はビルド確認どまり）
+  # ------------------------------------------------------------------
+  release:
+    needs: [gate, windows, macos]
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write # Release を作るのに要る唯一の権限
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          pattern: dist-*
+          merge-multiple: true
+
+      - name: 集まったものを確かめる
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          ls -la
+          n=$(ls | wc -l)
+          # Windows 2 本 + macOS 4 本
+          [ "$n" -eq 6 ] || { echo "::error::成果物が 6 個ではなく $n 個"; exit 1; }
+
+      - name: SHA256SUMS
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      # **リリースノートは CHANGELOG から取る。無ければ止める。**
+      # `generate_release_notes` は PR を元にするので、main へ直接コミットする
+      # このリポジトリではほぼ空になる。
+      - name: リリースノートを切り出す
+        shell: bash
+        env:
+          V: ${{ needs.gate.outputs.version }}
+        run: |
+          set -euo pipefail
+          v="$V"
+          # `## v0.1.0` / `## 0.1.0` のどちらでも拾い、次の `## ` の手前まで
+          awk -v ver="$v" '
+            $0 ~ "^## v?" ver "([^0-9]|$)" { on = 1; next }
+            on && /^## / { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then
+            echo "::error::CHANGELOG.md に '## v$v' の節がありません。"
+            echo "::error::'## vNext' を '## v$v' に直してからタグを打ち直してください。"
+            exit 1
+          fi
+          head -20 notes.md
+
+      - name: Release を作る
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # gh は「ドラフトで作る → 全部上げる → 公開」の順に動くので、
+          # 途中で落ちても中途半端に公開された Release は残らない。
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file notes.md \
+            --verify-tag
+
+      - name: 配った物を書き出す
+        shell: bash
+        run: |
+          {
+            echo "### $GITHUB_REF_NAME"
+            echo
+            echo '```'
+            cat dist/SHA256SUMS.txt
+            echo '```'
+            echo
+            echo "**このリポジトリは Private です。** Release のアセットは"
+            echo "ログインしていない第三者からは 404 になります（\`curl -LO\` も同じ）。"
+          } >> "$GITHUB_STEP_SUMMARY"

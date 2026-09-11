@@ -1,0 +1,120 @@
+# 軽い検査。push と PR のたびに回す。
+#
+# **重いビルド（LZMA2 で 2 分、梱包で 3 分）はここでは回さない。**
+# このリポジトリは Private なので Actions はアカウントの課金枠を消費し、
+# とくに macOS は 1 分 $0.062（Linux の約 10 倍）かかる。
+# フルビルドとリリースは `release.yml` がタグのときだけ走らせる。
+#
+# ただし「タグを打って初めてパッケージの壊れに気づく」のは避けたいので、
+# **`--dir` までのパッケージ（カナリア）はここで毎回通す**。
+# `files` の指定漏れ・asar の中身・`extraResources` の解決は
+# パッケージしないと出ない壊れ方で（落とし穴 133 / 134）、
+# そこだけなら圧縮を通さずに数十秒で見られる。
+
+name: ci
+
+on:
+  push:
+    # branches だけを書くと、タグの push はこのワークフローに一致しない
+    # （タグは release.yml が拾う）
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+# 既定を読み取りだけにする。このワークフローは何も書かない。
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Linux は 1 分 $0.006 と一番安いので、デバイスに触らない検査はこちらに寄せる。
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22' # engines: node >=22（node:zlib の crc32 を使う）
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      # ルートで 1 回。npm workspaces なので packages/* と apps/* が全部入る。
+      # **`--omit=dev` にしない**（electron / electron-builder / vitest は全部 devDependency）。
+      - run: npm ci
+
+      - name: typecheck（7 つの tsconfig）
+        run: npm run typecheck
+
+      # ISO も実デバイスも触らない番人。数秒で終わる。
+      - name: RAID / bond の生成検証
+        run: npm run e2e:raid-bond
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - run: npm ci
+
+      # **`shell: bash` が要る。** 2 つのテストが `spawnSync('sh', …)` で
+      # 生成したシェルを本物の sh に食わせており、Windows ランナーの既定 (pwsh) では
+      # `sh` が PATH に無くて 19 件落ちる（手元の PowerShell で実測）。
+      # しかもそのうち 1 件は「改ざん検知が働く」ことを見るテストの**成功側だけ**が落ち、
+      # 失敗側は sh が無いこと自体で非ゼロになるので**誤った理由で緑になる**（落とし穴 116）。
+      - name: ユニットテスト（67 ファイル / 1300 件）
+        shell: bash
+        run: npm run test:unit
+
+      - name: ESP 複製の late-command を本物の sh で走らせる
+        shell: bash
+        run: npm run e2e:esp-mirror
+
+      - name: uninstall.ps1 を本物の PowerShell で走らせる
+        shell: bash
+        run: npm run e2e:uninstall-script
+
+      # カナリア。圧縮も梱包もせず、**パッケージできることだけ**を見る。
+      # `--dir` は electron-builder の CLI が target を DIR に上書きするので、
+      # `electron-builder.json` の win.target（portable）は使われない。
+      - name: パッケージのカナリア（--dir のみ・圧縮しない）
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd apps/desktop
+          npx electron-vite build
+          npx electron-builder --win --dir \
+            --config electron-builder.json \
+            -c.electronVersion="$(node -p "require('electron/package.json').version")" \
+            -c.directories.output=release/canary
+
+      # **「できた」で終わらせない。** 中身が入っているかまで見る（落とし穴 134）。
+      - name: 中身を数える
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="apps/desktop/release/canary/win-unpacked"
+          test -f "$d/Autoinstall USB Creator.exe"          || { echo "::error::本体の exe が無い"; exit 1; }
+          test -f "$d/resources/app.asar"                    || { echo "::error::app.asar が無い"; exit 1; }
+          # extraResources で同梱されるサンプル（落とし穴 134 はこれを入れ忘れた話）
+          test -f "$d/resources/samples/ip-only.json"        || { echo "::error::samples が同梱されていない"; exit 1; }
+          # インストーラが本体の asar に紛れ込んでいないこと（files の "!out/installer/**/*"）
+          if npx asar list "$d/resources/app.asar" | grep -q '/installer/'; then
+            echo "::error::app.asar にインストーラが入っている（files の除外が効いていない）"
+            exit 1
+          fi
+          echo "ok: $(du -sh "$d" | cut -f1)"

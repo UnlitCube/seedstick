@@ -3,6 +3,7 @@
   "appId": "app.autoinstall-ui.desktop",
   "productName": "Autoinstall USB Creator",
   "copyright": "Copyright © 2026",
+  "publish": null,
   "directories": {
     "output": "release",
     "buildResources": "build"
@@ -11,24 +12,14 @@
   "extraResources": [{ "from": "../../samples", "to": "samples", "filter": ["**/*"] }],
   "asarUnpack": [],
   "npmRebuild": false,
+  "afterPack": "./scripts/after-pack.cjs",
   "win": {
-    "target": [
-      { "target": "nsis", "arch": ["x64"] },
-      { "target": "portable", "arch": ["x64"] }
-    ],
-    "artifactName": "${productName}-${version}-win-${arch}.${ext}",
+    "target": [{ "target": "portable", "arch": ["x64"] }],
+    "artifactName": "AutoinstallUSBCreator-${version}-win-${arch}-portable.${ext}",
     "requestedExecutionLevel": "asInvoker"
   },
-  "nsis": {
-    "oneClick": false,
-    "allowToChangeInstallationDirectory": true,
-    "perMachine": false,
-    "createDesktopShortcut": true,
-    "shortcutName": "Autoinstall USB Creator",
-    "artifactName": "${productName}-${version}-win-${arch}-Setup.${ext}"
-  },
   "portable": {
-    "artifactName": "${productName}-${version}-win-${arch}-portable.${ext}"
+    "artifactName": "AutoinstallUSBCreator-${version}-win-${arch}-portable.${ext}"
   },
   "mac": {
     "target": [
@@ -36,11 +27,19 @@
       { "target": "zip", "arch": ["x64", "arm64"] }
     ],
     "category": "public.app-category.utilities",
-    "artifactName": "${productName}-${version}-mac-${arch}.${ext}",
-    "hardenedRuntime": true,
+    "artifactName": "AutoinstallUSBCreator-${version}-mac-${arch}.${ext}",
+    "identity": null,
+    "hardenedRuntime": false,
     "gatekeeperAssess": false,
-    "entitlements": "build/entitlements.mac.plist",
-    "entitlementsInherit": "build/entitlements.mac.plist"
+    "notarize": false
+  },
+  "dmg": {
+    "artifactName": "AutoinstallUSBCreator-${version}-mac-${arch}.${ext}",
+    "window": { "width": 540, "height": 380 },
+    "contents": [
+      { "x": 150, "y": 205, "type": "file" },
+      { "x": 390, "y": 205, "type": "link", "path": "/Applications" }
+    ]
   },
   "linux": {
     "target": [
@@ -48,7 +47,7 @@
       { "target": "deb", "arch": ["x64"] }
     ],
     "category": "Utility",
-    "artifactName": "${productName}-${version}-linux-${arch}.${ext}",
+    "artifactName": "AutoinstallUSBCreator-${version}-linux-${arch}.${ext}",
     "desktop": {
       "entry": {
         "Name": "Autoinstall USB Creator",

@@ -101,9 +101,60 @@ npm run dist:win   # パッケージ（macOS は dist:mac、Linux は dist:linux
 npm run dist:installer  # Windows 向けの Electron 製インストーラを 1 本の exe に
 ```
 
-`dist:installer` は `apps/desktop/release/Autoinstall USB Creator Setup-<version>.exe`
-を作る（5〜6 分）。**このユーザーにだけ**インストールするので管理者権限は要らない。
-削除は Windows の「アプリと機能」から。
+## 配布
+
+出力物は **インストーラ**と**ポータブル版**の 2 つを、Windows と macOS の両方で作る。
+
+| | インストーラ | ポータブル |
+|---|---|---|
+| Windows | `AutoinstallUSBCreator-<v>-win-x64-Setup.exe` | `AutoinstallUSBCreator-<v>-win-x64-portable.exe` |
+| macOS | `AutoinstallUSBCreator-<v>-mac-{x64,arm64}.dmg` | `AutoinstallUSBCreator-<v>-mac-{x64,arm64}.zip` |
+
+Windows のインストーラは**このユーザーにだけ**入れる（`%LOCALAPPDATA%\Programs`）ので
+管理者権限が要らない。削除は Windows の「アプリと機能」から。
+macOS の dmg は `/Applications` へドラッグする従来どおりの形。
+
+### リリースのしかた
+
+`CHANGELOG.md` の `## vNext` を `## v0.2.0` に直し、版番号を上げてタグを押す:
+
+```bash
+# 版番号は package.json だけでなくソースにも直書きされている。
+# 上げ忘れは npm run test:unit が赤くして教える（version-consistency.test.ts）
+npm run test:unit
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+`.github/workflows/release.yml` が Windows と macOS でビルドし、
+6 つの成果物と `SHA256SUMS.txt` を GitHub Release に載せる。
+**手動実行 (`workflow_dispatch`) はビルドが通るかを見るだけで、Release は作らない。**
+
+### 署名していないことの影響
+
+コード署名は保留している。そのため:
+
+- **Windows**: 初回起動で SmartScreen の「WindowsによってPCが保護されました」が出る。
+  「詳細情報」→「実行」で進める。
+- **macOS**: Gatekeeper は通らない。Apple Silicon で起動できるように
+  **ad-hoc 署名**だけは当ててある（`apps/desktop/scripts/after-pack.cjs`）が、
+  隔離属性は自分で外す必要がある:
+
+  ```bash
+  xattr -dr com.apple.quarantine "/Applications/Autoinstall USB Creator.app"
+  ```
+
+  macOS Sequoia (15) 以降は **Control-クリック →「開く」での回避が廃止**されたので、
+  システム設定 →「プライバシーとセキュリティ」から許可するか、上のコマンドを使う。
+
+### 受け取り方（このリポジトリは Private）
+
+**Private リポジトリの Release アセットは、ログインしていない第三者からは 404 になる**
+（ブラウザでも `curl -LO` でも同じ）。受け取る人には次のどれかが要る:
+
+- このリポジトリへの read 権限を持つ GitHub アカウント（`gh release download` が使える）
+- または、配布専用の Public リポジトリに Release だけを置く（ソースは Private のまま）
+
+`SHA256SUMS.txt` も同じ認証経路で配る以上、**改ざん検出ではなく破損検出**として読むこと。
 
 | ドキュメント | 内容 |
 |---|---|

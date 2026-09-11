@@ -3,6 +3,7 @@
   "appId": "app.autoinstall-ui.installer",
   "productName": "Autoinstall USB Creator Setup",
   "copyright": "Copyright © 2026",
+  "publish": null,
   "directories": {
     "output": "release",
     "buildResources": "installer-resources"
@@ -12,23 +13,46 @@
     "main": "out/installer/main/index.js",
     "productName": "Autoinstall USB Creator Setup"
   },
-  "files": ["out/installer/**/*", "!**/*.map", "package.json"],
+  "files": [
+    "out/installer/**/*",
+    "!**/*.map",
+    "package.json"
+  ],
   "extraResources": [
-    { "from": "installer-resources/payload.7z", "to": "payload.7z" },
-    { "from": "installer-resources/7za.exe", "to": "7za.exe" },
-    { "from": "installer-resources/icon.ico", "to": "icon.ico" },
-    { "from": "installer-resources/payload-meta.json", "to": "payload-meta.json" }
+    {
+      "from": "installer-resources/payload.7z",
+      "to": "payload.7z"
+    },
+    {
+      "from": "installer-resources/7za.exe",
+      "to": "7za.exe"
+    },
+    {
+      "from": "installer-resources/icon.ico",
+      "to": "icon.ico"
+    },
+    {
+      "from": "installer-resources/payload-meta.json",
+      "to": "payload-meta.json"
+    }
   ],
   "asar": true,
   "npmRebuild": false,
   "compression": "maximum",
   "win": {
-    "target": [{ "target": "portable", "arch": ["x64"] }],
+    "target": [
+      {
+        "target": "portable",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
     "icon": "installer-resources/icon.ico",
     "requestedExecutionLevel": "asInvoker"
   },
   "portable": {
-    "artifactName": "${productName}-${version}.${ext}",
+    "artifactName": "AutoinstallUSBCreator-${version}-win-x64-Setup.${ext}",
     "requestExecutionLevel": "user",
     "unicode": true,
     "useZip": false
