@@ -10,7 +10,7 @@ export { parseLsblk, mapTransport } from './linux.js'
 
 export class UnsupportedPlatformError extends Error {
   constructor(platform: string) {
-    super(`このプラットフォームには対応していません: ${platform}`)
+    super(`unsupported platform: ${platform}`)
     this.name = 'UnsupportedPlatformError'
   }
 }

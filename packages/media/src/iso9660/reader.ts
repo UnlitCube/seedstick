@@ -132,14 +132,14 @@ export async function readIsoStructure(dev: BlockDevice): Promise<IsoStructure> 
     const sector = FIRST_VD_SECTOR + i
     const buf = await dev.read(sector * ISO_SECTOR_SIZE, ISO_SECTOR_SIZE)
     if (buf.subarray(1, 6).toString('latin1') !== ISO_MAGIC) {
-      if (i === 0) throw new Error('ISO9660 の署名 (CD001) が見つかりません。Ubuntu の ISO ファイルではない可能性があります。')
+      if (i === 0) throw new Error('no ISO 9660 signature (CD001) found; this may not be an Ubuntu ISO file')
       break
     }
     const type = buf[0]!
     descriptors.push({ sector, type })
     if (type === 1 && !pvd) {
       const root = parseDirectoryRecord(buf, 156, sector * ISO_SECTOR_SIZE, false)
-      if (!root) throw new Error('ISO9660 のルートディレクトリレコードを読めません。')
+      if (!root) throw new Error('cannot read the ISO 9660 root directory record')
       pvd = {
         sector,
         volumeId: buf.subarray(40, 72).toString('latin1').trimEnd(),
@@ -161,7 +161,7 @@ export async function readIsoStructure(dev: BlockDevice): Promise<IsoStructure> 
       break
     }
   }
-  if (!pvd) throw new Error('ISO9660 の Primary Volume Descriptor が見つかりません。')
+  if (!pvd) throw new Error('no ISO 9660 Primary Volume Descriptor found')
 
   let elTorito: ElToritoInfo | null = null
   if (bootCatalogLba !== null) {
@@ -196,7 +196,7 @@ export async function readDirectory(
   dir: DirectoryRecord,
   joliet = false,
 ): Promise<DirectoryRecord[]> {
-  if (!dir.isDirectory) throw new Error(`ディレクトリではありません: ${dir.name}`)
+  if (!dir.isDirectory) throw new Error(`not a directory: ${dir.name}`)
   const buf = await dev.read(dir.extent * ISO_SECTOR_SIZE, dir.size)
   const out: DirectoryRecord[] = []
   let off = 0
@@ -255,6 +255,6 @@ export async function resolvePath(
 
 /** ファイルの内容を読む。 */
 export async function readFile(dev: BlockDevice, rec: DirectoryRecord): Promise<Buffer> {
-  if (rec.isDirectory) throw new Error(`ファイルではありません: ${rec.name}`)
+  if (rec.isDirectory) throw new Error(`not a file: ${rec.name}`)
   return dev.read(rec.extent * ISO_SECTOR_SIZE, rec.size)
 }

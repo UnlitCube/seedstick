@@ -60,15 +60,7 @@ interface Allowed {
  *   どちらも「例外として書いておく」と、実態と食い違ったまま残るので入れていない
  *   （未使用の例外は下のテストで落ちる）。
  */
-const ALLOWLIST: readonly Allowed[] = [
-  {
-    file: 'components/ErrorBoundary.tsx',
-    text: '画面の描画に失敗しました',
-    reason:
-      '画面には出ない。DevTools のコンソールにだけ出す開発者向けのログで、' +
-      '利用者に見せる文言は t(\'boundary.*\') 側にある。',
-  },
-]
+const ALLOWLIST: readonly Allowed[] = []
 
 /**
  * renderer のソースを raw で読む。`node:fs` を使わないのは、renderer の tsconfig に

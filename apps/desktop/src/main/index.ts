@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { APP_ID, createTranslator } from '@autoinstall/shared'
 import { disposeIpc, isWriteInProgress, registerIpc, shutdownWrite } from './ipc.js'
 import { getSettings } from './settings.js'
+import { applyAppMenu } from './app-menu.js'
 
 // アプリ本体。GUI は通常権限で動き、USB への書き込みだけを昇格した子プロセスに任せる
 // （write-supervisor.ts）。この分離があるので、アプリ全体を管理者で動かす必要がない。
@@ -130,6 +131,7 @@ if (!app.requestSingleInstanceLock()) {
 
   void app.whenReady().then(() => {
     registerIpc()
+    void getSettings().then((s) => applyAppMenu(s.locale))
     createWindow()
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()

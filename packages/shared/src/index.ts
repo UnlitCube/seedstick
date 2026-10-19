@@ -2,6 +2,12 @@
 
 export const APP_ID = 'jp.unlit-cube.seedstick'
 export const APP_NAME = 'Seedstick'
+/** 配布サイト（GitHub Pages）。About と macOS の About パネルから開く。 */
+export const SITE_URL = 'https://unlitcube.github.io/seedstick/'
+/** ソースコード。 */
+export const REPO_URL = 'https://github.com/UnlitCube/seedstick'
+/** 不具合の報告先。 */
+export const ISSUES_URL = 'https://github.com/UnlitCube/seedstick/issues'
 
 export * from './autoinstall/advanced.js'
 export * from './autoinstall/model.js'

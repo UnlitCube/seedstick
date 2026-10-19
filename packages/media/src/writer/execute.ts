@@ -44,7 +44,7 @@ export class WriteCancelledError extends Error {
   readonly text: LocalizedText = localized('write.cancelledBody')
 
   constructor() {
-    super('書き込みがキャンセルされました。USB メモリの内容は壊れています。作り直してください。')
+    super('write cancelled; the USB drive is now incomplete and must be written again')
     this.name = 'WriteCancelledError'
   }
 }
@@ -134,7 +134,7 @@ function assertAligned(op: WriteOp): void {
     // ただし `op.label` は LocalizedText なので、そのまま埋めると "[object Object]" になる。
     // 手順を識別できればよいのでキーを出す。
     throw new Error(
-      `書き込みがセクタ境界に揃っていません: "${op.label.key}" offset=${op.diskOffset} length=${len}`,
+      `write is not sector-aligned: "${op.label.key}" offset=${op.diskOffset} length=${len}`,
     )
   }
 }
@@ -275,7 +275,7 @@ export async function executeWritePlan(options: ExecuteOptions): Promise<WriteRe
         throw new VerificationError(
           // 開発者向けの生の文言。`r.label` は LocalizedText なのでキーを出す
           // （そのまま埋めると "[object Object]" になる）。
-          `書き込み結果が一致しません: ${r.label.key} (オフセット ${r.diskOffset})。USB メモリが故障しているか、書き込み中に抜かれた可能性があります。`,
+          `read-back mismatch: ${r.label.key} (offset ${r.diskOffset}). The USB drive may be faulty or was removed during the write.`,
           r.diskOffset,
           localized('write.verifyMismatch', { offset: r.diskOffset }),
         )

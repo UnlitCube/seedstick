@@ -114,7 +114,7 @@ describe('ReadyToReview を出す条件', () => {
       phase: 'iso',
       bytesDone: 1,
       bytesTotal: 2,
-      label: localized('write.title'),
+      label: localized('common.loading'),
       bytesPerSecond: null,
       etaSeconds: null,
     }
@@ -124,7 +124,7 @@ describe('ReadyToReview を出す条件', () => {
 
   it('書き込みの準備中も出さない', () => {
     useStore.setState({
-      writeStatus: { state: 'preparing', message: localized('write.title') },
+      writeStatus: { state: 'preparing', message: localized('common.loading') },
     })
     expect(shown(render()), '準備中にステップ移動の導線が出ている').toBe(false)
   })

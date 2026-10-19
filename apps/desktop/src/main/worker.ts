@@ -11,7 +11,7 @@ async function main(): Promise<void> {
   if (!jobPath) {
     // 開発者向け診断。supervisor は spawnDirect / spawnElevated のどちらでも必ず
     // ジョブファイルを渡すので、手でワーカーを叩いたときにしか到達しない。
-    process.stderr.write('ジョブファイルが指定されていません。\n')
+    process.stderr.write('no job file given\n')
     process.exit(2)
   }
   const job = JSON.parse(await readFile(jobPath, 'utf8')) as WorkerJob

@@ -205,7 +205,7 @@ export function findPreset(id: string): PostInstallPreset | undefined {
 
 export function getPreset(id: PostInstallPresetId): PostInstallPreset {
   const found = POST_INSTALL_PRESETS.find((p) => p.id === id)
-  if (!found) throw new Error(`未知のプリセット: ${id}`)
+  if (!found) throw new Error(`unknown preset: ${id}`)
   return found
 }
 

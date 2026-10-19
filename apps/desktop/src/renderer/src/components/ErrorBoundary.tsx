@@ -32,7 +32,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   override componentDidCatch(error: Error, info: ErrorInfo): void {
     // main 側のログにも残す。白画面のままだと利用者からは何も分からない。
-    console.error('画面の描画に失敗しました', error, info.componentStack)
+    console.error('render failed', error, info.componentStack)
   }
 
   private readonly reset = (): void => {

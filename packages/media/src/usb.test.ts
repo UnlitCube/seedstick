@@ -129,10 +129,10 @@ describe.each(CASES)('%s の USB 作成', (name) => {
 
   it('パッチは grub.cfg セクタ / レコード 2 つ / md5sum の 4 か所だけ', () => {
     expect(w.patchPlan.patches.map((p) => p.label)).toEqual([
-      'grub.cfg の内容',
-      'grub.cfg のサイズ (ISO9660)',
-      'grub.cfg のサイズ (Joliet)',
-      'md5sum.txt の grub.cfg 行',
+      'grub.cfg contents',
+      'grub.cfg size (ISO9660)',
+      'grub.cfg size (Joliet)',
+      'grub.cfg line in md5sum.txt',
     ])
     expect(w.patchPlan.newGrubCfg).toContain('autoinstall')
     expect(w.patchPlan.patchedKernelLines).toBeGreaterThan(0)
@@ -360,7 +360,7 @@ describe('レイアウトの安全性', () => {
     expect(text.params?.deviceSize).toMatch(/^[\d.]+ GB$/)
     expect(formatLocalized('en', text)).toMatch(/needs at least [\d.]+ GB/)
     // 開発者向けの message は日本語のまま残す（ログとバグ報告の突き合わせに使う）
-    expect(err.message).toMatch(/容量が足りません/)
+    expect(err.message).toMatch(/too small/)
   })
 
   it('途中で切れた ISO を拒否する（重なった GPT を作らない）', async () => {
@@ -395,7 +395,7 @@ describe('レイアウトの安全性', () => {
     expect(text.params?.fileSize).toBe('0.10 GB')
     // 英語 UI でも「どこまで続いているはずか」が読める
     expect(formatLocalized('en', text)).toMatch(/truncated.*ISO9660.*only 0\.10 GB/s)
-    expect((err as LayoutError).message).toMatch(/途中で切れています/)
+    expect((err as LayoutError).message).toMatch(/truncated/)
   })
 
   it('必要容量の計算が実際の計画と整合する', async () => {

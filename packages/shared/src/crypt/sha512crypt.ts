@@ -93,10 +93,10 @@ export function generateSalt(length = MAX_SALT_LENGTH): string {
 export function sha512Crypt(password: string, options: Sha512CryptOptions = {}): string {
   const rounds = options.rounds ?? DEFAULT_ROUNDS
   if (!Number.isInteger(rounds) || rounds < MIN_ROUNDS || rounds > MAX_ROUNDS) {
-    throw new RangeError(`rounds は ${MIN_ROUNDS}〜${MAX_ROUNDS} の整数である必要があります: ${rounds}`)
+    throw new RangeError(`rounds must be an integer from ${MIN_ROUNDS} to ${MAX_ROUNDS}: ${rounds}`)
   }
   const rawSalt = options.salt ?? generateSalt()
-  if (rawSalt.includes('$')) throw new Error('salt に "$" は使えません')
+  if (rawSalt.includes('$')) throw new Error('the salt must not contain "$"')
   const salt = Buffer.from(rawSalt.slice(0, MAX_SALT_LENGTH), 'utf8')
   const pw = Buffer.from(password, 'utf8')
 

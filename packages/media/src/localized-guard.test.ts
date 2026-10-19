@@ -540,14 +540,8 @@ interface Allowed {
  * （同じファイルに新しい直書きが増えたら、それは検出したい）。
  */
 const ALLOWLIST: readonly Allowed[] = [
-  {
-    file: 'packages/media/src/isopatch/index.ts',
-    text: 'grub.cfg の内容',
-    reason:
-      'ISO のインプレース改変 1 か所ぶんの名前 (`Patch.label`)。画面には出ない。' +
-      'ジョブ JSON と読み戻し検証の失敗メッセージ（開発者向けの `message`）にだけ現れる。' +
-      '進捗バーに出るのは `WriteOp.label`（LocalizedText）のほうで、別物。',
-  },
+  // 以前は isopatch の `Patch.label`（'grub.cfg の内容' など）を載せていた。開発者向けの
+  // 診断なので英語にした（OSS の貢献者と ja 以外の利用者の両方が読める）。いまは空。
 ]
 
 function listSources(): string[] {

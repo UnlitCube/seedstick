@@ -267,5 +267,10 @@ export interface AutoinstallApi {
 
   // --- その他 ---
   openExternal(url: string): Promise<void>
+  /**
+   * 同梱のライセンス全文 (`license`) / 第三者のライセンス (`notices`) を OS の既定のアプリで開く。
+   * 開けなければ false（開発中に生成していない等）。
+   */
+  openLegalDocument(kind: 'license' | 'notices'): Promise<boolean>
   readTextFile(): Promise<{ name: string; content: string } | null>
 }

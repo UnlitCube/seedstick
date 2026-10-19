@@ -64,7 +64,7 @@ export function readFatImage(img: Buffer): FatFilesystem {
     // 訪問済みクラスタも覚えて、循環している FAT を検出する。
     while (c >= 2 && c < eoc && parts.length <= clusterCount) {
       if (seen.has(c)) {
-        throw new Error(`FAT のクラスタ鎖が循環しています (クラスタ ${c})。`)
+        throw new Error(`the FAT cluster chain loops (cluster ${c})`)
       }
       seen.add(c)
       parts.push(clusterBytes(c))
@@ -72,7 +72,7 @@ export function readFatImage(img: Buffer): FatFilesystem {
     }
     if (parts.length > clusterCount) {
       // 黙って切り詰めない。切り詰めると読み戻し検証が「一致した」と言ってしまう。
-      throw new Error('FAT のクラスタ鎖がボリュームの容量を超えています。')
+      throw new Error('the FAT cluster chain is longer than the volume')
     }
     return Buffer.concat(parts).subarray(0, size)
   }

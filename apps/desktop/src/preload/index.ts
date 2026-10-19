@@ -114,6 +114,8 @@ const api: AutoinstallApi = {
   saveSettings: (next: AppSettings) => ipcRenderer.invoke('saveSettings', next) as Promise<AppSettings>,
 
   openExternal: (url: string) => ipcRenderer.invoke('openExternal', url) as Promise<void>,
+  openLegalDocument: (kind: 'license' | 'notices') =>
+    ipcRenderer.invoke('openLegalDocument', kind) as Promise<boolean>,
   readTextFile: () =>
     ipcRenderer.invoke('readTextFile') as Promise<{ name: string; content: string } | null>,
 }

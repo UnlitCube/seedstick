@@ -21,7 +21,7 @@ export class DeviceWriteStalledError extends Error {
   readonly text: LocalizedText = localized('write.deviceStalled')
 
   constructor(readonly offset: number) {
-    super(`デバイスへの書き込みが進みませんでした (offset=${offset})。USB メモリが抜かれた可能性があります。`)
+    super(`write to the device made no progress (offset=${offset}). The USB drive may have been removed.`)
     this.name = 'DeviceWriteStalledError'
   }
 }

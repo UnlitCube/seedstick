@@ -181,7 +181,7 @@ describe('Windows の列挙', () => {
   it('ディスク番号を取り出す', () => {
     expect(diskNumberFromId('\\\\.\\PhysicalDrive3')).toBe(3)
     expect(diskNumberFromId('\\\\.\\physicaldrive12')).toBe(12)
-    expect(() => diskNumberFromId('/dev/sdb')).toThrow(/ディスク ID/)
+    expect(() => diskNumberFromId('/dev/sdb')).toThrow(/not a Windows disk ID/)
   })
 })
 

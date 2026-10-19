@@ -112,7 +112,7 @@ export function parseWindowsDisks(json: string): RemovableDevice[] {
 /** `\\.\PhysicalDriveN` からディスク番号を取り出す。 */
 export function diskNumberFromId(id: string): number {
   const m = /PhysicalDrive(\d+)$/i.exec(id)
-  if (!m) throw new Error(`Windows のディスク ID として認識できません: ${id}`)
+  if (!m) throw new Error(`not a Windows disk ID: ${id}`)
   return Number(m[1])
 }
 

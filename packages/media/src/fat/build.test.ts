@@ -173,12 +173,12 @@ describe('buildFatImage', () => {
       name: `a-rather-long-provision-file-name-${i}.conf`,
       content: Buffer.from('x'),
     }))
-    expect(() => build(64 * 1024 * 1024, files)).toThrow(/ルートディレクトリ/)
+    expect(() => build(64 * 1024 * 1024, files)).toThrow(/root directory entries/)
   })
 
   it('容量を超えるファイルは分かるエラーになる', () => {
     expect(() => build(16 * 1024 * 1024, [{ name: 'huge.bin', content: Buffer.alloc(20 * 1024 * 1024) }])).toThrow(
-      /空き容量/,
+      /not enough free space/,
     )
   })
 

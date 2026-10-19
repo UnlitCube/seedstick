@@ -40,6 +40,8 @@ const ja = {
 
   'welcome.title': 'Seedstick',
   'welcome.tagline': 'Ubuntu Server の無人インストール USB を、ISO を再構築せずに作る',
+  'welcome.disclaimer':
+    'MIT ライセンスのオープンソースソフトウェアです。Canonical Ltd. とは提携・承認の関係にありません。Ubuntu は Canonical Ltd. の登録商標です。',
   'welcome.version': 'バージョン {version}',
   'welcome.upgrade': '{version} が既にインストールされています。上書きして更新します。',
   'welcome.f1.title': 'ISO はそのまま',
@@ -149,6 +151,8 @@ const en = {
   'welcome.title': 'Seedstick',
   'welcome.tagline':
     'Build an unattended Ubuntu Server install USB without rebuilding the ISO',
+  'welcome.disclaimer':
+    'Open-source software under the MIT License. Not affiliated with or endorsed by Canonical Ltd. Ubuntu is a registered trademark of Canonical Ltd.',
   'welcome.version': 'Version {version}',
   'welcome.upgrade': '{version} is already installed. It will be replaced.',
   'welcome.f1.title': 'The ISO stays untouched',

@@ -20,7 +20,7 @@ function profilesDir(): string {
 
 function profilePath(id: string): string {
   // id は自分で発行した UUID のみ。renderer から来た値をそのままパスに使わない。
-  if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error(`プロファイル ID が不正です: ${id}`)
+  if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error(`invalid profile ID: ${id}`)
   return join(profilesDir(), `${id}.json`)
 }
 

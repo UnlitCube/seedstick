@@ -50,6 +50,7 @@ import { rememberChosenPayload, wasChosenByUser } from './payload-allowlist.js'
 import * as profileStore from './profile-store.js'
 import { buildSeedBundle, SeedBuildError } from './seed-builder.js'
 import { getSettings, saveSettings } from './settings.js'
+import { applyAppMenu } from './app-menu.js'
 import { WriteSupervisor } from './write-supervisor.js'
 
 // main ⇄ renderer の唯一の境界。renderer から来る値は一切信用しない。
@@ -120,7 +121,7 @@ function broadcast(channel: string, payload: unknown): void {
 
 function mainWindow(): BrowserWindow {
   const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
-  if (!win) throw new Error('ウィンドウがありません。')
+  if (!win) throw new Error('no window')
   return win
 }
 
@@ -348,7 +349,7 @@ export function registerIpc(): void {
     // renderer が string 以外を送ってきた場合のガード。文言は「バグ／攻撃の検出」なので
     // 訳す価値が無い。総括だけ訳し、生の理由は開発者向けの詳細として添える。
     if (typeof path !== 'string') {
-      return { ok: false, reason: 'invalid', text: localized('error.unknown'), detail: 'パスが不正です。' }
+      return { ok: false, reason: 'invalid', text: localized('error.unknown'), detail: 'invalid path' }
     }
     const opened = await openIso(path)
     if (opened.ok) {
@@ -360,7 +361,7 @@ export function registerIpc(): void {
 
   ipcMain.handle('computeIsoChecksum', async (_e, path: unknown) => {
     if (typeof path !== 'string' || !allowedIsoPaths.has(path)) {
-      throw new Error('この ISO は選択されていません。')
+      throw new Error('this ISO was not chosen in the dialog')
     }
     return computeChecksum(path, (bytesDone, bytesTotal) => {
       broadcast('checksum-progress', { bytesDone, bytesTotal })
@@ -405,7 +406,7 @@ export function registerIpc(): void {
   })
 
   ipcMain.handle('hashPassword', (_e, plain: unknown) => {
-    if (typeof plain !== 'string') throw new Error('パスワードが不正です。')
+    if (typeof plain !== 'string') throw new Error('invalid password value')
     // ハッシュ化は main 側で行い、平文が renderer 以外に残らないようにする
     return sha512Crypt(plain)
   })
@@ -414,13 +415,13 @@ export function registerIpc(): void {
   ipcMain.handle('listProfiles', () => profileStore.listProfiles())
 
   ipcMain.handle('saveNamedProfile', (_e, id: unknown, name: unknown, profile: AutoinstallProfile) => {
-    if (id !== null && typeof id !== 'string') throw new Error('プロファイル ID が不正です。')
-    if (typeof name !== 'string' || !name.trim()) throw new Error('プロファイル名を入力してください。')
+    if (id !== null && typeof id !== 'string') throw new Error('invalid profile ID')
+    if (typeof name !== 'string' || !name.trim()) throw new Error('profile name is empty')
     return profileStore.saveProfile(id, name.trim(), profile)
   })
 
   ipcMain.handle('loadNamedProfile', async (_e, id: unknown) => {
-    if (typeof id !== 'string') throw new Error('プロファイル ID が不正です。')
+    if (typeof id !== 'string') throw new Error('invalid profile ID')
     const loaded = await profileStore.loadProfile(id)
     // 保存済みプロファイルを開いた場合も同梱ファイルを読めるようにする。
     // ここを通さないと、アプリを再起動したあと「一度も書き込めない」状態になる。
@@ -429,18 +430,18 @@ export function registerIpc(): void {
   })
 
   ipcMain.handle('deleteNamedProfile', (_e, id: unknown) => {
-    if (typeof id !== 'string') throw new Error('プロファイル ID が不正です。')
+    if (typeof id !== 'string') throw new Error('invalid profile ID')
     return profileStore.deleteProfile(id)
   })
 
   ipcMain.handle('duplicateNamedProfile', (_e, id: unknown, newName: unknown) => {
-    if (typeof id !== 'string' || typeof newName !== 'string') throw new Error('引数が不正です。')
-    return profileStore.duplicateProfile(id, newName.trim() || 'コピー')
+    if (typeof id !== 'string' || typeof newName !== 'string') throw new Error('invalid arguments')
+    return profileStore.duplicateProfile(id, newName.trim() || 'Copy')
   })
 
   ipcMain.handle('renameNamedProfile', (_e, id: unknown, newName: unknown) => {
-    if (typeof id !== 'string' || typeof newName !== 'string') throw new Error('引数が不正です。')
-    if (!newName.trim()) throw new Error('プロファイル名を入力してください。')
+    if (typeof id !== 'string' || typeof newName !== 'string') throw new Error('invalid arguments')
+    if (!newName.trim()) throw new Error('profile name is empty')
     return profileStore.renameProfile(id, newName.trim())
   })
 
@@ -677,7 +678,12 @@ export function registerIpc(): void {
 
   // --- 設定 ---
   ipcMain.handle('getSettings', () => getSettings())
-  ipcMain.handle('saveSettings', (_e, next: AppSettings) => saveSettings(next))
+  ipcMain.handle('saveSettings', async (_e, next: AppSettings) => {
+    const saved = await saveSettings(next)
+    // メニューと About パネルも画面の言語に合わせ直す
+    applyAppMenu(saved.locale)
+    return saved
+  })
 
   // --- その他 ---
   ipcMain.handle('openExternal', async (_e, url: unknown) => {
@@ -700,9 +706,32 @@ export function registerIpc(): void {
       'docs.nvidia.com',
       'developer.nvidia.com',
       'www.freedesktop.org',
+      // このアプリの配布サイト
+      'unlitcube.github.io',
     ])
-    if (parsed.protocol !== 'https:' || !allowedHosts.has(parsed.hostname)) return
+    // GitHub は**このリポジトリの下だけ**（任意のリポジトリを開かせない）
+    const isOwnRepo =
+      parsed.hostname === 'github.com' &&
+      (parsed.pathname === '/UnlitCube/seedstick' || parsed.pathname.startsWith('/UnlitCube/seedstick/'))
+    if (parsed.protocol !== 'https:' || !(allowedHosts.has(parsed.hostname) || isOwnRepo)) return
     await shell.openExternal(parsed.toString())
+  })
+
+  ipcMain.handle('openLegalDocument', async (_e, kind: unknown) => {
+    if (kind !== 'license' && kind !== 'notices') return false
+    // パッケージ版は extraResources が resources/ に置く。開発中はリポジトリの元ファイル。
+    const file = app.isPackaged
+      ? join(process.resourcesPath, kind === 'license' ? 'LICENSE.txt' : 'THIRD_PARTY_NOTICES.txt')
+      : kind === 'license'
+        ? join(app.getAppPath(), '..', '..', 'LICENSE')
+        : join(app.getAppPath(), 'build', 'THIRD_PARTY_NOTICES.txt')
+    try {
+      await stat(file)
+    } catch {
+      return false
+    }
+    // openPath は失敗したときエラーメッセージを返し、成功したら空文字を返す
+    return (await shell.openPath(file)) === ''
   })
 
   ipcMain.handle('readTextFile', async () => {
@@ -724,7 +753,7 @@ export function registerIpc(): void {
     // 巨大なファイルを renderer に流し込まない
     const content = await readFile(path, 'utf8')
     if (content.length > 512 * 1024) {
-      throw new Error('ファイルが大きすぎます（512 KB まで）。')
+      throw new Error('file too large (512 KB max)')
     }
     return { name: basename(path), content }
   })

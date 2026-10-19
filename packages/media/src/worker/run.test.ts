@@ -143,7 +143,7 @@ describe('assertDeviceIsWritable — 差し替えられたジョブを拒否す�
   it('列挙にはあるが selectable: false（システムディスク等）', async () => {
     const blocked = device({ selectable: false, blockedReason: localized('device.blockedSystemDisk') })
     const err = await rejectionOf(fakePlatform([blocked]), job())
-    expectRejected(err, 'device.rejectedNotWritable', ['OS が入っているシステムディスクです'])
+    expectRejected(err, 'device.rejectedNotWritable', [en['device.blockedSystemDisk']])
     // **理由まで画面に届くこと。** ここは「差し替えられたジョブを止めた」ことを
     // 説明する最後の場所で、理由が無いと利用者は次の操作を選べない。
     // 一度、理由を開発者向けの message にだけ残す形にして、英語の画面から

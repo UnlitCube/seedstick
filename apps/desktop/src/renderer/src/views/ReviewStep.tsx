@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { AlertTriangle, CheckCircle2, Copy, Download, FolderOpen, Info, Save, Upload } from 'lucide-react'
-import type { ValidationIssue } from '@autoinstall/shared'
+import { isLocale, LOCALE_META, LOCALES, type CommentLanguage, type ValidationIssue } from '@autoinstall/shared'
 import { useStore } from '../store.js'
 import { formatBytes } from '../lib/format.js'
 import { useT, useTl } from '../lib/i18n.js'
@@ -12,6 +12,8 @@ export function ReviewStep(): React.JSX.Element {
   const t = useT()
   const { config, configBusy, profile, iso } = useStore()
   const loadProfileFromDisk = useStore((s) => s.loadProfileFromDisk)
+  const settings = useStore((s) => s.settings)
+  const saveSettings = useStore((s) => s.saveSettings)
   const [tab, setTab] = useState<Tab>('user-data')
   const [copied, setCopied] = useState(false)
 
@@ -75,10 +77,33 @@ export function ReviewStep(): React.JSX.Element {
               grub.cfg
             </TabButton>
           </div>
-          <Button onClick={() => void copy()} disabled={!currentCode}>
-            <Copy className="size-4" aria-hidden />
-            {copied ? t('common.copied') : t('common.copy')}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* 生成物のコメントの言語。既定は画面の言語に合わせる（ui）。変えると YAML を作り直す */}
+            <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
+              {t('review.commentLanguage')}
+              <select
+                value={settings?.commentLanguage ?? 'ui'}
+                onChange={(e) => {
+                  const v = e.target.value
+                  const next: CommentLanguage | null = v === 'ui' || v === 'none' ? v : isLocale(v) ? v : null
+                  if (next !== null) void saveSettings((s) => ({ ...s, commentLanguage: next }))
+                }}
+                className="rounded-md border border-slate-300 bg-white px-1.5 py-1 text-xs dark:border-slate-600 dark:bg-slate-800"
+              >
+                <option value="ui">{t('review.commentLanguageUi')}</option>
+                <option value="none">{t('review.commentLanguageNone')}</option>
+                {LOCALES.map((l) => (
+                  <option key={l} value={l} lang={LOCALE_META[l].htmlLang}>
+                    {LOCALE_META[l].endonym}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Button onClick={() => void copy()} disabled={!currentCode}>
+              <Copy className="size-4" aria-hidden />
+              {copied ? t('common.copied') : t('common.copy')}
+            </Button>
+          </div>
         </div>
 
         <div className="mt-3">

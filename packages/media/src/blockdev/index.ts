@@ -39,7 +39,7 @@ function isAllZero(buf: Buffer): boolean {
  */
 export class ReadOnlyError extends Error {
   constructor(offset: number) {
-    super(`読み取り専用デバイスへの書き込みが試みられました (offset=${offset})`)
+    super(`attempted to write to a read-only device (offset=${offset})`)
     this.name = 'ReadOnlyError'
   }
 }
@@ -86,7 +86,7 @@ export class FileBlockDevice implements BlockDevice {
       // 訳さない開発者向け診断。`FileBlockDevice` の書き込みは .img を作るテスト・
       // smoke・e2e スクリプトからしか呼ばれない（アプリ内では常に読み取り専用）。
       // 実デバイス側の同種の失敗は `RawBlockDevice` の `DeviceWriteStalledError` が扱う。
-      if (bytesWritten === 0) throw new Error(`書き込みが進みませんでした (offset=${offset + written})`)
+      if (bytesWritten === 0) throw new Error(`write made no progress (offset=${offset + written})`)
       written += bytesWritten
     }
   }

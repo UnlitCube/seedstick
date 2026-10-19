@@ -85,7 +85,7 @@ export function makeShortName(name: string, taken: ReadonlySet<string>): string 
     const candidate = pad(base.slice(0, Math.max(1, 8 - suffix.length)) + suffix, ext)
     if (!taken.has(candidate)) return candidate
   }
-  throw new Error(`短縮名を作れませんでした: ${name}`)
+  throw new Error(`could not make a short (8.3) name: ${name}`)
 }
 
 /** LFN エントリが参照する 8.3 名のチェックサム。 */
@@ -252,7 +252,7 @@ function computeGeometry(totalSectors: number, forced: FatType | undefined): Fat
     }
   }
   throw new Error(
-    `${totalSectors * BYTES_PER_SECTOR} バイトを FAT${fatType} で構成できません（クラスタ数がレンジ ${minClusters}〜${maxClustersExclusive - 1} に収まりません）。イメージサイズを変えてください。`,
+    `cannot lay out ${totalSectors * BYTES_PER_SECTOR} bytes as FAT${fatType} (cluster count outside ${minClusters}-${maxClustersExclusive - 1}). Change the image size.`,
   )
 }
 
@@ -262,7 +262,7 @@ function computeGeometry(totalSectors: number, forced: FatType | undefined): Fat
 
 export function buildFatImage(options: BuildFatOptions): FatImage {
   if (options.sizeBytes % BYTES_PER_SECTOR !== 0) {
-    throw new Error('FAT イメージのサイズは 512 の倍数である必要があります。')
+    throw new Error('the FAT image size must be a multiple of 512')
   }
   const totalSectors = options.sizeBytes / BYTES_PER_SECTOR
   const geo = computeGeometry(totalSectors, options.forceFatType)
@@ -356,7 +356,7 @@ export function buildFatImage(options: BuildFatOptions): FatImage {
     const clustersNeeded = Math.max(1, Math.ceil(file.content.length / bytesPerCluster))
     if (nextCluster + clustersNeeded > geo.clusterCount + 2) {
       throw new Error(
-        `FAT イメージの空き容量が足りません（${file.name} に ${clustersNeeded} クラスタ必要）。`,
+        `not enough free space in the FAT image (${file.name} needs ${clustersNeeded} clusters)`,
       )
     }
     const firstCluster = file.content.length === 0 ? 0 : nextCluster
@@ -413,7 +413,7 @@ export function buildFatImage(options: BuildFatOptions): FatImage {
     const capacity = rootClusters * bytesPerCluster
     if (rootDirBuf.length > capacity) {
       // 事前計算とずれた場合の保険。ここに来たら rootSlotCount の計算式に穴がある。
-      throw new Error('ルートディレクトリのエントリが予約したクラスタに収まりません。')
+      throw new Error('root directory entries do not fit in the reserved clusters')
     }
     // ルート用に予約したクラスタを鎖として繋ぐ
     for (let i = 0; i < rootClusters; i++) {
@@ -432,7 +432,7 @@ export function buildFatImage(options: BuildFatOptions): FatImage {
     const capacity = geo.rootEntryCount * 32
     if (rootDirBuf.length > capacity) {
       throw new Error(
-        `ルートディレクトリのエントリ数が上限 (${geo.rootEntryCount}) を超えました。ファイル名を短くするか数を減らしてください。`,
+        `too many root directory entries (limit ${geo.rootEntryCount}). Use shorter file names or fewer files.`,
       )
     }
     const rootStart = (geo.reservedSectors + geo.numFats * geo.fatSizeSectors) * BYTES_PER_SECTOR

@@ -374,7 +374,7 @@ export class WriteSupervisor {
           // 実運用では起きない開発者向けの診断なので訳さない。
           // start() の catch で総括文（write.errorSpawnFailed）が付き、
           // この文字列は detail として等幅で出る。
-          reject(new Error('進捗受信用のポートを開けませんでした。'))
+          reject(new Error('could not open the progress port'))
           return
         }
         this.server = server

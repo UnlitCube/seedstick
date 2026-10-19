@@ -65,6 +65,9 @@ export function WelcomeStep({ info, onNext, onUninstall }: Props): React.JSX.Ele
             </div>
           ))}
         </div>
+
+        {/* ライセンスと「Canonical とは無関係」（docs/LEGAL.md）。インストーラだけを受け取った人にも届くように */}
+        <p className="mt-4 text-[11px] leading-relaxed text-white/40">{t('welcome.disclaimer')}</p>
       </div>
 
       <div className="mt-auto flex items-center justify-between pt-6">

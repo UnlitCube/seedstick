@@ -101,7 +101,7 @@ export async function assertDeviceIsWritable(platform: PlatformOps, job: WorkerJ
   const found = devices.find((d) => d.id === job.devicePath)
   if (!found) {
     throw new DeviceRejectedError(
-      `書き込み先 ${job.devicePath} が見つかりません。取り外されたか、書き込み対象として認められないデバイスです。`,
+      `target ${job.devicePath} not found: it was removed, or it is not an allowed write target`,
       localized('device.rejectedNotFound', { path: job.devicePath }),
     )
   }
@@ -119,14 +119,14 @@ export async function assertDeviceIsWritable(platform: PlatformOps, job: WorkerJ
             reason: found.blockedReason,
           })
     // message は開発者向けなので日本語のままでよい（ログと WriteStatus.detail に出る）。
-    const reason = found.blockedReason ? formatLocalized('ja', found.blockedReason) : '対象外のデバイスです'
-    throw new DeviceRejectedError(`${job.devicePath} には書き込めません: ${reason}`, text)
+    const reason = found.blockedReason ? formatLocalized('en', found.blockedReason) : 'not an allowed device'
+    throw new DeviceRejectedError(`cannot write to ${job.devicePath}: ${reason}`, text)
   }
   // サイズが食い違うと GPT のバックアップを書く位置がずれる。
   // 差し替えの兆候でもあるので厳密に一致を求める。
   if (found.sizeBytes !== job.deviceSizeBytes) {
     throw new DeviceRejectedError(
-      `${job.devicePath} の容量が指示書と違います（指示 ${job.deviceSizeBytes} / 実際 ${found.sizeBytes}）。`,
+      `${job.devicePath} has a different size than the job (job ${job.deviceSizeBytes} / actual ${found.sizeBytes})`,
       // 読める単位だけだと、数 KB の食い違いが「32.0 GB / 32.0 GB」と同じに見えて
       // 「なぜ止まったのか分からない」画面になる。生のバイト数も併記する。
       localized('device.rejectedSizeMismatch', {
@@ -142,8 +142,8 @@ export async function assertDeviceIsWritable(platform: PlatformOps, job: WorkerJ
   if (job.deviceSerial !== null && found.serial !== job.deviceSerial) {
     const expectedSerial = job.deviceSerial
     throw new DeviceRejectedError(
-      `${job.devicePath} は選んだデバイスと違います（シリアル 指示 ${job.deviceSerial} / 実際 ${found.serial ?? '不明'}）。` +
-        '取り外して挿し直したか、別のデバイスに入れ替わっています。もう一度選び直してください。',
+      `${job.devicePath} is not the selected device (serial: job ${job.deviceSerial} / actual ${found.serial ?? 'unknown'}). ` +
+        'It was unplugged and replugged, or replaced by another device. Select it again.',
       // 「実際のシリアルが読めない」は単語 1 個の差し込みでは訳せないので別のキーにする
       found.serial === null
         ? localized('device.rejectedSerialMissing', {
@@ -159,7 +159,7 @@ export async function assertDeviceIsWritable(platform: PlatformOps, job: WorkerJ
   }
   if (job.deviceSerial === null && found.description !== job.deviceDescription) {
     throw new DeviceRejectedError(
-      `${job.devicePath} は選んだデバイスと違います（指示 "${job.deviceDescription}" / 実際 "${found.description}"）。`,
+      `${job.devicePath} is not the selected device (job "${job.deviceDescription}" / actual "${found.description}")`,
       localized('device.rejectedDescriptionMismatch', {
         path: job.devicePath,
         expected: job.deviceDescription,

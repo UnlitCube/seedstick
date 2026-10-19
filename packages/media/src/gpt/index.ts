@@ -102,7 +102,7 @@ export function guidToString(buf: Buffer): string {
 export function guidToBuffer(guid: string): Buffer {
   const hex = guid.replace(/-/g, '').toLowerCase()
   if (hex.length !== 32 || !/^[0-9a-f]{32}$/.test(hex)) {
-    throw new Error(`GUID の形式が不正です: ${guid}`)
+    throw new Error(`invalid GUID: ${guid}`)
   }
   const raw = Buffer.from(hex, 'hex')
   const out = Buffer.alloc(16)
@@ -295,12 +295,12 @@ export function buildGpt(opts: BuildGptOptions): GptImage {
   const backupEntriesLba = backupHeaderLba - entrySectors
   const lastUsableLba = backupEntriesLba - 1
   if (lastUsableLba <= opts.firstUsableLba) {
-    throw new Error('ディスクが小さすぎて GPT を構成できません。')
+    throw new Error('the disk is too small for a GPT')
   }
   for (const e of opts.entries) {
     if (e.endLba > lastUsableLba) {
       throw new Error(
-        `パーティション "${e.name}" の終端 (LBA ${e.endLba}) が使用可能領域の末尾 (LBA ${lastUsableLba}) を超えています。`,
+        `partition "${e.name}" ends at LBA ${e.endLba}, past the last usable LBA ${lastUsableLba}`,
       )
     }
   }

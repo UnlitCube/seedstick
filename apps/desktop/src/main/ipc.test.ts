@@ -209,7 +209,7 @@ describe('openIso の型ガードは総括を訳し、生の理由は詳細に�
     expect(r.reason).toBe('invalid')
     expect(r.text.key).toBe('error.unknown')
     // 開発者向けの診断は訳さずそのまま（バグ報告の突き合わせに使う）
-    expect(r.detail).toBe('パスが不正です。')
+    expect(r.detail).toBe('invalid path')
   })
 })
 

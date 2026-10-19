@@ -1,11 +1,12 @@
-import { useEffect } from 'react'
-import { Check, ChevronLeft, ChevronRight, Disc3, Languages } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Check, ChevronLeft, ChevronRight, Disc3, Info, Languages } from 'lucide-react'
 import { isLocale, LOCALE_META, LOCALES } from '@autoinstall/shared'
 import { STEP_GROUPS, STEP_LABELS, STEP_ORDER, useStore, type StepId } from './store.js'
 import { useT, useTl } from './lib/i18n.js'
 import { summarizeStep } from './lib/summary.js'
 import { Button, Callout } from './components/ui.js'
 import { ErrorBoundary } from './components/ErrorBoundary.js'
+import { AboutDialog } from './components/AboutDialog.js'
 import { ProfileBar } from './views/ProfileBar.js'
 import { IsoStep } from './views/IsoStep.js'
 import { BasicsStep } from './views/BasicsStep.js'
@@ -45,6 +46,7 @@ export function App(): React.JSX.Element {
   const config = useStore((s) => s.config)
   const locale = useStore((s) => s.locale)
   const setLocale = useStore((s) => s.setLocale)
+  const [aboutOpen, setAboutOpen] = useState(false)
   const writeStatus = useStore((s) => s.writeStatus)
   const profileNotes = useStore((s) => s.profileNotes)
   const dismissProfileNotes = useStore((s) => s.dismissProfileNotes)
@@ -114,8 +116,18 @@ export function App(): React.JSX.Element {
               ))}
             </select>
           </label>
+          <button
+            type="button"
+            onClick={() => setAboutOpen(true)}
+            aria-label={t('about.open')}
+            title={t('about.open')}
+            className="rounded-lg border border-slate-300 p-1.5 text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+          >
+            <Info className="size-3.5" aria-hidden />
+          </button>
         </div>
       </header>
+      <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
 
       <div className="flex min-h-0 flex-1">
         {/*

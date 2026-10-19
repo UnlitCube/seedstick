@@ -157,11 +157,11 @@ export function yamlDialectDiffs(text: string, maxDiffs = 5): string[] {
     if (Array.isArray(x) || Array.isArray(y)) {
       // **片方だけが配列**なら、それ自体が差（`typeof [] === 'object'` で見落とさない）。
       if (!Array.isArray(x) || !Array.isArray(y)) {
-        diffs.push(`${path}: 片方だけが配列`)
+        diffs.push(`${path}: only one side is an array`)
         return
       }
       if (x.length !== y.length) {
-        diffs.push(`${path}: 長さ ${x.length} vs ${y.length}`)
+        diffs.push(`${path}: length ${x.length} vs ${y.length}`)
         return
       }
       x.forEach((v, i) => walk(v, y[i], `${path}[${i}]`))
@@ -173,7 +173,7 @@ export function yamlDialectDiffs(text: string, maxDiffs = 5): string[] {
       const ky = Object.keys(y as object)
       const only = [...kx.filter((k) => !ky.includes(k)), ...ky.filter((k) => !kx.includes(k))]
       if (only.length > 0) {
-        diffs.push(`${path}: キーが違う (${only.join(', ')})`)
+        diffs.push(`${path}: different keys (${only.join(', ')})`)
         return
       }
       for (const k of kx) {
@@ -183,7 +183,7 @@ export function yamlDialectDiffs(text: string, maxDiffs = 5): string[] {
     }
     if (x !== y) {
       diffs.push(
-        `${path}: 1.1 では ${typeof x} ${JSON.stringify(x)} / 1.2 では ${typeof y} ${JSON.stringify(y)}`,
+        `${path}: YAML 1.1 reads ${typeof x} ${JSON.stringify(x)} / YAML 1.2 reads ${typeof y} ${JSON.stringify(y)}`,
       )
     }
   }

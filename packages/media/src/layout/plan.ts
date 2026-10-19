@@ -135,7 +135,7 @@ export async function planUsbLayout(options: PlanUsbLayoutOptions): Promise<UsbL
   const mbr = parseMbr(mbrSector)
   if (!mbr.valid || !mbr.isProtective) {
     throw new LayoutError(
-      'この ISO には protective MBR がありません。Ubuntu の live-server ISO ではない可能性があります。',
+      'this ISO has no protective MBR; it may not be an Ubuntu live-server ISO',
       'not-protective-mbr',
       localized('layout.notProtectiveMbr'),
     )
@@ -143,7 +143,7 @@ export async function planUsbLayout(options: PlanUsbLayoutOptions): Promise<UsbL
   const isoGpt = await readGpt(isoDevice)
   if (!isoGpt) {
     throw new LayoutError(
-      'この ISO には GPT がありません。対応していない形式です。',
+      'this ISO has no GPT; unsupported layout',
       'no-gpt',
       localized('layout.noGpt'),
     )
@@ -162,10 +162,10 @@ export async function planUsbLayout(options: PlanUsbLayoutOptions): Promise<UsbL
     if (e.endLba >= isoSectorsTotal) {
       const needed = (e.endLba + 1) * SECTOR_SIZE
       throw new LayoutError(
-        `この ISO は途中で切れています。パーティション "${e.name}" は ` +
-          `${gb(needed)} の位置まで続いていますが、ファイルは ` +
-          `${gb(isoSizeBytes)} しかありません。` +
-          'ダウンロードが完了しているか、SHA256 が公式のものと一致するかを確認してください。',
+        `this ISO is truncated: partition "${e.name}" extends to ` +
+          `${gb(needed)}, but the file is only ` +
+          `${gb(isoSizeBytes)}. ` +
+          'Check that the download finished and that its SHA256 matches the official one.',
         'iso-truncated',
         localized('layout.isoTruncated', {
           partition: e.name,
@@ -191,7 +191,7 @@ export async function planUsbLayout(options: PlanUsbLayoutOptions): Promise<UsbL
   if (cidataEndLba > lastUsableLba) {
     const needed = (cidataStartLba + cidataSectors + entrySectors + 2) * SECTOR_SIZE
     throw new LayoutError(
-      `USB の容量が足りません。ISO (${gb(isoSizeBytes)}) と設定用パーティション (${mb(cidataSizeBytes)}) を書くには少なくとも ${gb(needed)} 必要ですが、このデバイスは ${gb(diskSizeBytes)} です。`,
+      `the USB drive is too small: the ISO (${gb(isoSizeBytes)}) and the config partition (${mb(cidataSizeBytes)}) need at least ${gb(needed)}, but the device is ${gb(diskSizeBytes)}`,
       'disk-too-small',
       localized('layout.diskTooSmall', {
         isoSize: gb(isoSizeBytes),
@@ -203,7 +203,7 @@ export async function planUsbLayout(options: PlanUsbLayoutOptions): Promise<UsbL
   }
   if (cidataSectors < 2048) {
     throw new LayoutError(
-      '設定用パーティションは 1 MiB 以上にしてください。',
+      'the config partition must be at least 1 MiB',
       'cidata-too-small',
       localized('layout.cidataTooSmall'),
     )

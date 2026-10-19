@@ -201,7 +201,7 @@ function rawYamlToJs(yaml: string, field: string, key: MsgKey): unknown {
     return doc.toJS() ?? {}
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err)
-    throw new GenerateError(`生の YAML を読めない (${field}): ${detail}`, localized(key, { detail }), field)
+    throw new GenerateError(`cannot read the raw YAML (${field}): ${detail}`, localized(key, { detail }), field)
   }
 }
 
@@ -622,7 +622,7 @@ export function parseOverlay(yaml: string): Record<string, unknown> | undefined 
     throw new GenerateError(
       // `message` は開発者向けの診断として日本語のまま残す（ログとテストが読む）。
       // 画面に出すのは `text` の方。**連結して英文に混ぜない**。
-      `上書き YAML の構文エラー: ${detail}`,
+      `syntax error in the override YAML: ${detail}`,
       // YAML パーサの原文はもともと英語なので、そのまま両方の言語に載せる。
       localized('generate.overlaySyntax', { detail }),
       'advanced.rawOverlayYaml',
@@ -638,7 +638,7 @@ export function parseOverlay(yaml: string): Record<string, unknown> | undefined 
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err)
     throw new GenerateError(
-      `上書き YAML を読めない: ${detail}`,
+      `cannot read the override YAML: ${detail}`,
       localized('generate.overlaySyntax', { detail }),
       'advanced.rawOverlayYaml',
     )
@@ -647,7 +647,7 @@ export function parseOverlay(yaml: string): Record<string, unknown> | undefined 
   if (js === null || js === undefined) return undefined
   if (typeof js !== 'object' || Array.isArray(js)) {
     throw new GenerateError(
-      '上書き YAML はキーと値のマッピングである必要があります',
+      'the override YAML must be a mapping of keys to values',
       localized('generate.overlayNotMapping'),
       'advanced.rawOverlayYaml',
     )
