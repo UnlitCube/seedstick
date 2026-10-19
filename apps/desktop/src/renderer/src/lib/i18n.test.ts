@@ -62,13 +62,6 @@ interface Allowed {
  */
 const ALLOWLIST: readonly Allowed[] = [
   {
-    file: 'App.tsx',
-    text: '日本語',
-    reason:
-      '言語切り替えボタンのラベル。切り替え先の言語は「その言語自身の表記」で出すのが正しく、' +
-      '訳文にすると英語表示のときに「Japanese」になって切り替え先が分かりにくくなる。',
-  },
-  {
     file: 'components/ErrorBoundary.tsx',
     text: '画面の描画に失敗しました',
     reason:

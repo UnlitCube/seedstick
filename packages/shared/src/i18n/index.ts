@@ -1,13 +1,34 @@
 import { ja, type MsgKey } from './ja.js'
 import { en } from './en.js'
+import { FALLBACK_LOCALE, LOCALE_META, type Locale } from './locales.js'
 
-export type Locale = 'ja' | 'en'
 export type { MsgKey }
 export { ja, en }
+export {
+  FALLBACK_LOCALE,
+  LOCALE_META,
+  LOCALES,
+  isLocale,
+  negotiateLocale,
+  type Locale,
+  type LocaleMeta,
+} from './locales.js'
 
-export const LOCALES: readonly Locale[] = ['ja', 'en']
+/**
+ * 言語ごとの辞書。**全キーを持つことを型で強制する**（`satisfies Record<MsgKey, string>`）。
+ * 言語を足すときは `locales.ts` の表に 1 行と、ここに 1 つ。
+ */
+export const DICTIONARIES: Readonly<Record<Locale, Readonly<Record<MsgKey, string>>>> = { ja, en }
 
-const DICTS: Record<Locale, Record<MsgKey, string>> = { ja, en }
+/** その言語の訳文。無ければ en、それも無ければ ja（原文）、それも無ければキー名。 */
+function lookup(locale: Locale, key: string): string {
+  return (
+    (DICTIONARIES[locale] as Record<string, string> | undefined)?.[key] ??
+    (DICTIONARIES[FALLBACK_LOCALE] as Record<string, string>)[key] ??
+    (ja as Record<string, string>)[key] ??
+    key
+  )
+}
 
 /**
  * `{name}` の差し込みに渡せる値。ReactNode は renderer 側の `useTx` が扱う。
@@ -80,6 +101,90 @@ export function interpolate(template: string, params?: MsgParams, locale?: Local
   return interpolateAt(template, params, locale, 0)
 }
 
+/**
+ * 複数形の区切り `{n, plural, one {# item} other {# items}}` を、数に合う形に置き換える。
+ *
+ * ICU MessageFormat の plural だけを、必要な分だけ実装する（select・offset・`=0` は持たない）。
+ * 形は `Intl.PluralRules` で選び、**その形が書かれていなければ `other`** を使う
+ * （フランス語の many のように、訳者が書かない形を CLDR が返すことがある）。
+ * `#` はその数に置き換える。中に `{size}` のような通常の差し込みがあれば、
+ * そのまま残して後の置換に任せる。
+ *
+ * 値が無い・数として読めないときは**ブロックごと残す**（渡し忘れに気づけるように）。
+ * 書式が壊れていても例外は投げない（辞書は手で書くもの）。
+ */
+export function resolvePlurals(
+  template: string,
+  params: Readonly<Record<string, unknown>> | undefined,
+  locale: Locale | undefined,
+): string {
+  if (!template.includes(', plural,') && !template.includes(',plural,')) return template
+  let out = ''
+  let i = 0
+  const head = /\{([A-Za-z][A-Za-z0-9_]*)\s*,\s*plural\s*,/y
+  while (i < template.length) {
+    head.lastIndex = i
+    const m = template[i] === '{' ? head.exec(template) : null
+    if (m === null) {
+      out += template[i]
+      i++
+      continue
+    }
+    const block = parsePluralBlock(template, head.lastIndex)
+    if (block === null) {
+      out += template.slice(i)
+      break
+    }
+    const raw = params?.[m[1]!]
+    const n = typeof raw === 'number' ? raw : typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : NaN
+    if (!Number.isFinite(n)) {
+      out += template.slice(i, block.end)
+    } else {
+      const tag = locale === undefined ? 'en-US' : LOCALE_META[locale]?.intl ?? 'en-US'
+      let category: string
+      try {
+        category = new Intl.PluralRules(tag).select(n)
+      } catch {
+        category = 'other'
+      }
+      const chosen = block.forms.get(category) ?? block.forms.get('other') ?? ''
+      out += chosen.replace(/#/g, String(n))
+    }
+    i = block.end
+  }
+  return out
+}
+
+/** `{n, plural,` の直後から読み、`one {..} other {..}}` を取り出す。壊れていれば null。 */
+function parsePluralBlock(text: string, start: number): { forms: Map<string, string>; end: number } | null {
+  const forms = new Map<string, string>()
+  let i = start
+  for (;;) {
+    while (i < text.length && /\s/.test(text[i]!)) i++
+    if (i >= text.length) return null
+    if (text[i] === '}') return { forms, end: i + 1 }
+    const sel = /[A-Za-z=0-9]+/y
+    sel.lastIndex = i
+    const m = sel.exec(text)
+    if (m === null) return null
+    i = sel.lastIndex
+    while (i < text.length && /\s/.test(text[i]!)) i++
+    if (text[i] !== '{') return null
+    let depth = 0
+    const bodyStart = i + 1
+    for (; i < text.length; i++) {
+      if (text[i] === '{') depth++
+      else if (text[i] === '}') {
+        depth--
+        if (depth === 0) break
+      }
+    }
+    if (depth !== 0) return null
+    forms.set(m[0], text.slice(bodyStart, i))
+    i++
+  }
+}
+
 function interpolateAt(
   template: string,
   params: MsgParams | undefined,
@@ -90,6 +195,7 @@ function interpolateAt(
   // `params: null` が `params[name]` まで進んで TypeError になる。
   // ここは IPC / NDJSON / 手で編集された JSON から値が来る場所なので、null も配列も届く。
   if (params === null || typeof params !== 'object' || Array.isArray(params)) return template
+  template = resolvePlurals(template, params, locale)
   // 判定用と置換用で正規表現を共有しない（落とし穴 63）。ここは置換専用。
   return template.replace(/\{([A-Za-z][A-Za-z0-9_]*)\}/g, (whole, name: string) => {
     const value = params[name]
@@ -99,25 +205,24 @@ function interpolateAt(
     // 訳せないもの（locale が無い・深すぎる）はプレースホルダのまま残す。
     // JSON から来た値は循環しないが、**深さは外から決まる**ので必ず上限を置く。
     if (locale === undefined || depth >= MAX_NEST_DEPTH) return whole
-    const dict = DICTS[locale] ?? ja
-    const inner = dict[value.key] ?? ja[value.key] ?? value.key
-    return interpolateAt(inner, value.params, locale, depth + 1)
+    return interpolateAt(lookup(locale, value.key), value.params, locale, depth + 1)
   })
 }
 
-/** 訳文に含まれる `{name}` の集合を返す（ja / en の食い違いを検出するために使う）。 */
+/**
+ * 訳文に含まれる差し込み名の集合を返す（言語間の食い違いを検出するために使う）。
+ * 複数形のブロック `{n, plural, …}` の `n` と、その中の `{size}` も数える。
+ */
 export function placeholdersOf(template: string): string[] {
   const found = new Set<string>()
   // `matchAll` は毎回新しい正規表現を作る（`/g` の lastIndex を持ち回さない）
-  for (const m of template.matchAll(/\{([A-Za-z][A-Za-z0-9_]*)\}/g)) found.add(m[1]!)
+  for (const m of template.matchAll(/\{([A-Za-z][A-Za-z0-9_]*)(?:\}|\s*,\s*plural\s*,)/g)) found.add(m[1]!)
   return [...found].sort()
 }
 
 /** 翻訳関数を作る。未知のキーはキー名をそのまま返す（画面が空白になるより気づきやすい）。 */
 export function createTranslator(locale: Locale): (key: MsgKey, params?: MsgParams) => string {
-  const dict = DICTS[locale] ?? ja
-  return (key: MsgKey, params?: MsgParams) =>
-    interpolate(dict[key] ?? ja[key] ?? key, params, locale)
+  return (key: MsgKey, params?: MsgParams) => interpolate(lookup(locale, key), params, locale)
 }
 
 /**
@@ -150,7 +255,3 @@ export function formatLocalized(locale: Locale, text: LocalizedText): string {
   return createTranslator(locale)(text.key, text.params)
 }
 
-/** OS のロケール文字列（`ja-JP` 等）から対応言語を選ぶ。 */
-export function resolveLocale(systemLocale: string | undefined): Locale {
-  return (systemLocale ?? '').toLowerCase().startsWith('ja') ? 'ja' : 'en'
-}

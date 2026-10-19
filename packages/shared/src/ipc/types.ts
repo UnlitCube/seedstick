@@ -2,7 +2,7 @@ import type { AutoinstallProfile } from '../autoinstall/model.js'
 import type { ProfileSummary } from '../autoinstall/migrate.js'
 import type { ValidationIssue } from '../autoinstall/validate.js'
 import type { IsoIdentity } from '../iso/catalog.js'
-import type { LocalizedText } from '../i18n/index.js'
+import type { Locale, LocalizedText } from '../i18n/index.js'
 
 // preload の contextBridge が公開する API の型。main と renderer の唯一の契約。
 // renderer は main を import できないので、この型を共有パッケージ経由で共有する。
@@ -159,13 +159,24 @@ export type WriteStatus =
   | { readonly state: 'error'; readonly message: LocalizedText; readonly detail: string | null }
   | { readonly state: 'cancelled' }
 
+/**
+ * 生成する YAML に付けるコメントの言語。
+ * `ui` は**画面の言語に合わせる**（既定）。`none` はコメントを付けない。
+ */
+export type CommentLanguage = 'ui' | 'none' | Locale
+
 export interface AppSettings {
-  readonly locale: 'ja' | 'en'
+  readonly locale: Locale
   readonly lastIsoDirectory: string | null
   readonly verifyAfterWrite: boolean
   readonly cidataSizeBytes: number
   readonly auditRecord: boolean
-  readonly commentLanguage: 'ja' | 'en' | 'none'
+  readonly commentLanguage: CommentLanguage
+}
+
+/** `ui` を画面の言語に解決した、実際に使うコメントの言語。 */
+export function effectiveCommentLanguage(settings: Pick<AppSettings, 'locale' | 'commentLanguage'>): Locale | 'none' {
+  return settings.commentLanguage === 'ui' ? settings.locale : settings.commentLanguage
 }
 
 /** `window.autoinstall` の形。preload と renderer/env.d.ts はこれに合わせる。 */

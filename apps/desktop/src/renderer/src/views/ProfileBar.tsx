@@ -9,7 +9,7 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react'
-import type { ProfileSummary } from '@autoinstall/shared'
+import { LOCALE_META, type ProfileSummary } from '@autoinstall/shared'
 import { useStore } from '../store.js'
 import { useT } from '../lib/i18n.js'
 import { Badge, Button, Callout, Modal, TextInput } from '../components/ui.js'
@@ -126,7 +126,7 @@ function ProfileLibraryModal({
   const [renaming, setRenaming] = useState<{ item: ProfileSummary; name: string } | null>(null)
 
   const formatDate = (iso: string): string =>
-    new Date(iso).toLocaleString(locale === 'ja' ? 'ja-JP' : 'en-US', {
+    new Date(iso).toLocaleString(LOCALE_META[locale].intl, {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',

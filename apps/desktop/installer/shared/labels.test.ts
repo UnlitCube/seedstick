@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { DICTIONARIES, createTranslator, interpolate, type LabelKey } from './labels.js'
+import { LOCALES } from './locales.js'
 
 // ---------------------------------------------------------------------------
 // この番人が見ているもの
@@ -113,39 +114,46 @@ function stripComments(source: string): string[] {
 // ---------------------------------------------------------------------------
 
 describe('インストーラの辞書', () => {
-  it('ja と en のキーが完全に一致する', () => {
+  it('どの言語の辞書も ja とキーが完全に一致する', () => {
     const ja = Object.keys(DICTIONARIES.ja).sort()
-    const en = Object.keys(DICTIONARIES.en).sort()
-    expect(en).toEqual(ja)
     expect(ja.length).toBeGreaterThan(50)
+    for (const locale of LOCALES) {
+      expect(Object.keys(DICTIONARIES[locale]).sort(), locale).toEqual(ja)
+    }
   })
 
-  it('同じキーの差し込み名の集合が ja と en で一致する', () => {
+  it('同じキーの差し込み名の集合が、どの言語でも ja と一致する', () => {
     const names = (text: string): string[] =>
       [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1] ?? '').sort()
     const mismatched: string[] = []
-    for (const key of Object.keys(DICTIONARIES.ja) as LabelKey[]) {
-      const a = names(DICTIONARIES.ja[key])
-      const b = names(DICTIONARIES.en[key])
-      if (a.join(',') !== b.join(',')) {
-        mismatched.push(`${key}: ja=[${a.join(',')}] en=[${b.join(',')}]`)
+    for (const locale of LOCALES) {
+      for (const key of Object.keys(DICTIONARIES.ja) as LabelKey[]) {
+        const a = names(DICTIONARIES.ja[key])
+        const b = names(DICTIONARIES[locale][key])
+        if (a.join(',') !== b.join(',')) {
+          mismatched.push(`${locale} ${key}: ja=[${a.join(',')}] ${locale}=[${b.join(',')}]`)
+        }
       }
     }
     expect(mismatched).toEqual([])
   })
 
-  it('どちらの言語でも空の訳文が無い', () => {
-    for (const locale of ['ja', 'en'] as const) {
+  it('どの言語でも空の訳文が無い', () => {
+    for (const locale of LOCALES) {
       for (const [key, text] of Object.entries(DICTIONARIES[locale])) {
         expect(text.trim(), `${locale}/${key}`).not.toBe('')
       }
     }
   })
 
-  it('en に日本語が混ざっていない（写し忘れの検出）', () => {
-    const leaked = Object.entries(DICTIONARIES.en)
-      .filter(([, text]) => JAPANESE.test(text))
-      .map(([key]) => key)
+  it('ja 以外に日本語（かな）が混ざっていない（写し忘れの検出）', () => {
+    // 中国語は漢字を使うので、かなで見る。
+    const leaked: string[] = []
+    for (const locale of LOCALES.filter((l) => l !== 'ja')) {
+      for (const [key, text] of Object.entries(DICTIONARIES[locale])) {
+        if (/[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(text)) leaked.push(`${locale}/${key}`)
+      }
+    }
     expect(leaked).toEqual([])
   })
 })

@@ -16,7 +16,7 @@ import {
   type InstallResult,
   type InstallerInfo,
 } from '../shared/protocol.js'
-import type { Locale } from '../shared/labels.js'
+import { negotiateLocale, type Locale } from '../shared/locales.js'
 import { checkInstallDir } from './install-dir.js'
 import { PRODUCT_NAME, defaultInstallDir, resolveAssets } from './paths.js'
 import { readExistingInstallDir } from './registry.js'
@@ -54,8 +54,8 @@ function safeUserName(): string {
 }
 
 function localeOf(): Locale {
-  // アプリ本体と同じ 2 つ。判定も本体と同じく前方一致で見る。
-  return app.getLocale().toLowerCase().startsWith('ja') ? 'ja' : 'en'
+  // アプリ本体と同じ選び方（OS の好みの言語の並びを先頭から見る。locales.ts）。
+  return negotiateLocale([...app.getPreferredSystemLanguages(), app.getLocale()])
 }
 
 function createWindow(): void {

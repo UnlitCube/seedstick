@@ -1,15 +1,16 @@
 // 表示言語を切り替えるだけの小さな道具。
 //
 //   node .e2e/set-locale.mjs en
-//   node .e2e/set-locale.mjs ja
+//   node .e2e/set-locale.mjs ja        （ほかの言語も locales.ts の表にあれば同じ形で）
 //
 // `full-run.mjs` / `full-run2.mjs` は画面の文言を**辞書から引く**ので、
 // 切り替えたあとそのまま通せる（言語ごとに書き分ける必要は無い）。
 import { open } from './drive.mjs'
+import { LOCALES } from '../packages/shared/src/i18n/locales.ts'
 
 const want = process.argv[2]
-if (want !== 'ja' && want !== 'en') {
-  console.error('使い方: node .e2e/set-locale.mjs <ja|en>')
+if (!LOCALES.includes(want)) {
+  console.error(`使い方: node .e2e/set-locale.mjs <${LOCALES.join('|')}>`)
   process.exit(2)
 }
 const d = await open()

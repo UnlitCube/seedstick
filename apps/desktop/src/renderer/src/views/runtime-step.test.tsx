@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { createDefaultProfile, ja, en, formatLocalized } from '@autoinstall/shared'
@@ -21,6 +21,11 @@ import { summarizeStep } from '../lib/summary.js'
 //   3. 画面で選んだことが、サイドバーの 1 行要約に出ること（要約が飾りでないこと）
 
 const mounted: { host: HTMLElement; root: Root }[] = []
+
+// 期待値は ja の辞書から引くので、言語を明示する（ストアの初期値は OS の言語から選ぶ）。
+beforeEach(() => {
+  useStore.setState({ locale: 'ja' })
+})
 
 afterEach(() => {
   for (const m of mounted.splice(0)) {

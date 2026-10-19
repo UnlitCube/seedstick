@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { formatLocalized, localized } from '@autoinstall/shared'
 import { classifyDevice, formatSize, MAX_DEVICE_BYTES, MIN_DEVICE_BYTES } from './types.js'
 import { diskNumberFromId, mapBusType, parseWindowsDisks } from './win32.js'
-import { mapBusProtocol, parsePlist, toDevice } from './darwin.js'
+import { bootWholeDisks, mapBusProtocol, parsePlist, toDevice, type DiskutilRootInfo } from './darwin.js'
 import { mapTransport, parseLsblk } from './linux.js'
-import { elevationHint, getPlatformOps, UnsupportedPlatformError } from './index.js'
+import { getPlatformOps, UnsupportedPlatformError } from './index.js'
 
 describe('classifyDevice の安全判定', () => {
   const base = {
@@ -234,6 +234,36 @@ describe('macOS の列挙', () => {
     expect(toDevice(info, [], true).selectable).toBe(false)
   })
 
+  // `diskutil info -plist /` の形（APFS の起動ボリューム）。合成ディスク disk3 の上にあり、
+  // 物理ディスクは APFSPhysicalStores でしか分からない。
+  const rootInfo = (physicalStore: string, synthesized = 'disk3'): string => `<plist version="1.0"><dict>
+  <key>APFSContainerReference</key><string>${synthesized}</string>
+  <key>APFSPhysicalStores</key><array><dict><key>APFSPhysicalStore</key><string>${physicalStore}</string></dict></array>
+  <key>DeviceIdentifier</key><string>${synthesized}s1s1</string>
+  <key>ParentWholeDisk</key><string>${synthesized}</string>
+  <key>SystemImage</key><true/>
+</dict></plist>`
+
+  it('起動ディスクは APFS の物理ストアまで辿って特定する', () => {
+    const boot = bootWholeDisks(parsePlist(rootInfo('disk0s2')) as DiskutilRootInfo)
+    expect([...boot].sort()).toEqual(['disk0', 'disk3'])
+  })
+
+  it('外付け SSD から起動している Mac で、その外付けを候補に出さない', () => {
+    // 回帰: 以前は DeviceIdentifier の末尾を 1 段削って `disk5s1` にしていたので、
+    // 起動している外付け (disk4) が「書き込める USB」として並んだ。
+    const boot = bootWholeDisks(parsePlist(rootInfo('disk4s2', 'disk5')) as DiskutilRootInfo)
+    expect(boot.has('disk4')).toBe(true)
+    const info = parsePlist(PLIST) as Record<string, unknown> // disk4 / USB / 外付け
+    expect(toDevice(info, [], boot.has('disk4')).selectable).toBe(false)
+  })
+
+  it('壊れた / 空の情報からは何も特定しない（列挙側は 0 台にする）', () => {
+    expect(bootWholeDisks(null).size).toBe(0)
+    expect(bootWholeDisks({} as DiskutilRootInfo).size).toBe(0)
+    expect(bootWholeDisks({ APFSPhysicalStores: 'x' } as unknown as DiskutilRootInfo).size).toBe(0)
+  })
+
   it('BusProtocol を写す', () => {
     expect(mapBusProtocol('USB')).toBe('usb')
     expect(mapBusProtocol('Secure Digital')).toBe('sd')
@@ -301,6 +331,57 @@ describe('Linux の列挙', () => {
     expect(nvme!.mountpoints).toEqual(['/boot/efi', '/'])
   })
 
+  /** USB 接続の外付けディスク 1 台。子パーティションのマウントポイントだけを変える。 */
+  const usbDisk = (mounts: (string | null)[], single = false): string =>
+    JSON.stringify({
+      blockdevices: [
+        {
+          name: 'sdc',
+          path: '/dev/sdc',
+          size: 500_107_862_016,
+          type: 'disk',
+          tran: 'usb',
+          rm: false,
+          hotplug: true,
+          ro: false,
+          model: 'Portable SSD',
+          serial: 'X1',
+          vendor: 'Acme',
+          ...(single ? { mountpoint: null } : { mountpoints: [null] }),
+          children: mounts.map((m, i) => ({
+            name: `sdc${i + 1}`,
+            path: `/dev/sdc${i + 1}`,
+            type: 'part',
+            ...(single ? { mountpoint: m } : { mountpoints: [m] }),
+          })),
+        },
+      ],
+    })
+
+  it('スワップや /var を載せたディスクはシステムとして弾く', () => {
+    // 回帰: 以前は / /boot /boot/efi /home の 4 つしか見ておらず、これらが候補に出た
+    for (const m of ['[SWAP]', '/var', '/srv', '/data', '/opt/app']) {
+      const [d] = parseLsblk(usbDisk([m]))
+      expect(d!.selectable, m).toBe(false)
+      expect(d!.isSystem, m).toBe(true)
+    }
+  })
+
+  it('取り外し可能なメディアの置き場所にマウントされた USB は選べる', () => {
+    for (const m of ['/media/user/DATA', '/run/media/user/DATA', '/mnt', '/mnt/usb', null]) {
+      const [d] = parseLsblk(usbDisk([m]))
+      expect(d!.selectable, String(m)).toBe(true)
+    }
+  })
+
+  it('古い lsblk（MOUNTPOINT が単数）の出力も読める', () => {
+    const [swap] = parseLsblk(usbDisk(['[SWAP]'], true))
+    expect(swap!.isSystem).toBe(true)
+    expect(swap!.mountpoints).toEqual(['[SWAP]'])
+    const [media] = parseLsblk(usbDisk(['/media/user/DATA'], true))
+    expect(media!.selectable).toBe(true)
+  })
+
   it('transport を写す', () => {
     expect(mapTransport('usb', false)).toBe('usb')
     expect(mapTransport('nvme', false)).toBe('nvme')
@@ -321,12 +402,4 @@ describe('プラットフォーム選択', () => {
     expect(() => getPlatformOps('aix')).toThrow(UnsupportedPlatformError)
   })
 
-  it('昇格の案内が OS ごとに用意されている', () => {
-    expect(elevationHint('win32').ja).toMatch(/管理者権限/)
-    expect(elevationHint('darwin').ja).toMatch(/パスワード/)
-    expect(elevationHint('linux').ja).toMatch(/root/)
-    for (const p of ['win32', 'darwin', 'linux'] as const) {
-      expect(elevationHint(p).en.length).toBeGreaterThan(0)
-    }
-  })
 })

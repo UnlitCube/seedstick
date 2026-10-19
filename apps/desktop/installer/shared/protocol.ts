@@ -6,6 +6,8 @@
 // インストール先のパスは renderer が自由に入力できるので、
 // main 側で必ず検証してから使う（`validateInstallDir`）。
 
+import type { Locale } from './locales.js'
+
 /** 画面の段。`rail` の並びと 1 対 1。 */
 export type StepId = 'welcome' | 'options' | 'progress' | 'done'
 
@@ -121,8 +123,8 @@ export interface InstallerBridge {
   launchAndExit(exePath: string): Promise<void>
   close(): Promise<void>
   minimize(): Promise<void>
-  /** 表示言語。アプリ本体と同じ 2 つ。 */
-  locale(): Promise<'ja' | 'en'>
+  /** 表示言語。アプリ本体と同じ集合（locales.ts）。 */
+  locale(): Promise<Locale>
 }
 
 /** IPC のチャンネル名。**文字列を散らさない。** */

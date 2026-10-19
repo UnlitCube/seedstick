@@ -5,10 +5,15 @@ import { connect } from './cdp.mjs'
 // **画面の文言をここに書き写さない。** 辞書が正。
 // 書き写すと訳文を変えた瞬間に「画面には出ているのにテストだけが落ちる」になり、
 // GUI を起こすまで気づけない（実際に `起動メニューの残り容量: … bytes` でそうなった）。
-import { ja } from '../packages/shared/src/i18n/ja.ts'
-import { en } from '../packages/shared/src/i18n/en.ts'
+// 言語の一覧は locales.ts の表から取り、辞書は言語ごとのファイルを読む
+// （index.ts は './ja.js' を実行時に import するので、Node の型除去では直接読めない）。
+import { LOCALES } from '../packages/shared/src/i18n/locales.ts'
 
-const DICTS = { ja, en }
+const DICTS = {}
+for (const l of LOCALES) {
+  const mod = await import(`../packages/shared/src/i18n/${l}.ts`)
+  DICTS[l] = Object.values(mod).find((v) => typeof v === 'object' && v !== null)
+}
 
 export async function open() {
   const c = await connect()
@@ -49,17 +54,13 @@ export async function open() {
   /**
    * いま画面が出している言語を読む。
    *
-   * ストアは外から見えないので、**言語切り替えボタンのラベル**から判定する。
-   * このボタンは「切り替え*先*」の言語をその言語自身の表記で出す規約なので
-   * （`App.tsx`。英語表示のときに "Japanese" にすると切り替え先が伝わらない）、
-   * `English` と出ていれば今は日本語。
+   * ストアは外から見えないので、ヘッダの言語の選択肢（`select[data-locale]`）の値を読む。
+   * 表示文言（「English」など）で判定すると、言語を足したり名前を直したりした瞬間に壊れる。
    */
   const detectLocale = async () =>
     c.eval(`
-      const labels = [...document.querySelectorAll('header button')].map((b) => (b.innerText ?? '').trim())
-      if (labels.includes('English')) return 'ja'
-      if (labels.includes('日本語')) return 'en'
-      return 'ja'
+      const sel = document.querySelector('select[data-locale]')
+      return sel ? sel.value : null
     `)
 
   let locale = await detectLocale()
@@ -68,7 +69,7 @@ export async function open() {
     ...c,
     centerOf,
     clickAt,
-    /** いま画面が出している言語（`ja` / `en`）。 */
+    /** いま画面が出している言語（locales.ts の表の id）。 */
     get locale() {
       return locale
     },
@@ -82,9 +83,17 @@ export async function open() {
     async setLocale(want) {
       locale = await detectLocale()
       if (locale === want) return locale
-      // 切り替えボタンは「切り替え先の言語」を出しているので、
-      // いま ja なら 'English' が、en なら '日本語' が押すべきラベル。
-      await this.click('header button', locale === 'ja' ? 'English' : '日本語')
+      // ネイティブの <select> のポップアップは CDP の入力イベントでは操作できないので、
+      // 値を設定して change を送る（React はこの経路でも onChange を呼ぶ）。
+      const ok = await c.eval(`
+        const sel = document.querySelector('select[data-locale]')
+        if (!sel) return false
+        const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set
+        setter.call(sel, ${JSON.stringify(want)})
+        sel.dispatchEvent(new Event('change', { bubbles: true }))
+        return true
+      `)
+      if (!ok) throw new Error('言語の選択肢 (select[data-locale]) が見つかりません')
       await new Promise((r) => setTimeout(r, 600))
       locale = await detectLocale()
       if (locale !== want) throw new Error(`言語を ${want} に切り替えられませんでした（いま ${locale}）`)

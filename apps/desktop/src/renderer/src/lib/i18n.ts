@@ -2,6 +2,7 @@ import { Fragment, createElement } from 'react'
 import {
   createTranslator,
   isLocalizedText,
+  resolvePlurals,
   type Locale,
   type LocalizedText,
   type MsgKey,
@@ -73,8 +74,10 @@ export function useTx(): (key: MsgKey, nodes: Readonly<Record<string, React.Reac
   const locale = useStore((s) => s.locale)
   const t = createTranslator(locale)
   return (key, nodes) => {
+    // 複数形 `{n, plural, …}` は先に解く（数として渡された差し込みだけを使う）。
+    const numbers = Object.fromEntries(Object.entries(nodes).filter(([, v]) => typeof v === 'number'))
     // 分割は「捕獲付き」なので、奇数番目が差し込み名になる。
-    const parts = t(key).split(/\{([A-Za-z][A-Za-z0-9_]*)\}/)
+    const parts = resolvePlurals(t(key), numbers, locale).split(/\{([A-Za-z][A-Za-z0-9_]*)\}/)
     const children: React.ReactNode[] = []
     for (let i = 0; i < parts.length; i++) {
       const piece = parts[i]!

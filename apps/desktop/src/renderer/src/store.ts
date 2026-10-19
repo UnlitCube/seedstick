@@ -1,8 +1,9 @@
 import { create } from 'zustand'
 import {
   createDefaultProfile,
+  LOCALE_META,
   localized,
-  resolveLocale,
+  negotiateLocale,
   type AppSettings,
   type ChecksumResult,
   type AutoinstallProfile,
@@ -216,9 +217,23 @@ let settingsChain: Promise<unknown> = Promise.resolve()
 /** 設定生成の多重起動を避けるための世代番号 */
 let generation = 0
 
+/**
+ * `<html lang>` を画面の言語に合わせる。index.html の既定は固定なので、
+ * 切り替えるたびにここで直す（漢字の字形・読み上げ・ハイフネーションが lang で変わる）。
+ */
+function applyDocumentLang(locale: Locale): void {
+  if (typeof document === 'undefined') return
+  document.documentElement.lang = LOCALE_META[locale].htmlLang
+}
+
+/** 設定が届く前の言語。OS の好みの並びから選ぶ（設定が届けばそちらに替わる）。 */
+function initialLocale(): Locale {
+  return negotiateLocale(typeof navigator === 'undefined' ? [] : [...navigator.languages])
+}
+
 export const useStore = create<AppState>((set, get) => ({
   ready: false,
-  locale: 'ja',
+  locale: initialLocale(),
   settings: null,
   step: 'iso',
   profile: createDefaultProfile('24.04', 'seedstick/0.1.0', new Date().toISOString()),
@@ -244,11 +259,9 @@ export const useStore = create<AppState>((set, get) => ({
 
   async init() {
     const settings = await window.autoinstall.getSettings()
-    set({
-      settings,
-      locale: settings.locale ?? resolveLocale(window.autoinstall.systemLocale),
-      ready: true,
-    })
+    const locale = settings.locale ?? negotiateLocale([window.autoinstall.systemLocale])
+    applyDocumentLang(locale)
+    set({ settings, locale, ready: true })
     window.autoinstall.onWriteStatus((writeStatus) => {
       set({ writeStatus })
       // 書き込みが終わったらデバイス一覧を更新する（ドライブレターが変わるため）
@@ -577,6 +590,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   async setLocale(locale) {
+    applyDocumentLang(locale)
     set({ locale })
     await get().saveSettings((s) => ({ ...s, locale }))
   },

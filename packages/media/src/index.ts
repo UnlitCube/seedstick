@@ -108,7 +108,6 @@ export {
   classifyDevice,
   needsExtraCaution,
   EXTRA_CAUTION_SIZE_BYTES,
-  elevationHint,
   formatSize,
   getPlatformOps,
   UnsupportedPlatformError,

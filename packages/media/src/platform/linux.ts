@@ -22,6 +22,8 @@ interface LsblkDevice {
   serial?: string | null
   vendor?: string | null
   mountpoints?: (string | null)[]
+  /** util-linux 2.37 未満は MOUNTPOINTS 列が無く、単数の MOUNTPOINT しか返さない。 */
+  mountpoint?: string | null
   children?: LsblkDevice[]
 }
 
@@ -48,10 +50,27 @@ function collectMountpoints(d: LsblkDevice): string[] {
   const out: string[] = []
   const walk = (node: LsblkDevice): void => {
     for (const m of node.mountpoints ?? []) if (m) out.push(m)
+    if (node.mountpoint) out.push(node.mountpoint)
     for (const c of node.children ?? []) walk(c)
   }
   walk(d)
-  return out
+  return [...new Set(out)]
+}
+
+/** 取り外し可能なメディアが自動・手動でマウントされる場所。 */
+const REMOVABLE_MOUNT_ROOTS = ['/media/', '/run/media/', '/mnt/', '/mnt']
+
+/**
+ * このマウントポイントは「USB メモリを差したときに使われる場所」か。
+ *
+ * 以前は `/` `/boot` `/boot/efi` `/home` の 4 つだけをシステムとして弾いていたので、
+ * スワップ (`[SWAP]`) や `/var` `/srv` `/data` を載せた内蔵・外付けディスクが候補に出た。
+ * 逆向きに、**取り外し可能なメディアの置き場所以外にマウントされていたら守る**側に倒す。
+ * 変わった場所にマウントした USB メモリは弾かれるが、理由つきで表示されるので
+ * 利用者はアンマウントすれば選べる（消してはいけないディスクを消すよりずっとよい）。
+ */
+function isRemovableMountpoint(m: string): boolean {
+  return REMOVABLE_MOUNT_ROOTS.some((root) => (root.endsWith('/') ? m.startsWith(root) : m === root))
 }
 
 /** `lsblk -J -b` の JSON をデバイス一覧に変換する（純関数。テスト可能）。 */
@@ -70,8 +89,9 @@ export function parseLsblk(json: string): RemovableDevice[] {
         sizeBytes: Number(d.size ?? 0),
         bus: mapTransport(d.tran, hotplug),
         removable: Boolean(d.rm) || hotplug,
-        // ルートや /boot を含むディスクは絶対に候補にしない
-        isSystem: mountpoints.some((m) => m === '/' || m === '/boot' || m === '/boot/efi' || m === '/home'),
+        // ルート・/boot・スワップなど、取り外し可能なメディアの置き場所以外に
+        // マウントされているものを含むディスクは絶対に候補にしない
+        isSystem: mountpoints.some((m) => !isRemovableMountpoint(m)),
         mountpoints,
         serial: d.serial?.trim() || null,
         readOnly: Boolean(d.ro),
@@ -83,10 +103,12 @@ export function parseLsblk(json: string): RemovableDevice[] {
 
 export const linuxOps: PlatformOps = {
   async listDevices() {
-    const { stdout } = await exec(
-      'lsblk',
-      ['-J', '-b', '-o', 'NAME,PATH,SIZE,TYPE,TRAN,RM,HOTPLUG,RO,MODEL,SERIAL,VENDOR,MOUNTPOINTS'],
-      { timeout: 30_000, maxBuffer: 8 * 1024 * 1024 },
+    const columns = 'NAME,PATH,SIZE,TYPE,TRAN,RM,HOTPLUG,RO,MODEL,SERIAL,VENDOR'
+    const opts = { timeout: 30_000, maxBuffer: 8 * 1024 * 1024 }
+    // MOUNTPOINTS（複数）は util-linux 2.37 から。古い lsblk は未知の列で失敗するので、
+    // 単数の MOUNTPOINT で読み直す（Debian 11 は 2.36）。
+    const { stdout } = await exec('lsblk', ['-J', '-b', '-o', `${columns},MOUNTPOINTS`], opts).catch(() =>
+      exec('lsblk', ['-J', '-b', '-o', `${columns},MOUNTPOINT`], opts),
     )
     return parseLsblk(stdout)
   },
@@ -96,11 +118,11 @@ export const linuxOps: PlatformOps = {
     // udisks があればそちら（ユーザー権限で動く）を優先し、無ければ umount を使う。
     const { stdout } = await exec('lsblk', ['-J', '-o', 'PATH,MOUNTPOINTS', deviceId], {
       timeout: 15_000,
-    })
+    }).catch(() => exec('lsblk', ['-J', '-o', 'PATH,MOUNTPOINT', deviceId], { timeout: 15_000 }))
     const parsed = JSON.parse(stdout) as { blockdevices?: LsblkDevice[] }
     const targets: string[] = []
     const walk = (n: LsblkDevice): void => {
-      if ((n.mountpoints ?? []).some(Boolean)) targets.push(n.path ?? `/dev/${n.name}`)
+      if ((n.mountpoints ?? []).some(Boolean) || n.mountpoint) targets.push(n.path ?? `/dev/${n.name}`)
       for (const c of n.children ?? []) walk(c)
     }
     for (const d of parsed.blockdevices ?? []) walk(d)

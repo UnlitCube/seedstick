@@ -1,6 +1,6 @@
 import { Scalar, isMap, type Document, type Node } from 'yaml'
 import { createAutoinstallDocument, parseAutoinstallYaml } from './yaml.js'
-import { localized, type LocalizedText, type MsgKey } from '../i18n/index.js'
+import { createTranslator, localized, type Locale, type LocalizedText, type MsgKey } from '../i18n/index.js'
 import type {
   AutoinstallProfile,
   InterfaceSelector,
@@ -37,7 +37,8 @@ import { buildBondNetplan } from './generate-bond.js'
 // GUI で作った設定と、実際にインストーラへ渡る YAML が 1 対 1 で対応することが商用ツールの信頼性の要。
 // 生成物には日本語/英語の説明コメントを付ける（初心者が YAML を読んで意味を理解できるようにするため）。
 
-export type CommentLocale = 'ja' | 'en'
+/** コメントの言語は画面の言語と同じ集合（辞書から引く）。 */
+export type CommentLocale = Locale
 
 /**
  * 生成が止まった理由を **訳せる形で** 運ぶ例外。`SeedBuildError` と同じ形。
@@ -69,137 +70,47 @@ export interface GenerateOptions {
 
 const DEFAULT_OPTIONS: GenerateOptions = { comments: 'ja' }
 
-interface Comment {
-  readonly ja: string
-  readonly en: string
-}
-
+/**
+ * 各セクションの説明コメント。**訳文は辞書（`yaml.comment.*`）に置く。**
+ * 以前は `{ja, en}` の対をここに持っていたため、言語を足すたびに別の仕組みを
+ * 直す必要があった（i18n の機構が 2 つ）。
+ */
 const C = {
-  version: {
-    ja: 'autoinstall 設定の形式バージョン。現在は 1 のみ。',
-    en: 'Format version of this autoinstall config. Only 1 exists today.',
-  },
-  interactive: {
-    ja: 'ここに書いたセクションはインストーラが画面で質問します（空なら完全自動）。',
-    en: 'Sections listed here are asked interactively. Empty means fully unattended.',
-  },
-  locale: {
-    ja: 'インストール後のシステムロケール。',
-    en: 'System locale of the installed system.',
-  },
-  keyboard: {
-    ja: 'キーボード配列。layout は必須、variant は配列の派生（無ければ空）。',
-    en: 'Keyboard layout. layout is required; variant is the sub-layout (empty if none).',
-  },
-  timezone: {
-    ja: 'タイムゾーン。geoip にすると IP アドレスから自動判定します。',
-    en: 'Time zone. Use geoip to detect it from the IP address.',
-  },
-  refreshInstaller: {
-    ja: 'インストーラ本体を snap store から最新版に更新するか。ネットワークが必要です。',
-    en: 'Whether to update the installer itself from the snap store. Requires network.',
-  },
-  source: {
-    ja: 'インストールする範囲。ubuntu-server=標準、ubuntu-server-minimal=最小構成。',
-    en: 'What to install. ubuntu-server = standard, ubuntu-server-minimal = minimal.',
-  },
-  network: {
-    ja: 'ネットワーク設定（netplan v2 形式）。インストール中と再起動後の両方に使われます。',
-    en: 'Network config in netplan v2 format, used during install and after reboot.',
-  },
-  proxy: {
-    ja: 'APT が使う HTTP プロキシ。',
-    en: 'HTTP proxy used by APT.',
-  },
-  apt: {
-    ja: 'パッケージの取得元。ミラーが遅い/届かないとインストールが長時間止まります。',
-    en: 'Package mirror settings. A slow or unreachable mirror stalls the install.',
-  },
-  storage: {
-    ja: 'ディスクの使い方。ここで指定したディスクの中身は完全に消去されます。',
-    en: 'Disk layout. Everything on the selected disk is erased.',
-  },
-  identity: {
-    ja: '最初に作る管理ユーザー。password は crypt(3) ハッシュ（平文は使えません）。',
-    en: 'The first admin user. password must be a crypt(3) hash, never plain text.',
-  },
-  ssh: {
-    ja: 'SSH の設定。install-server を true にすると openssh-server が入ります。',
-    en: 'SSH settings. install-server: true installs openssh-server.',
-  },
-  packages: {
-    ja: '追加でインストールする deb パッケージ。ネットワークが必要です。',
-    en: 'Extra deb packages to install. Requires network.',
-  },
-  snaps: {
-    ja: '追加でインストールする snap。ネットワークが必要です。',
-    en: 'Extra snaps to install. Requires network.',
-  },
-  updates: {
-    ja: 'インストール時に適用する更新。security=セキュリティのみ、all=全部。',
-    en: 'Updates applied during install. security = security only, all = everything.',
-  },
-  drivers: {
-    ja: 'サードパーティのドライバ（NVIDIA 等）を自動で入れるか。',
-    en: 'Whether to install third-party drivers (e.g. NVIDIA) automatically.',
-  },
-  kernelCrashDumps: {
-    ja: 'カーネルクラッシュダンプ (kdump) を有効にするか。',
-    en: 'Whether to enable kernel crash dumps (kdump).',
-  },
-  ubuntuPro: {
-    ja: 'Ubuntu Pro のトークン。付けると ESM などが有効になります。',
-    en: 'Ubuntu Pro token. Enables ESM and related services.',
-  },
-  lateCommands: {
-    ja: 'インストール完了後・再起動前に実行するコマンド。curtin in-target で新システム内で動きます。',
-    en: 'Commands run after install, before reboot. curtin in-target runs them inside the new system.',
-  },
-  errorCommands: {
-    ja: 'インストールが失敗したときに実行するコマンド（ログ収集などに使います）。',
-    en: 'Commands run when the install fails, e.g. to collect logs.',
-  },
-  userData: {
-    ja: 'インストール後の初回起動時に cloud-init が実行する設定。',
-    en: 'cloud-init config applied on the first boot of the installed system.',
-  },
-  shutdown: {
-    ja: 'インストール後の動作。reboot=再起動、poweroff=電源を切る。',
-    en: 'What to do when done. reboot restarts, poweroff powers off.',
-  },
-  reporting: {
-    ja: 'インストール進捗の出力先。',
-    en: 'Where install progress is reported.',
-  },
-  kernel: {
-    ja: 'インストール先に入れるカーネル。hwe は新しいハードウェア向け。',
-    en: 'Which kernel to install. hwe supports newer hardware.',
-  },
-  debconf: {
-    ja: 'debconf の質問に先回りして答える設定。',
-    en: 'Pre-seeded answers for debconf questions.',
-  },
-  activeDirectory: {
-    ja: 'Active Directory ドメインへの参加。パスワードはインストール中に聞かれます。',
-    en: 'Join an Active Directory domain. The password is asked during install.',
-  },
-  codecs: {
-    ja: 'multiverse の制限付きパッケージ (ubuntu-restricted-addons) を入れるか。',
-    en: 'Whether to install restricted packages (ubuntu-restricted-addons) from multiverse.',
-  },
-  oem: {
-    ja: 'OEM メタパッケージを入れるか。カーネルが変わることがあります。',
-    en: 'Whether to install OEM meta-packages. This can change the installed kernel.',
-  },
-  earlyCommands: {
-    ja: 'インストーラ起動直後に実行するコマンド。ここで設定自体を書き換えられます。',
-    en: 'Commands run as soon as the installer starts. They may rewrite the config itself.',
-  },
-} satisfies Record<string, Comment>
+  version: 'yaml.comment.version',
+  interactive: 'yaml.comment.interactive',
+  locale: 'yaml.comment.locale',
+  keyboard: 'yaml.comment.keyboard',
+  timezone: 'yaml.comment.timezone',
+  refreshInstaller: 'yaml.comment.refreshInstaller',
+  source: 'yaml.comment.source',
+  network: 'yaml.comment.network',
+  proxy: 'yaml.comment.proxy',
+  apt: 'yaml.comment.apt',
+  storage: 'yaml.comment.storage',
+  identity: 'yaml.comment.identity',
+  ssh: 'yaml.comment.ssh',
+  packages: 'yaml.comment.packages',
+  snaps: 'yaml.comment.snaps',
+  updates: 'yaml.comment.updates',
+  drivers: 'yaml.comment.drivers',
+  kernelCrashDumps: 'yaml.comment.kernelCrashDumps',
+  ubuntuPro: 'yaml.comment.ubuntuPro',
+  lateCommands: 'yaml.comment.lateCommands',
+  errorCommands: 'yaml.comment.errorCommands',
+  userData: 'yaml.comment.userData',
+  shutdown: 'yaml.comment.shutdown',
+  reporting: 'yaml.comment.reporting',
+  kernel: 'yaml.comment.kernel',
+  debconf: 'yaml.comment.debconf',
+  activeDirectory: 'yaml.comment.activeDirectory',
+  codecs: 'yaml.comment.codecs',
+  oem: 'yaml.comment.oem',
+  earlyCommands: 'yaml.comment.earlyCommands',
+} as const satisfies Record<string, MsgKey>
 
-function commentText(c: Comment, locale: CommentLocale | 'none'): string | undefined {
+function commentText(key: MsgKey, locale: CommentLocale | 'none'): string | undefined {
   if (locale === 'none') return undefined
-  return ` ${locale === 'ja' ? c.ja : c.en}`
+  return ` ${createTranslator(locale)(key)}`
 }
 
 // ---------------------------------------------------------------------------
@@ -768,7 +679,7 @@ export function deepMerge(
   return out
 }
 
-const SECTION_COMMENTS: Record<string, Comment> = {
+const SECTION_COMMENTS: Record<string, MsgKey> = {
   version: C.version,
   'interactive-sections': C.interactive,
   locale: C.locale,
@@ -830,6 +741,23 @@ const YAML_STRINGIFY_OPTIONS = {
 } as const
 
 /**
+ * user-data の先頭のコメント。**改行は 1 行ずつ `#` を付ける**
+ * （訳文に改行が入っても、YAML のコメントの外に出ないように）。
+ */
+function userDataHeader(profile: AutoinstallProfile, locale: CommentLocale): string {
+  const t = createTranslator(locale)
+  const lines = [
+    t('yaml.header.title'),
+    t('yaml.header.generated', { tool: profile.meta.toolVersion, profile: profile.meta.name }),
+    t('yaml.header.target', { series: profile.series }),
+    '',
+    t('yaml.header.magic'),
+  ]
+  const commented = lines.flatMap((l) => l.split('\n')).map((l) => (l === '' ? '#' : `# ${l}`))
+  return ['#cloud-config', ...commented, ''].join('\n')
+}
+
+/**
  * cloud-init の NoCloud に置く `user-data` の内容を作る。
  * 先頭の `#cloud-config` は cloud-init が必須とするマジックヘッダ（無いと設定が無視される）。
  */
@@ -840,28 +768,7 @@ export function generateUserData(
   const autoinstall = buildAutoinstallObject(profile, options)
   const doc = createAutoinstallDocument({ autoinstall })
   attachComments(doc, options.comments)
-  const header =
-    options.comments === 'none'
-      ? '#cloud-config\n'
-      : options.comments === 'ja'
-        ? [
-            '#cloud-config',
-            '# Ubuntu Server 自動インストール設定 (autoinstall)',
-            `# 生成: ${profile.meta.toolVersion} / プロファイル: ${profile.meta.name}`,
-            `# 対象: Ubuntu Server ${profile.series}`,
-            '#',
-            '# 先頭の #cloud-config 行は cloud-init が必須とする目印です。消さないでください。',
-            '',
-          ].join('\n')
-        : [
-            '#cloud-config',
-            '# Ubuntu Server unattended installation config (autoinstall)',
-            `# Generated by ${profile.meta.toolVersion} / profile: ${profile.meta.name}`,
-            `# Target: Ubuntu Server ${profile.series}`,
-            '#',
-            '# The leading #cloud-config line is required by cloud-init. Do not remove it.',
-            '',
-          ].join('\n')
+  const header = options.comments === 'none' ? '#cloud-config\n' : userDataHeader(profile, options.comments)
   return header + doc.toString(YAML_STRINGIFY_OPTIONS)
 }
 

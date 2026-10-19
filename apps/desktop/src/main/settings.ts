@@ -2,18 +2,28 @@ import { app } from 'electron'
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import type { AppSettings } from '@autoinstall/shared'
-import { resolveLocale } from '@autoinstall/shared'
+import { isLocale, negotiateLocale } from '@autoinstall/shared'
 
 // 設定は userData の JSON に保存する。アプリの更新で消えないパスなので、ここが正しい置き場所。
 
+/**
+ * 初回の言語。OS の「好みの言語の並び」から選ぶ（第一言語が未対応なら第二言語を見る）。
+ * `getPreferredSystemLanguages()` が空を返す環境もあるので、`getLocale()` も後ろに足す。
+ */
+function systemLocale(): AppSettings['locale'] {
+  return negotiateLocale([...app.getPreferredSystemLanguages(), app.getLocale()])
+}
+
 function defaults(): AppSettings {
   return {
-    locale: resolveLocale(app.getLocale()),
+    locale: systemLocale(),
     lastIsoDirectory: null,
     verifyAfterWrite: true,
     cidataSizeBytes: 64 * 1024 * 1024,
     auditRecord: true,
-    commentLanguage: resolveLocale(app.getLocale()),
+    // 既定は「画面の言語に合わせる」。初回起動時の OS の言語で固定すると、
+    // 画面の言語を変えても生成物のコメントだけが元の言語のまま残る。
+    commentLanguage: 'ui',
   }
 }
 
@@ -27,7 +37,7 @@ function normalize(raw: unknown): AppSettings {
   if (raw === null || typeof raw !== 'object') return d
   const r = raw as Partial<AppSettings>
   return {
-    locale: r.locale === 'ja' || r.locale === 'en' ? r.locale : d.locale,
+    locale: isLocale(r.locale) ? r.locale : d.locale,
     lastIsoDirectory: typeof r.lastIsoDirectory === 'string' ? r.lastIsoDirectory : null,
     // 明示的な boolean のみ受け入れる。undefined で「既定に戻す」を表現すると、
     // JSON.stringify がキーを落として二度と false にできなくなる。
@@ -38,7 +48,7 @@ function normalize(raw: unknown): AppSettings {
         : d.cidataSizeBytes,
     auditRecord: typeof r.auditRecord === 'boolean' ? r.auditRecord : d.auditRecord,
     commentLanguage:
-      r.commentLanguage === 'ja' || r.commentLanguage === 'en' || r.commentLanguage === 'none'
+      r.commentLanguage === 'ui' || r.commentLanguage === 'none' || isLocale(r.commentLanguage)
         ? r.commentLanguage
         : d.commentLanguage,
   }

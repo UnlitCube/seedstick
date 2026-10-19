@@ -24,6 +24,7 @@ import {
   addUniqueIssue,
   generateErrorIssue,
   createTranslator,
+  effectiveCommentLanguage,
   localized,
   type AppSettings,
   type ValidationIssue,
@@ -137,7 +138,7 @@ async function dialogT(): Promise<ReturnType<typeof createTranslator>> {
 /** 設定の生成と検証。ペイロードの実体は読まずにサイズだけ集計する。 */
 async function generate(profile: AutoinstallProfile): Promise<GeneratedConfig> {
   const settings = await getSettings()
-  const options = { comments: settings.commentLanguage } as const
+  const options: GenerateOptions = { comments: effectiveCommentLanguage(settings) }
   const validation = validateProfile(profile)
 
   let payloadBytes = 0
@@ -284,7 +285,7 @@ async function prepareMedia(req: {
   try {
     bundle = await buildSeedBundle({
       profile: req.profile,
-      generateOptions: { comments: settings.commentLanguage },
+      generateOptions: { comments: effectiveCommentLanguage(settings) },
       auditRecord: req.auditRecord,
       isoFileName: basename(req.isoPath),
       isoFingerprint,
@@ -512,7 +513,8 @@ export function registerIpc(): void {
     await writeFile(join(dir, 'autoinstall.yaml'), config.autoinstallYaml, 'utf8')
     // README は画面ではなく**生成物**なので、生成物のコメント言語に合わせる。
     // 'none'（コメントを入れない）のときは読む人が居ないわけではないので、UI の言語に落とす。
-    const readmeLocale = settings.commentLanguage === 'none' ? settings.locale : settings.commentLanguage
+    const commentLocale = effectiveCommentLanguage(settings)
+    const readmeLocale = commentLocale === 'none' ? settings.locale : commentLocale
     await writeFile(
       join(dir, 'README.txt'),
       createTranslator(readmeLocale)('bundle.readme', {

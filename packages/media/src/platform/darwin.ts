@@ -154,20 +154,59 @@ export function toDevice(info: DiskutilInfo, mountpoints: string[], isBootDisk: 
   })
 }
 
+/** `diskutil info -plist /` のうち、起動ディスクを特定するのに使う項目。 */
+export interface DiskutilRootInfo {
+  DeviceIdentifier?: string
+  ParentWholeDisk?: string
+  APFSContainerReference?: string
+  APFSPhysicalStores?: { APFSPhysicalStore?: string }[]
+}
+
+/** `disk4s2s1` → `disk4`。形が違えば null。 */
+function wholeDiskOf(id: unknown): string | null {
+  return typeof id === 'string' ? (/^disk\d+/.exec(id)?.[0] ?? null) : null
+}
+
+/**
+ * 起動ボリュームを**支えている物理ディスク**の集合。
+ *
+ * APFS の起動ボリュームは `disk3s1s1` のような**合成ディスク**（APFS コンテナ）の上にあり、
+ * 実体の物理ディスクは `APFSPhysicalStores`（例 `disk0s2`）でしか分からない。
+ * 以前は `DeviceIdentifier` の末尾を 1 段削っていたので `disk3s1` になり、
+ * どのディスクにも一致しなかった。内蔵ディスクは `Internal` で弾かれるので表面化しないが、
+ * **外付け SSD から起動している Mac では、起動ディスクが書き込み先の候補に出る**。
+ * 合成ディスクと物理ストアの両方を集め、どちらに一致しても起動ディスクとして扱う。
+ */
+export function bootWholeDisks(root: DiskutilRootInfo | null): Set<string> {
+  const out = new Set<string>()
+  if (root === null || typeof root !== 'object') return out
+  for (const id of [root.DeviceIdentifier, root.ParentWholeDisk, root.APFSContainerReference]) {
+    const w = wholeDiskOf(id)
+    if (w !== null) out.add(w)
+  }
+  for (const store of Array.isArray(root.APFSPhysicalStores) ? root.APFSPhysicalStores : []) {
+    const w = wholeDiskOf(store?.APFSPhysicalStore)
+    if (w !== null) out.add(w)
+  }
+  return out
+}
+
 export const darwinOps: PlatformOps = {
   async listDevices() {
     const listXml = await diskutil(['list', '-plist', 'external', 'physical'])
     const list = parsePlist(listXml) as { WholeDisks?: string[] } | null
     const wholeDisks = list?.WholeDisks ?? []
 
-    // 起動ディスクを特定して確実に除外する
-    let bootDisk = ''
+    // 起動ディスクを特定して確実に除外する。**取れなかったら 1 台も出さない**
+    // （起動ディスクが分からないまま外付けを並べると、外付けから起動した Mac で
+    // 起動ディスクを消しうる。列挙が空なら利用者は気づける）。
+    let bootDisks: Set<string>
     try {
-      const rootInfo = parsePlist(await diskutil(['info', '-plist', '/'])) as DiskutilInfo | null
-      bootDisk = (rootInfo?.DeviceIdentifier ?? '').replace(/s\d+$/, '')
+      bootDisks = bootWholeDisks(parsePlist(await diskutil(['info', '-plist', '/'])) as DiskutilRootInfo | null)
     } catch {
-      bootDisk = ''
+      return []
     }
+    if (bootDisks.size === 0) return []
 
     const devices: RemovableDevice[] = []
     for (const disk of wholeDisks) {
@@ -183,7 +222,7 @@ export const darwinOps: PlatformOps = {
         for (const d of all?.AllDisksAndPartitions ?? []) {
           for (const p of d.Partitions ?? []) if (p.MountPoint) mounts.push(p.MountPoint)
         }
-        devices.push(toDevice(info, mounts, disk === bootDisk))
+        devices.push(toDevice(info, mounts, bootDisks.has(disk)))
       } catch {
         // 1 台の情報取得に失敗しても他は列挙する
       }

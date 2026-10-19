@@ -13,7 +13,7 @@ import type {
   InstallResult,
   InstallerInfo,
 } from '../../shared/protocol.js'
-import type { Locale } from '../../shared/labels.js'
+import { INSTALLER_LOCALES, negotiateLocale, type Locale } from '../../shared/locales.js'
 import { LocaleContext, useT } from './i18n.js'
 import { TitleBar } from './components/TitleBar.js'
 import { StepRail } from './components/StepRail.js'
@@ -29,13 +29,18 @@ type InstallStep = 'welcome' | 'options' | 'progress' | 'done'
 type UninstallStep = 'confirm' | 'progress' | 'done'
 
 export function App(): React.JSX.Element {
-  const [locale, setLocale] = useState<Locale>('ja')
+  // main が OS の言語を返すまでは、ブラウザ側の並びで仮に選ぶ（同じ規則）。
+  const [locale, setLocale] = useState<Locale>(() => negotiateLocale([...navigator.languages]))
   const [info, setInfo] = useState<InstallerInfo | null>(null)
 
   useEffect(() => {
     void window.installer.locale().then(setLocale)
     void window.installer.info().then(setInfo)
   }, [])
+
+  useEffect(() => {
+    document.documentElement.lang = INSTALLER_LOCALES[locale].htmlLang
+  }, [locale])
 
   return (
     <LocaleContext.Provider value={locale}>

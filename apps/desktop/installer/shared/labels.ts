@@ -8,7 +8,14 @@
 // `ProgressPhase` の判別子で運び、訳すのは renderer だけ（落とし穴 78）。
 // この規約が守られていることは `labels.test.ts` が機械で数える。
 
-export type Locale = 'ja' | 'en'
+// **型だけ**を import する。.e2e のスクリプトは Node の型除去でこのファイルを直接読むので、
+// 実行時の import（'./locales.js'）があると解決できずに落ちる。
+import type { Locale } from './locales.js'
+
+export type { Locale }
+
+/** locales.ts の FALLBACK_LOCALE と同じ値（上の理由で import しない）。 */
+const FALLBACK: Locale = 'en'
 
 /** 差し込み。数と名前は ja / en で一致していること（テストが数える）。 */
 export type Params = Readonly<Record<string, string | number>>
@@ -244,8 +251,10 @@ export function interpolate(text: string, params?: Params): string {
 }
 
 export function createTranslator(locale: Locale) {
-  const dict = DICTIONARIES[locale] ?? DICTIONARIES.ja
-  return (key: LabelKey, params?: Params): string => interpolate(dict[key] ?? key, params)
+  // 訳が無ければ en（ja 以外の利用者に日本語を出さない）、それも無ければ原文の ja。
+  const dict = DICTIONARIES[locale] ?? DICTIONARIES[FALLBACK]
+  return (key: LabelKey, params?: Params): string =>
+    interpolate(dict[key] ?? DICTIONARIES[FALLBACK][key] ?? DICTIONARIES.ja[key] ?? key, params)
 }
 
 export type Translator = ReturnType<typeof createTranslator>

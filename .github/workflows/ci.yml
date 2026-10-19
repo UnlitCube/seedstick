@@ -77,6 +77,10 @@ jobs:
       - name: ESP 複製の late-command を本物の sh で走らせる
         run: npm run e2e:esp-mirror
 
+      # 本物の lsblk の出力で、/ を載せたディスクが候補に出ないことを見る（読むだけ）
+      - name: デバイス列挙の自己点検
+        run: npx tsx scripts/check-devices.mts
+
   windows:
     runs-on: windows-latest
     timeout-minutes: 45
@@ -194,3 +198,8 @@ jobs:
 
       - name: ユニットテスト
         run: npm run test:unit
+
+      # 本物の diskutil の出力で、起動ディスク（APFS の物理ストア）を特定できることを見る。
+      # ユニットテストは出力の形をこちらで書いているので、実物と違えば素通りする。
+      - name: デバイス列挙の自己点検
+        run: npx tsx scripts/check-devices.mts

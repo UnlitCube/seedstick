@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { Check, ChevronLeft, ChevronRight, Disc3, Languages } from 'lucide-react'
+import { isLocale, LOCALE_META, LOCALES } from '@autoinstall/shared'
 import { STEP_GROUPS, STEP_LABELS, STEP_ORDER, useStore, type StepId } from './store.js'
 import { useT, useTl } from './lib/i18n.js'
 import { summarizeStep } from './lib/summary.js'
@@ -89,13 +90,30 @@ export function App(): React.JSX.Element {
               Ubuntu Server {iso.identity.version} {iso.identity.arch}
             </span>
           )}
-          <button
-            onClick={() => void setLocale(locale === 'ja' ? 'en' : 'ja')}
-            className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
-          >
-            <Languages className="size-3.5" aria-hidden />
-            {locale === 'ja' ? 'English' : '日本語'}
-          </button>
+          {/*
+            言語は**その言語自身での名前**で並べる（English の利用者が「日本語」を
+            読めなくても、日本語の利用者は「日本語」を探せる）。名前は locales.ts の表から引き、
+            訳さない。e2e は data-locale の値で言語を読み書きする（表示文言に頼らない）。
+          */}
+          <label className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-700 dark:border-slate-600 dark:text-slate-300">
+            <Languages className="size-3.5 shrink-0" aria-hidden />
+            <span className="sr-only">{t('common.language')}</span>
+            <select
+              data-locale
+              value={locale}
+              onChange={(e) => {
+                if (isLocale(e.target.value)) void setLocale(e.target.value)
+              }}
+              className="bg-transparent py-0.5 text-xs outline-none"
+              title={t('common.language')}
+            >
+              {LOCALES.map((l) => (
+                <option key={l} value={l} lang={LOCALE_META[l].htmlLang}>
+                  {LOCALE_META[l].endonym}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
       </header>
 

@@ -5,51 +5,80 @@ import { fileURLToPath } from 'node:url'
 import * as shared from '../index.js'
 import {
   createTranslator,
+  DICTIONARIES,
   en,
   formatLocalized,
   interpolate,
+  isLocale,
   ja,
   localized,
+  LOCALE_META,
   LOCALES,
+  negotiateLocale,
   placeholdersOf,
-  resolveLocale,
+  resolvePlurals,
+  type Locale,
   type MsgKey,
 } from './index.js'
 
+/**
+ * 危険な操作の確認文に、その言語で「消える」を表す語が入っていること。
+ * **言語を足すと型エラーになる**ので、記入を忘れられない。
+ */
+const SAFETY_TERMS = {
+  ja: /消去/,
+  en: /erase/i,
+} satisfies Record<Locale, RegExp>
+
+/** その言語の訳文に出てよい文字体系の外にある 1 文字を探す正規表現（表から作る）。 */
+function unexpectedScriptPattern(locale: Locale): RegExp {
+  const allowed = [...LOCALE_META[locale].scripts, 'Common', 'Inherited']
+  return new RegExp(`[^${allowed.map((sc) => `\\p{Script=${sc}}`).join('')}]`, 'u')
+}
+
+/** U+3000-303F: 、。「」〜 など / U+FF00-FFEF: （）！？： と半角カナ。ソースは ASCII で（落とし穴 44）。 */
+const FULLWIDTH = /[\u3000-\u303F\uFF00-\uFFEF]/
+
 describe('i18n', () => {
-  it('ja と en のキーが完全に一致する', () => {
+  it('どの言語の辞書も ja とキーが完全に一致する', () => {
     // 型でも保証しているが、実行時にも確認しておく（satisfies を外した事故を検出する）
-    expect(Object.keys(en).sort()).toEqual(Object.keys(ja).sort())
+    for (const locale of LOCALES) {
+      expect(Object.keys(DICTIONARIES[locale]).sort(), locale).toEqual(Object.keys(ja).sort())
+    }
+  })
+
+  it('表の言語と辞書の言語が一致する', () => {
+    expect(Object.keys(DICTIONARIES).sort()).toEqual([...LOCALES].sort())
+    expect(LOCALES).toContain('ja')
+    expect(LOCALES).toContain('en')
   })
 
   it('空の訳文が無い', () => {
     for (const locale of LOCALES) {
-      const dict = locale === 'ja' ? ja : en
-      for (const [k, v] of Object.entries(dict)) {
+      for (const [k, v] of Object.entries(DICTIONARIES[locale])) {
         expect(v.trim().length, `${locale}.${k} が空`).toBeGreaterThan(0)
       }
     }
   })
 
-  it('英語の辞書に日本語が混入していない', () => {
-    // 製品名など意図的な例外は無い想定
-    for (const [k, v] of Object.entries(en)) {
-      expect(/[ぁ-んァ-ヶ一-龠]/.test(v), `en.${k} に日本語が残っている: ${v}`).toBe(false)
+  it('ja 以外の辞書に日本語（かな）が残っていない', () => {
+    // 訳し残しの典型。中国語は漢字を使うので、かなで見る。
+    for (const locale of LOCALES.filter((l) => l !== 'ja')) {
+      for (const [k, v] of Object.entries(DICTIONARIES[locale])) {
+        expect(/[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(v), `${locale}.${k} に日本語が残っている: ${v}`).toBe(
+          false,
+        )
+      }
     }
   })
 
-  it('英語の辞書に全角の約物が混入していない', () => {
-    // かな・漢字を英訳しても、括弧と句読点だけ全角のまま残る取りこぼしが起きる。
-    // 上の検査は「ぁ-ん」等しか見ないので素通りする。
-    // U+3000-303F: 、。「」〜 など / U+FF00-FFEF: （）！？： と半角カナ。
-    // ソースを ASCII に保つため \u エスケープで書く（落とし穴 44）。
-    const FULLWIDTH = /[\u3000-\u303F\uFF00-\uFFEF]/
-    for (const [k, v] of Object.entries(en)) {
-      const hit = v.match(FULLWIDTH)
-      expect(
-        hit,
-        `en.${k} に全角の約物が残っている: ${JSON.stringify(hit?.[0])} in ${v}`,
-      ).toBeNull()
+  it('全角の約物を使わない言語に、全角の約物が混入していない', () => {
+    // かな・漢字を訳しても、括弧と句読点だけ全角のまま残る取りこぼしが起きる。
+    for (const locale of LOCALES.filter((l) => !LOCALE_META[l].fullwidthPunctuation)) {
+      for (const [k, v] of Object.entries(DICTIONARIES[locale])) {
+        const hit = v.match(FULLWIDTH)
+        expect(hit, `${locale}.${k} に全角の約物が残っている: ${JSON.stringify(hit?.[0])} in ${v}`).toBeNull()
+      }
     }
   })
 
@@ -62,19 +91,33 @@ describe('i18n', () => {
     expect(createTranslator('ja')('nope.not.a.key' as MsgKey)).toBe('nope.not.a.key')
   })
 
-  it('OS ロケールから言語を決める', () => {
-    expect(resolveLocale('ja-JP')).toBe('ja')
-    expect(resolveLocale('ja')).toBe('ja')
-    expect(resolveLocale('en-US')).toBe('en')
-    expect(resolveLocale(undefined)).toBe('en')
-    expect(resolveLocale('de-DE')).toBe('en')
+  it('OS の言語の並びから言語を決める', () => {
+    expect(negotiateLocale(['ja-JP'])).toBe('ja')
+    expect(negotiateLocale(['ja'])).toBe('ja')
+    expect(negotiateLocale(['en-US'])).toBe('en')
+    expect(negotiateLocale(['en-GB'])).toBe('en')
+    expect(negotiateLocale([])).toBe('en')
+    expect(negotiateLocale([undefined, null, ''])).toBe('en')
+    // 対応していない言語は飛ばして、次に好まれている言語を見る
+    expect(negotiateLocale(['it-IT', 'ja-JP'])).toBe('ja')
+    expect(negotiateLocale(['it-IT'])).toBe('en')
+    // 区切りが _ の形（POSIX のロケール）も読める
+    expect(negotiateLocale(['ja_JP.UTF-8'.split('.')[0]!])).toBe('ja')
+    for (const l of LOCALES) expect(negotiateLocale([l]), l).toBe(l)
+    expect(isLocale('en')).toBe(true)
+    expect(isLocale('xx')).toBe(false)
+    expect(isLocale('__proto__')).toBe(false)
   })
 
-  it('危険な操作の文言に警告が含まれている', () => {
-    // 誤操作でディスクを消す事故を防ぐため、確認文には必ず「消去」「erased」が入る
-    expect(ja['write.confirmBody']).toMatch(/消去/)
-    expect(en['write.confirmBody']).toMatch(/erased/i)
-    expect(ja['storage.warning']).toMatch(/消去/)
+  it('危険な操作の文言に、その言語の「消える」が含まれている', () => {
+    // 誤操作でディスクを消す事故を防ぐため、確認文には必ず消去を表す語が入る。
+    // 訳で弱めると（「上書きされます」など）、ここで落ちる。
+    for (const locale of LOCALES) {
+      const term = SAFETY_TERMS[locale]
+      const d = DICTIONARIES[locale]
+      expect(d['write.confirmBody'], `${locale} write.confirmBody`).toMatch(term)
+      expect(d['storage.warning'], `${locale} storage.warning`).toMatch(term)
+    }
   })
 })
 
@@ -99,17 +142,76 @@ describe('差し込み', () => {
     expect(interpolate('{a}', { a: '{b}', b: 'secret' })).toBe('{b}')
   })
 
-  it('プレースホルダを含むキーは ja と en で名前の集合が一致する', () => {
-    for (const key of Object.keys(ja) as MsgKey[]) {
-      expect(placeholdersOf(en[key]), `${key} の差し込み名が ja と en で違う`).toEqual(
-        placeholdersOf(ja[key]),
-      )
+  it('プレースホルダを含むキーは、どの言語でも ja と名前の集合が一致する', () => {
+    for (const locale of LOCALES) {
+      const d = DICTIONARIES[locale]
+      for (const key of Object.keys(ja) as MsgKey[]) {
+        expect(placeholdersOf(d[key]), `${key} の差し込み名が ja と ${locale} で違う`).toEqual(
+          placeholdersOf(ja[key]),
+        )
+      }
     }
   })
 
   it('翻訳関数が差し込みを行う', () => {
     const t = createTranslator('ja')
     expect(t('common.next')).toBe('次へ')
+  })
+})
+
+describe('複数形', () => {
+  const EN = '{n, plural, one {# item} other {# items}}'
+
+  it('数に合う形を選ぶ（en: 1 は one、それ以外は other）', () => {
+    expect(interpolate(EN, { n: 1 }, 'en')).toBe('1 item')
+    expect(interpolate(EN, { n: 2 }, 'en')).toBe('2 items')
+    expect(interpolate(EN, { n: 0 }, 'en')).toBe('0 items')
+    // IPC から文字列で来ても数として読む
+    expect(interpolate(EN, { n: '1' }, 'en')).toBe('1 item')
+  })
+
+  it('その言語に無い形は other を使う（ja は other だけ）', () => {
+    expect(interpolate('{n, plural, other {# 件}}', { n: 1 }, 'ja')).toBe('1 件')
+    // en で one を書き忘れても other で出る（落ちない）
+    expect(interpolate('{n, plural, other {# items}}', { n: 1 }, 'en')).toBe('1 items')
+  })
+
+  it('中の通常の差し込みも置き換える', () => {
+    expect(interpolate('{n, plural, one {# item ({size})} other {# items ({size})}}', { n: 3, size: '2 MB' }, 'en')).toBe(
+      '3 items (2 MB)',
+    )
+  })
+
+  it('値が無い・数でないときはブロックを残す（渡し忘れに気づける）', () => {
+    expect(interpolate(EN, {}, 'en')).toBe(EN)
+    expect(interpolate(EN, { n: 'abc' }, 'en')).toBe(EN)
+  })
+
+  it('壊れた書式でも例外を投げない', () => {
+    for (const broken of ['{n, plural, one {x', '{n, plural, one x}', '{n, plural, }', '{n, plural,']) {
+      expect(() => resolvePlurals(broken, { n: 1 }, 'en'), broken).not.toThrow()
+    }
+  })
+
+  it('差し込み名の集合に、複数形の変数と中の差し込みを数える', () => {
+    expect(placeholdersOf('{n, plural, one {# item ({size})} other {# items ({size})}}')).toEqual(['n', 'size'])
+  })
+
+  it('辞書の複数形は、どの言語でも other を持つ', () => {
+    // other が無いと、CLDR がその言語で返す形によっては何も出ない。
+    const bad: string[] = []
+    for (const locale of LOCALES) {
+      for (const [k, v] of Object.entries(DICTIONARIES[locale])) {
+        if (!/,\s*plural\s*,/.test(v)) continue
+        if (!/\bother\s*\{/.test(v)) bad.push(`${locale}.${k}`)
+        // 実際に 1 と 2 で展開できること（壊れていればブロックが残る）
+        for (const n of [1, 2]) {
+          const out = resolvePlurals(v, { n, count: n }, locale)
+          if (/,\s*plural\s*,/.test(out)) bad.push(`${locale}.${k} (n=${n}): ${out}`)
+        }
+      }
+    }
+    expect(bad).toEqual([])
   })
 })
 
@@ -356,12 +458,12 @@ describe('選択肢のラベル', () => {
     expect(where).toContain('COMMON_PACKAGES[0].label')
   })
 
-  it('すべてのラベルが両方の辞書に実在する（実在しないと画面にキー名が出る）', () => {
+  it('すべてのラベルがすべての辞書に実在する（実在しないと画面にキー名が出る）', () => {
     // `createTranslator` は未知のキーをそのまま返すので、綴りを間違えた選択肢は
     // 画面に `basics.keyboardKr140` のような英数字を出す。型（MsgKey）でも
     // 弾けるが、`as MsgKey` で抜けられるし、辞書からキーを消した側は気づけない。
     const missing = labels
-      .filter((l) => ja[l.key as MsgKey] === undefined || en[l.key as MsgKey] === undefined)
+      .filter((l) => LOCALES.some((locale) => DICTIONARIES[locale][l.key as MsgKey] === undefined))
       .map((l) => `${l.where}: "${l.key}"`)
     expect(missing, 'ja.ts / en.ts に無いキーを選択肢が指しています').toEqual([])
   })
@@ -380,34 +482,35 @@ describe('選択肢のラベル', () => {
     // ここでも実際に引いた文字列で確かめる。
     const bad: string[] = []
     for (const l of labels) {
-      const jaText = ja[l.key as MsgKey]
-      const enText = en[l.key as MsgKey]
-      if (jaText === undefined || enText === undefined) continue
-      const jaHit = unexpectedChar(jaText, UNEXPECTED_IN_JA)
-      if (jaHit !== null) bad.push(`${l.where} (ja): ${jaHit} in ${jaText}`)
-      const enHit = unexpectedChar(enText, UNEXPECTED_IN_EN)
-      if (enHit !== null) bad.push(`${l.where} (en): ${enHit} in ${enText}`)
+      for (const locale of LOCALES) {
+        const text = DICTIONARIES[locale][l.key as MsgKey]
+        if (text === undefined) continue
+        const hit = unexpectedChar(text, unexpectedScriptPattern(locale))
+        if (hit !== null) bad.push(`${l.where} (${locale}): ${hit} in ${text}`)
+      }
     }
     expect(bad, 'ハングル・キリル・タイ文字などがラベルに混ざっています').toEqual([])
   })
 })
 
 describe('想定外の文字体系', () => {
-  it('ja の辞書に想定外の文字体系が混ざっていない', () => {
-    const bad = Object.entries(ja)
-      .map(([k, v]) => ({ k, v, hit: unexpectedChar(v, UNEXPECTED_IN_JA) }))
-      .filter((b) => b.hit !== null)
-      .map((b) => `ja.${b.k}: ${b.hit} in ${b.v}`)
+  it('どの言語の辞書にも、その言語の外の文字体系が混ざっていない', () => {
+    // 表（LOCALE_META.scripts）から作るので、言語を足せば自動で検査が増える。
+    const bad: string[] = []
+    for (const locale of LOCALES) {
+      const pattern = unexpectedScriptPattern(locale)
+      for (const [k, v] of Object.entries(DICTIONARIES[locale])) {
+        const hit = unexpectedChar(v, pattern)
+        if (hit !== null) bad.push(`${locale}.${k}: ${hit} in ${v}`)
+      }
+    }
     expect(bad).toEqual([])
   })
 
-  it('en の辞書に想定外の文字体系が混ざっていない', () => {
-    // かな・漢字は上の検査でも落ちるが、こちらはハングルやキリルも落とす。
-    const bad = Object.entries(en)
-      .map(([k, v]) => ({ k, v, hit: unexpectedChar(v, UNEXPECTED_IN_EN) }))
-      .filter((b) => b.hit !== null)
-      .map((b) => `en.${b.k}: ${b.hit} in ${b.v}`)
-    expect(bad).toEqual([])
+  it('表から作った検査が、手で書いた検査と同じに働く', () => {
+    expect(unexpectedScriptPattern('ja').source).toContain('Hiragana')
+    expect(unexpectedChar('Korean (104\u30AD\u30FC)', unexpectedScriptPattern('en'))).toBe('\u30AD (U+30AD)')
+    expect(unexpectedChar('\u97D3\u56FD\u8A9E (104\uD0A4)', unexpectedScriptPattern('ja'))).toBe('\uD0A4 (U+D0A4)')
   })
 
   it('検査そのものが効く（混ぜたら落ちることを確かめる）', () => {
