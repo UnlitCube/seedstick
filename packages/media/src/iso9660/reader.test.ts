@@ -21,6 +21,7 @@ const CASES = [
     grubExtent: 1835,
     grubSize: 570,
     hweEntry: true,
+    md5ListsGrubCfg: true,
   },
   {
     name: 'ubuntu-24.04.4-live-server-amd64',
@@ -29,6 +30,7 @@ const CASES = [
     grubExtent: 2197,
     grubSize: 573,
     hweEntry: true,
+    md5ListsGrubCfg: true,
   },
   {
     name: 'ubuntu-25.10-live-server-amd64',
@@ -37,6 +39,7 @@ const CASES = [
     grubExtent: 1999,
     grubSize: 443,
     hweEntry: false,
+    md5ListsGrubCfg: true,
   },
   {
     name: 'ubuntu-26.04.1-live-server-amd64',
@@ -45,6 +48,19 @@ const CASES = [
     grubExtent: 1997,
     grubSize: 394,
     hweEntry: false,
+    md5ListsGrubCfg: true,
+  },
+  {
+    name: 'ubuntu-26.10-live-server-amd64',
+    volumeId: 'Ubuntu-Server 26.10 amd64',
+    size: 2_897_321_984,
+    grubExtent: 2239,
+    grubSize: 394,
+    hweEntry: false,
+    // 26.10 の md5sum.txt は grub.cfg を載せていない（loopback.cfg だけ）。
+    // 2026-10-20 に実 ISO から直接読んで確認（916 行）。書き換える行が無いので、
+    // md5sum.txt のパッチは出ない（buildIsoPatches は 3 か所になる）。
+    md5ListsGrubCfg: false,
   },
 ] as const
 
@@ -118,13 +134,17 @@ describe.each(CASES)('$name', (c) => {
     expect(2048 - c.grubSize).toBeGreaterThan(1400)
   })
 
-  it('md5sum.txt に ./boot/grub/grub.cfg の行がある', async () => {
+  it('md5sum.txt の ./boot/grub/grub.cfg の行の有無が実測どおり', async () => {
     const dev = device(c.name)
     const iso = await readIsoStructure(dev)
     const found = await resolvePath(dev, iso.pvd.rootRecord, '/md5sum.txt')
     expect(found).not.toBeNull()
     const text = (await readFile(dev, found!.record)).toString('utf8')
-    expect(text).toMatch(/^[0-9a-f]{32} {2}\.\/boot\/grub\/grub\.cfg$/m)
+    const line = /^[0-9a-f]{32} {2}\.\/boot\/grub\/grub\.cfg$/m
+    if (c.md5ListsGrubCfg) expect(text).toMatch(line)
+    else expect(text).not.toMatch(line)
+    // どちらでも md5sum.txt 自体は本物（行が十分ある）
+    expect(text.split('\n').filter((l) => /^[0-9a-f]{32} {2}\.\//.test(l)).length).toBeGreaterThan(50)
   })
 
   it('.disk/info が Ubuntu-Server の書式である', async () => {

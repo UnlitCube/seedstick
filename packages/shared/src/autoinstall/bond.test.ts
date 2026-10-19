@@ -313,6 +313,7 @@ const SCHEMA_FILES: Record<UbuntuSeries, string> = {
   '24.04': 'autoinstall-schema.24.04.4.json',
   '25.10': 'autoinstall-schema.25.10.json',
   '26.04': 'autoinstall-schema.26.04.1.json',
+  '26.10': 'autoinstall-schema.26.10.json',
 }
 
 function validatorFor(series: UbuntuSeries): (data: unknown) => ErrorObject[] | null {

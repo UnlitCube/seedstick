@@ -22,9 +22,9 @@ import type {
 // autoinstall のキー名をそのまま使わず、初心者に意味が分かる語彙にしている（変換は generate.ts）。
 
 /** サポートする Ubuntu Server のシリーズ。ISO の Volume ID から自動判定する。 */
-export type UbuntuSeries = '22.04' | '24.04' | '25.10' | '26.04'
+export type UbuntuSeries = '22.04' | '24.04' | '25.10' | '26.04' | '26.10'
 
-export const UBUNTU_SERIES: readonly UbuntuSeries[] = ['22.04', '24.04', '25.10', '26.04']
+export const UBUNTU_SERIES: readonly UbuntuSeries[] = ['22.04', '24.04', '25.10', '26.04', '26.10']
 
 /** シリーズごとの autoinstall 機能差。subiquity の autoinstall-schema.json 実測に基づく。 */
 export interface SeriesFeatures {
@@ -115,6 +115,21 @@ export const SERIES_FEATURES: Record<UbuntuSeries, SeriesFeatures> = {
     resetPartition: true,
   },
   '26.04': {
+    interactiveSections: true,
+    interactiveAll: true,
+    source: true,
+    ubuntuPro: true,
+    codecsOemAd: true,
+    kernelCrashDumps: true,
+    zdevs: true,
+    hweMenuEntry: false,
+    identityGroups: true,
+    aptFallback: true,
+    resetPartition: true,
+  },
+  // 26.10 は autoinstall-schema.json が 26.04.1 とバイト単位で同一、grub.cfg も同一
+  // （2026-10-20 に実 ISO と subiquity のタグ 26.10 で実測。docs/research/iso-probe/26.10）。
+  '26.10': {
     interactiveSections: true,
     interactiveAll: true,
     source: true,

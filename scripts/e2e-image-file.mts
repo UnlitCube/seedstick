@@ -57,6 +57,7 @@ import { sha512Crypt } from '../packages/shared/src/crypt/sha512crypt.js'
 import { checkFreeSpace, checkImageDestination, suggestImageFileName } from '../apps/desktop/src/main/image-target.js'
 import { buildSeedBundle } from '../apps/desktop/src/main/seed-builder.js'
 import { WriteSupervisor } from '../apps/desktop/src/main/write-supervisor.js'
+import { md5sumLineCheck } from './lib/md5sum-line.mts'
 
 const HASH = sha512Crypt('image-e2e-password', { salt: 'imagesalt' })
 
@@ -168,6 +169,7 @@ async function run(isoPath: string): Promise<void> {
     const isoDev = await FileBlockDevice.open(isoPath, 'r')
     let patches: { offset: number; data: string; label: string }[]
     let newGrubCfg: string
+    let originalMd5 = ''
     let volumeId: string
     let isoSizeBytes: number
     let series: UbuntuSeries
@@ -178,6 +180,7 @@ async function run(isoPath: string): Promise<void> {
       if (recognized.kind !== 'supported') return
       series = recognized.identity.series
       volumeId = inspection.volumeId
+      originalMd5 = inspection.md5sum?.text ?? ''
       isoSizeBytes = inspection.sizeBytes
       console.log(
         `       ${recognized.identity.version} ${recognized.identity.arch} / ${formatSize(isoStat.size)}`,
@@ -388,12 +391,8 @@ async function run(isoPath: string): Promise<void> {
 
       const md5 = await resolvePath(img, structure.pvd.rootRecord, '/md5sum.txt')
       const md5Text = (await readIsoFile(img, md5!.record)).toString('utf8')
-      const line = md5Text.split('\n').find((l) => l.endsWith('  ./boot/grub/grub.cfg'))
-      eq(
-        'md5sum.txt の grub.cfg 行が更新されている',
-        line?.slice(0, 32),
-        createHash('md5').update(Buffer.from(newGrubCfg, 'utf8')).digest('hex'),
-      )
+      const m = md5sumLineCheck(originalMd5, md5Text, newGrubCfg)
+      check(m.label, m.ok, m.detail)
 
       // CIDATA
       const cidata = gpt!.entries.find((e) => e.name === CIDATA_LABEL)!

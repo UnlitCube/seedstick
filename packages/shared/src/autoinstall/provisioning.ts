@@ -190,13 +190,15 @@ export interface GpuConfig {
 
 /**
  * NVIDIA の CUDA リポジトリが存在する Ubuntu シリーズ。
- * 2026-09-03 時点で `ubuntu2510` は 404（リポジトリ自体が無い）。
+ * `ubuntu2510`（2026-09-03）と `ubuntu2610`（2026-10-20）は 404（リポジトリ自体が無い）。
+ * 公開されたら `cuda-keyring_1.1-1_all.deb` が 200 になることを確かめてから足す。
  */
 export const CUDA_REPO_DISTRO: Record<UbuntuSeries, string | null> = {
   '22.04': 'ubuntu2204',
   '24.04': 'ubuntu2404',
   '25.10': null,
   '26.04': 'ubuntu2604',
+  '26.10': null,
 }
 
 /** リポジトリに存在することを確認済みのツールキット。新しい順。 */

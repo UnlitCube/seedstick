@@ -1,4 +1,4 @@
-import type { UbuntuSeries } from '../autoinstall/model.js'
+import { UBUNTU_SERIES, type UbuntuSeries } from '../autoinstall/model.js'
 
 // ISO の識別と、シリーズごとの既知の値。すべて実 ISO の実測に基づく（docs/research/ISO-FACTS.md）。
 
@@ -26,6 +26,7 @@ const VOLUME_ID_RE = /^Ubuntu-Server (\d+\.\d+(?:\.\d+)?)( LTS)? (amd64|arm64)$/
 /**
  * `.disk/info` の実測フォーマット:
  *   `Ubuntu-Server 24.04.4 LTS "Noble Numbat" - Release amd64 (20260210)`
+ *   `Ubuntu-Server 26.10 "Stonking Stingray" - Official amd64 (20261010)`（Release ではない）
  */
 const DISK_INFO_RE =
   /^Ubuntu-Server (\d+\.\d+(?:\.\d+)?)( LTS)? "([^"]+)" - \w+ (amd64|arm64) \((\d{8}(?:\.\d+)?)\)/
@@ -44,7 +45,8 @@ export type IsoRecognition =
 function seriesOf(version: string): UbuntuSeries | undefined {
   const parts = version.split('.')
   const series = `${parts[0]}.${parts[1]}`
-  return (['22.04', '24.04', '25.10', '26.04'] as const).find((s) => s === series)
+  // 対応表は model.ts の 1 か所だけ。ここに写すと、シリーズを足したとき写しだけが取り残される
+  return UBUNTU_SERIES.find((s) => s === series)
 }
 
 /** Volume ID と（あれば）`.disk/info` から ISO を識別する。 */
@@ -94,7 +96,7 @@ export interface SeriesCatalogEntry {
   readonly eol: string
 }
 
-/** 2026-09-03 時点の実測値。GUI の「ISO をダウンロード」導線とバージョン検証に使う。 */
+/** 実測値（2026-09-03、24.04.5 と 26.10 は 2026-10-20）。GUI の「ISO をダウンロード」導線とバージョン検証に使う。 */
 export const SERIES_CATALOG: Record<UbuntuSeries, SeriesCatalogEntry> = {
   '22.04': {
     series: '22.04',
@@ -112,9 +114,9 @@ export const SERIES_CATALOG: Record<UbuntuSeries, SeriesCatalogEntry> = {
     codename: 'Noble Numbat',
     isLts: true,
     releaseDir: 'https://releases.ubuntu.com/24.04/',
-    knownLatestVersion: '24.04.4',
-    knownIsoName: 'ubuntu-24.04.4-live-server-amd64.iso',
-    knownIsoSize: 3_405_469_696,
+    knownLatestVersion: '24.04.5',
+    knownIsoName: 'ubuntu-24.04.5-live-server-amd64.iso',
+    knownIsoSize: 4_080_486_400,
     hasHweEntry: true,
     eol: '2029-04',
   },
@@ -139,6 +141,18 @@ export const SERIES_CATALOG: Record<UbuntuSeries, SeriesCatalogEntry> = {
     knownIsoSize: 2_927_861_760,
     hasHweEntry: false,
     eol: '2031-04',
+  },
+  '26.10': {
+    series: '26.10',
+    codename: 'Stonking Stingray',
+    isLts: false,
+    releaseDir: 'https://releases.ubuntu.com/26.10/',
+    knownLatestVersion: '26.10',
+    knownIsoName: 'ubuntu-26.10-live-server-amd64.iso',
+    knownIsoSize: 2_897_321_984,
+    hasHweEntry: false,
+    // 非 LTS は 9 か月（25.10 と同じ数え方）
+    eol: '2027-07',
   },
 }
 

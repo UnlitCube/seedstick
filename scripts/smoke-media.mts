@@ -32,6 +32,7 @@ import {
   IsoValidationError,
 } from '../packages/media/src/index.js'
 import {
+  CUDA_REPO_DISTRO,
   SEED_MOUNT_PATH,
   collectFirstBootCommands,
   collectLateCommands,
@@ -44,6 +45,7 @@ import {
   type AutoinstallProfile,
 } from '../packages/shared/src/index.js'
 import { sha512Crypt } from '../packages/shared/src/crypt/sha512crypt.js'
+import { md5sumLineCheck } from './lib/md5sum-line.mts'
 
 const HASH = sha512Crypt('smoke-test-password', { salt: 'smokesalt' })
 
@@ -140,7 +142,8 @@ async function checkFullWrite(path: string): Promise<void> {
     await writeFile(payloadPath, payload)
 
     const base = createDefaultProfile(recognized.identity.series, 'smoke/0.1.0', '2026-09-03T00:00:00.000Z')
-    const gpuSupported = recognized.identity.series !== '25.10'
+    // CUDA の可否は表から引く（`series !== '25.10'` と写すと 26.10 で取り残された。落とし穴 82）
+    const gpuSupported = CUDA_REPO_DISTRO[recognized.identity.series] !== null
     const profile: AutoinstallProfile = {
       ...base,
       basics: { ...base.basics, hostname: 'smoke-host', locale: 'ja_JP.UTF-8', timezone: 'Asia/Tokyo' },
@@ -252,7 +255,9 @@ async function checkFullWrite(path: string): Promise<void> {
 
     // --- 3. レイアウト計画 ---
     const patchPlan = buildIsoPatches(inspection, { args: ['autoinstall'], markTitle: true })
-    eq('パッチ数', patchPlan.patches.length, 4)
+    // md5sum.txt が grub.cfg を載せていれば 4 か所、載せていなければ（26.10〜）3 か所
+    const md5Listed = (inspection.md5sum?.text ?? '').split('\n').some((l) => l.endsWith('  ./boot/grub/grub.cfg'))
+    eq('パッチ数', patchPlan.patches.length, md5Listed ? 4 : 3)
     check('改変後 grub.cfg に autoinstall が入る', patchPlan.newGrubCfg.includes('autoinstall'))
     check('改変後 grub.cfg が 2048 バイト以内', Buffer.byteLength(patchPlan.newGrubCfg, 'utf8') <= 2048)
 
@@ -346,9 +351,8 @@ async function checkFullWrite(path: string): Promise<void> {
       // md5sum.txt
       const md5 = await resolvePath(img, structure.pvd.rootRecord, '/md5sum.txt')
       const md5Text = (await readIsoFile(img, md5!.record)).toString('utf8')
-      const line = md5Text.split('\n').find((l) => l.endsWith('  ./boot/grub/grub.cfg'))
-      const expectedMd5 = createHash('md5').update(Buffer.from(patchPlan.newGrubCfg, 'utf8')).digest('hex')
-      eq('md5sum.txt の grub.cfg 行が更新されている', line?.slice(0, 32), expectedMd5)
+      const m = md5sumLineCheck(inspection.md5sum?.text ?? '', md5Text, patchPlan.newGrubCfg)
+      check(m.label, m.ok, m.detail)
 
       // CIDATA パーティション
       const cidata = gpt!.entries.find((e) => e.name === CIDATA_LABEL)!

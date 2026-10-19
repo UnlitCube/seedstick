@@ -45,7 +45,20 @@ const CASES = [
   'ubuntu-24.04.4-live-server-amd64',
   'ubuntu-25.10-live-server-amd64',
   'ubuntu-26.04.1-live-server-amd64',
+  'ubuntu-26.10-live-server-amd64',
 ] as const
+
+/**
+ * md5sum.txt が grub.cfg を載せているか（実測）。26.10 から載らなくなった。
+ * 載っていなければ書き換える行が無いので、md5sum.txt のパッチは出ない。
+ */
+const MD5_LISTS_GRUB_CFG: Record<(typeof CASES)[number], boolean> = {
+  'ubuntu-22.04.5-live-server-amd64': true,
+  'ubuntu-24.04.4-live-server-amd64': true,
+  'ubuntu-25.10-live-server-amd64': true,
+  'ubuntu-26.04.1-live-server-amd64': true,
+  'ubuntu-26.10-live-server-amd64': false,
+}
 
 /** テストを決定的にするための固定乱数源 */
 function fixedRandom(seed = 1): (n: number) => Buffer {
@@ -127,12 +140,12 @@ describe.each(CASES)('%s の USB 作成', (name) => {
     expect(w.inspection.grubCfgJoliet).not.toBeNull()
   })
 
-  it('パッチは grub.cfg セクタ / レコード 2 つ / md5sum の 4 か所だけ', () => {
+  it('パッチは grub.cfg セクタ / レコード 2 つ /（載っていれば）md5sum の行だけ', () => {
     expect(w.patchPlan.patches.map((p) => p.label)).toEqual([
       'grub.cfg contents',
       'grub.cfg size (ISO9660)',
       'grub.cfg size (Joliet)',
-      'grub.cfg line in md5sum.txt',
+      ...(MD5_LISTS_GRUB_CFG[name] ? ['grub.cfg line in md5sum.txt'] : []),
     ])
     expect(w.patchPlan.newGrubCfg).toContain('autoinstall')
     expect(w.patchPlan.patchedKernelLines).toBeGreaterThan(0)
@@ -236,11 +249,18 @@ describe.each(CASES)('%s の USB 作成', (name) => {
     expect((await readFile(w.usb, j!.record)).toString('utf8')).toBe(w.patchPlan.newGrubCfg)
   })
 
-  it('md5sum.txt の grub.cfg 行が新しい内容の MD5 に更新される', async () => {
+  it('md5sum.txt の grub.cfg 行が新しい内容の MD5 に更新される（載っていれば）', async () => {
     const structure = await readIsoStructure(w.usb)
     const md5 = await resolvePath(w.usb, structure.pvd.rootRecord, '/md5sum.txt')
     const text = (await readFile(w.usb, md5!.record)).toString('utf8')
     const line = text.split('\n').find((l) => l.endsWith('  ./boot/grub/grub.cfg'))
+    if (!MD5_LISTS_GRUB_CFG[name]) {
+      // 載っていないリリースでは、行を足していない（md5sum.txt は 1 バイトも変えない）
+      expect(line).toBeUndefined()
+      const original = await resolvePath(w.iso, (await readIsoStructure(w.iso)).pvd.rootRecord, '/md5sum.txt')
+      expect(text).toBe((await readFile(w.iso, original!.record)).toString('utf8'))
+      return
+    }
     expect(line).toBeDefined()
     const expected = createHash('md5').update(Buffer.from(w.patchPlan.newGrubCfg, 'utf8')).digest('hex')
     expect(line!.slice(0, 32)).toBe(expected)

@@ -60,6 +60,7 @@ import {
   type UbuntuSeries,
 } from '../packages/shared/src/index.js'
 import { sha512Crypt } from '../packages/shared/src/crypt/sha512crypt.js'
+import { md5sumLineCheck } from './lib/md5sum-line.mts'
 
 const HASH = sha512Crypt('e2e-test-password', { salt: 'e2esalt00' })
 const SSH_KEY = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample e2e@example'
@@ -69,6 +70,7 @@ const SCHEMA_FILES: Record<UbuntuSeries, string> = {
   '24.04': 'autoinstall-schema.24.04.4.json',
   '25.10': 'autoinstall-schema.25.10.json',
   '26.04': 'autoinstall-schema.26.04.1.json',
+  '26.10': 'autoinstall-schema.26.10.json',
 }
 
 let failures = 0
@@ -726,12 +728,8 @@ async function runCase(
 
     const md5 = await resolvePath(img, structure.pvd.rootRecord, '/md5sum.txt')
     const md5Text = (await readIsoFile(img, md5!.record)).toString('utf8')
-    const line = md5Text.split('\n').find((l) => l.endsWith('  ./boot/grub/grub.cfg'))
-    eq(
-      `${c.id}: md5sum.txt が更新されている`,
-      line?.slice(0, 32),
-      createHash('md5').update(Buffer.from(grubText, 'utf8')).digest('hex'),
-    )
+    const m = md5sumLineCheck(iso.inspection.md5sum?.text ?? '', md5Text, grubText)
+    check(`${c.id}: ${m.label}`, m.ok, m.detail)
 
     const gptRead = (await readGpt(img))!
     const cidata = gptRead.entries.find((e) => e.name === CIDATA_LABEL)!
