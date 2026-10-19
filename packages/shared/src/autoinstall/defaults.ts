@@ -5,7 +5,7 @@ import { createDefaultRaidStorage } from './raid.js'
 /** 何も設定していない状態のプロファイル。GUI の初期値であり、単体テストの基準でもある。 */
 export function createDefaultProfile(
   series: UbuntuSeries = '24.04',
-  toolVersion = 'autoinstall-ui/0.1.0',
+  toolVersion = 'seedstick/0.1.0',
   createdAt = '1970-01-01T00:00:00.000Z',
 ): AutoinstallProfile {
   return {

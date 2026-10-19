@@ -195,30 +195,20 @@ critical 3 件はすべてその型だった。
 ### 2.4 監査結果の置き場
 
 ```
-run ID  : wf_f344b0ea-275
-結果 JSON: C:\Users\user\AppData\Local\Temp\claude\c--dev-autoinstall-ui\
-           fc99da65-c423-4374-931f-e16fde7ad614\tasks\wm01o7nlq.output
-journal : C:\Users\user\.claude\projects\c--dev-autoinstall-ui\
-           265087e8-6f15-4284-9dc5-d04858b0c178\subagents\workflows\wf_f344b0ea-275\journal.jsonl
-スクリプト: C:\Users\user\.claude\projects\C--dev-autoinstall-ui\
-           265087e8-6f15-4284-9dc5-d04858b0c178\workflows\scripts\audit-round4-wf_f344b0ea-275.js
+run ID    : wf_f344b0ea-275
+スクリプト: audit-round4-wf_f344b0ea-275.js
 ```
 
 5 巡目:
 
 ```
-run ID   : wf_9dc57c25-409
-journal  : C:\Users\user\.claude\projects\c--dev-autoinstall-ui\
-           8ef72743-47d2-4cdb-a320-0daf0fed1f11\subagents\workflows\wf_9dc57c25-409\journal.jsonl
-スクリプト: C:\Users\user\.claude\projects\C--dev-autoinstall-ui\
-           8ef72743-47d2-4cdb-a320-0daf0fed1f11\workflows\scripts\
-           guard-and-audit-round5-wf_9dc57c25-409.js
-修正側     : 同ディレクトリの fix-round5-findings-wf_821c84cc-258.js
-           （run ID `wf_821c84cc-258`）
+run ID    : wf_9dc57c25-409
+スクリプト: guard-and-audit-round5-wf_9dc57c25-409.js
+修正側    : fix-round5-findings-wf_821c84cc-258.js（run ID `wf_821c84cc-258`）
 ```
 
-（2026-09-05 時点で上記はすべて実在を確認した。ただしどれも
-`.claude` 配下なので、リポジトリを別のマシンへ移すと付いてこない。）
+（結果・journal・スクリプトは作者の手元の Claude Code の作業ディレクトリ（`.claude` 配下）にあり、
+リポジトリには含まれない。公開にあたってローカルのパスは消した。）
 
 一時ディレクトリなので消える可能性がある。**残す価値があるものは
 CHANGELOG と CLAUDE.md に書き写してある。**
@@ -238,19 +228,14 @@ CHANGELOG と CLAUDE.md に書き写してある。**
 6 巡目（今回）:
 
 ```
-run ID   : wf_d24aabeb-1ac
-journal  : C:\Users\user\.claude\projects\c--dev-autoinstall-ui\
-           8ef72743-47d2-4cdb-a320-0daf0fed1f11\subagents\workflows\wf_d24aabeb-1ac\journal.jsonl
-スクリプト: C:\Users\user\.claude\projects\C--dev-autoinstall-ui\
-           8ef72743-47d2-4cdb-a320-0daf0fed1f11\workflows\scripts\
-           audit-round6-wf_d24aabeb-1ac.js
-修正側     : 同ディレクトリの fix-round6-wf_6aa98323-d61.js（run ID `wf_6aa98323-d61`）
-階層化側   : 同ディレクトリの hierarchy-and-remaining-work-wf_c472cec9-a4f.js
+run ID    : wf_d24aabeb-1ac
+スクリプト: audit-round6-wf_d24aabeb-1ac.js
+修正側    : fix-round6-wf_6aa98323-d61.js（run ID `wf_6aa98323-d61`）
+階層化側  : hierarchy-and-remaining-work-wf_c472cec9-a4f.js
 ```
 
 （6 巡目も 6 レンズ × 3 視点反証。対象は「今回入れた階層化と i18n の統一」
-そのもの。→ 2.6。上の 3 つのパスも 2026-09-05 に実在を確認した。
-`.claude` 配下なので、リポジトリを別のマシンへ移すと付いてこない。）
+そのもの。→ 2.6。記録は作者の手元の `.claude` 配下にあり、リポジトリには含まれない。）
 **「29 件」は journal の `severity` の実測**（high 2 / medium 13 / low 14）。
 **「14 件生存」はワークフローの申し送りの数字で、journal から数え直してはいない。**
 
@@ -555,15 +540,15 @@ ipcMain の配線と保存ダイアログだけが無い。
 
 ---
 
-### 2.9 今回のセッション：利用者の実機構成を VM で組んで完走させた
+### 2.9 今回のセッション：参考構成（SATA×2 + NVMe×2）を VM で組んで完走させた
 
 **やったこと**: `scripts/e2e-vm.mts` に RAID 構成のモード (`--raid`) を足し、
-利用者の実機構成そのもの（容量だけ縮めたもの）を QEMU で組んで
+参考構成（SATA×2 + NVMe×2）そのもの（容量だけ縮めたもの）を QEMU で組んで
 **無人インストールを完走させ、そのシステムを起動させた**。
 
 ```
 npm run e2e:vm         既定（単一ディスク・LVM）— 一切変えていない
-npm run e2e:vm:raid    利用者の実機構成
+npm run e2e:vm:raid    参考構成（SATA×2 + NVMe×2）
 ```
 
 VM のディスク（`VM_DISKS` の既定）:
@@ -1113,9 +1098,9 @@ GRUB の menuentry の引数 (ai.ipv4=10.0.2.101/24)
 利用者の指示は 2 つ:
 「Electron製インストーラーで作成してください。」
 「モダンかつスタイリッシュな形としてコンセプトを反映してください。
-別の Electron アプリ など参考になるものがあれば参考にしてください。」
+（別の非公開アプリ）など参考になるものがあれば参考にしてください。」
 
-`（別のリポジトリ）` を参照実装として読み、
+別の非公開アプリの Electron 製インストーラを参照実装として読み、
 **設計は借りて、判断は借りずに**移した。
 
 #### できたもの
@@ -1130,7 +1115,7 @@ GRUB の menuentry の引数 (ai.ipv4=10.0.2.101/24)
 
 #### 参照実装から**変えた**ところ（理由つき）
 
-| | 別の Electron アプリ | ここ | 理由 |
+| | 参照実装（非公開） | ここ | 理由 |
 |---|---|---|---|
 | インストール先 | `Program Files`（全ユーザー） | `%LOCALAPPDATA%\Programs`（このユーザー） | このアプリは「本体は通常権限、USB へ書く子だけ昇格」が設計。インストーラだけ管理者を要求するのは筋が通らない。未署名で `requireAdministrator` は SmartScreen も強くなる |
 | レジストリ | HKLM | **HKCU** | 上に合わせる。HKLM に書くと他のユーザーの「プログラムと機能」に、そのユーザーからは消せない項目が出る |
@@ -1368,7 +1353,7 @@ Private なので Actions は課金枠を消費し、**macOS は 1 分 $0.062**�
   `npm run e2e:vm:raid` が確かめたのは**この 4 点を縮めた形**だけである。
   - **バスが違う。** VM の `sda` / `sdb` は **virtio-blk**（ゲストからは `/dev/vda` /
     `/dev/vdb`）で、実機の **SATA** ではない。NVMe は QEMU の `nvme` デバイスなので
-    `/dev/nvme0n1` として見えるが、実機の Samsung MZQL2 ではない。
+    `/dev/nvme0n1` として見えるが、実機の データセンター向け NVMe ではない。
   - **容量が違う。** 60G x2 + 20G x2 で、実機は 447.1GB x2 + **3.5TB x2**。
     `size: -1`（残り全部）と LVM の伸びは容量に依存する。
     **3.5TB の md を作ったときの初期同期の時間**（実機では数時間になりうる）は
@@ -1376,7 +1361,7 @@ Private なので Actions は課金枠を消費し、**macOS は 1 分 $0.062**�
   - **シリアルの指定が違う。** VM では `serial: "*sda*"` のように
     **glob** で引いている（QEMU が付ける ID_SERIAL が NVMe だけ
     `<model>_<serial>` に組み立てられるため）。実機では
-    `S6RANE0T500001` のような完全一致を使う。**glob と完全一致で
+    `SSDSERIAL0001` のような完全一致を使う。**glob と完全一致で
     subiquity の照合が同じに動くか**は VM でしか見ていない。
   - **ESP が 1 台なので `late-commands` が 1 行も出ていない。**
     利用者の構成は ESP が sda だけなので `needsRaidEspMirror` が false になり、

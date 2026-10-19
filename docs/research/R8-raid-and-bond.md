@@ -9,7 +9,7 @@
 
 - curtin storage — https://curtin.readthedocs.io/en/latest/topics/storage.html
 - netplan v2 — https://netplan.readthedocs.io/en/stable/netplan-yaml/
-- `docs/research/sources/autoinstall-reference.rst` の "Action-based configuration"
+- `autoinstall-reference.rst`（`docs/research/SOURCES.md` の固定リンク）の "Action-based configuration"
   （「curtin がサポートする構文の**上位集合**」と書かれている）
 
 ---

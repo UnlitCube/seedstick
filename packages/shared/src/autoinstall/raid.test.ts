@@ -385,7 +385,7 @@ describe('RAID + LVM の生成', () => {
 })
 
 // ---------------------------------------------------------------------------
-// 利用者の実機構成（SATA SSD 2 台 + NVMe 2 台）
+// 参考構成（SATA SSD 2 台 + NVMe 2 台）
 // ---------------------------------------------------------------------------
 //
 //   /boot/efi : 1G   vfat  **sda1 だけ**（ESP は RAID に置けない）
@@ -396,12 +396,12 @@ describe('RAID + LVM の生成', () => {
 // この 3 つ（丸ごとメンバー / マウントしない配列 / ESP をディスクごとに選ぶ）が
 // 同時に成立することを、出力の形を固定して確かめる。
 
-const SDA = 'S6RANE0T500001'
-const SDB = 'S6RANE0T500002'
-const NVME0 = 'S6CVNE0T900001'
-const NVME1 = 'S6CVNE0T900002'
+const SDA = 'SSDSERIAL0001'
+const SDB = 'SSDSERIAL0002'
+const NVME0 = 'NVMESERIAL0001'
+const NVME1 = 'NVMESERIAL0002'
 
-/** 利用者の実機構成そのもの。 */
+/** 参考構成（SATA×2 + NVMe×2）そのもの。 */
 const REAL_MACHINE: Partial<RaidStorageConfig> = {
   disks: [
     // sda: パーティションを切る。**ESP はこの 1 台だけ。**
@@ -426,7 +426,7 @@ const REAL_MACHINE: Partial<RaidStorageConfig> = {
   mirrorBootloader: true,
 }
 
-describe('利用者の実機構成（丸ごとメンバー + マウントしない配列 + ESP は 1 台だけ）', () => {
+describe('参考構成（丸ごとメンバー + マウントしない配列 + ESP は 1 台だけ）', () => {
   const profile = raidProfile(REAL_MACHINE)
   const config = configOf(profile)
   const find = (id: string): Action | undefined => config.find((a) => a['id'] === id)
@@ -680,7 +680,7 @@ describe.each(['22.04', '24.04', '25.10', '26.04'] as UbuntuSeries[])(
       expect(errors?.map((e) => `${e.instancePath} ${e.message ?? ''}`).join('\n') ?? '').toBe('')
     })
 
-    it('利用者の実機構成（丸ごとメンバー + マウントしない配列）もスキーマを通る', () => {
+    it('参考構成（丸ごとメンバー + マウントしない配列）もスキーマを通る', () => {
       const built = toPlain(buildAutoinstallObject(raidProfile(REAL_MACHINE, series), { comments: 'none' }))
       const errors = validate(built)
       expect(errors?.map((e) => `${e.instancePath} ${e.message ?? ''}`).join('\n') ?? '').toBe('')

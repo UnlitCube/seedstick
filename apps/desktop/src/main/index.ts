@@ -68,7 +68,7 @@ function createWindow(): BrowserWindow {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: '#0f172a',
-    title: 'Autoinstall USB Creator',
+    title: 'Seedstick',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,

@@ -8,7 +8,7 @@
 // 実際の `sh` で走らせているのと同じ考え方（落とし穴 115）。
 //
 // **本物のインストール先には触らない。** `%TEMP%` に作った砂場と、
-// `HKCU:\Software\...\autoinstall-ui-e2e` という**このテスト専用のキー**だけを使う。
+// `HKCU:\Software\...\seedstick-e2e` という**このテスト専用のキー**だけを使う。
 // 作ったものは最後に必ず消す（落とし穴 86）。
 //
 // Windows 以外ではスキップして正常終了する。
@@ -33,7 +33,7 @@ const check = (name: string, ok: boolean, detail?: string): void => {
 }
 
 /** このテスト専用のレジストリキー。**本物 (`...\Uninstall\...`) には触らない。** */
-const TEST_KEY = 'HKCU:\\Software\\autoinstall-ui-e2e'
+const TEST_KEY = 'HKCU:\\Software\\seedstick-e2e'
 
 function ps(script: string): { ok: boolean; out: string; code: number | null } {
   const r = spawnSync(
@@ -65,16 +65,16 @@ function runCommandLine(command: string): { code: number | null; out: string } {
 }
 
 const sandbox = mkdtempSync(join(tmpdir(), 'autoinstall-uninst-'))
-const installDir = join(sandbox, 'Autoinstall USB Creator')
-const desktopLink = join(sandbox, 'Desktop', 'Autoinstall USB Creator.lnk')
-const startMenuLink = join(sandbox, 'StartMenu', 'Autoinstall USB Creator.lnk')
+const installDir = join(sandbox, 'Seedstick')
+const desktopLink = join(sandbox, 'Desktop', 'Seedstick.lnk')
+const startMenuLink = join(sandbox, 'StartMenu', 'Seedstick.lnk')
 
 try {
   // --- 砂場を作る -----------------------------------------------------------
   mkdirSync(join(installDir, 'resources', 'samples'), { recursive: true })
   mkdirSync(join(sandbox, 'Desktop'), { recursive: true })
   mkdirSync(join(sandbox, 'StartMenu'), { recursive: true })
-  writeFileSync(join(installDir, 'Autoinstall USB Creator.exe'), 'x')
+  writeFileSync(join(installDir, 'Seedstick.exe'), 'x')
   writeFileSync(join(installDir, 'resources', 'app.asar'), 'x')
   writeFileSync(join(installDir, 'resources', 'samples', 'ip-only.json'), '{}')
   writeFileSync(desktopLink, 'x')
@@ -92,7 +92,7 @@ try {
   // （**本物のキーを消す検査は書かない**。走らせるたびに実際のインストールが壊れる）。
   const real = buildUninstallScriptFile({ installDir, desktopLink, startMenuLink })
   const script = real.replace(
-    /HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Autoinstall USB Creator/,
+    /HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Seedstick/,
     TEST_KEY.replace('HKCU:\\', 'HKCU:\\'),
   )
   check('差し替え: テスト用キーを指している', script.includes(TEST_KEY) && !script.includes('CurrentVersion'))

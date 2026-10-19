@@ -33,7 +33,7 @@ export class PowerShellScriptError extends Error {
  * 書く側 (`buildSelfDeleteScript`) と探して殺す側
  * (`buildKillLeftoverCleanupScript`) が**同じ定数から導く**ので食い違わない。
  */
-export const CLEANUP_POLL_MARKER = 'autoinstall-ui-cleanup-poll'
+export const CLEANUP_POLL_MARKER = 'seedstick-cleanup-poll'
 
 /**
  * アンインストール情報のレジストリキー。**HKCU**（このユーザーだけ）。
@@ -41,7 +41,7 @@ export const CLEANUP_POLL_MARKER = 'autoinstall-ui-cleanup-poll'
  * 「他のユーザーのプログラムと機能に、そのユーザーからは消せない項目が出る」ことになる。
  */
 export const UNINSTALL_REGISTRY_KEY =
-  'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Autoinstall USB Creator'
+  'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Seedstick'
 
 /** PowerShell の単一引用符リテラルへ埋めるためのエスケープ。`'` を 2 つにするだけ。 */
 export function psSingleQuote(value: string): string {
@@ -201,7 +201,7 @@ export function buildUninstallScriptFile(opts: {
   const desktop = psSingleQuote(opts.desktopLink)
   const startMenu = psSingleQuote(opts.startMenuLink)
   return joinPowerShellScript([
-    '# Autoinstall USB Creator - uninstall',
+    '# Seedstick - uninstall',
     `$dir = '${dir}'`,
     `Remove-Item -Force -ErrorAction SilentlyContinue -LiteralPath '${desktop}'`,
     `Remove-Item -Force -ErrorAction SilentlyContinue -LiteralPath '${startMenu}'`,

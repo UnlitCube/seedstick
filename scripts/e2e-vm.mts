@@ -17,7 +17,7 @@
  *
  * 使い方:
  *   npm run e2e:vm                     既定（単一ディスク・LVM）
- *   npm run e2e:vm:raid                利用者の実機構成（ディスク 2 台 + NVMe 2 台の RAID1）
+ *   npm run e2e:vm:raid                参考構成（ディスク 2 台 + NVMe 2 台の RAID1）
  *   VM_DISKS="sda:450G sdb:450G" ...   ディスク構成を変える
  *
  * **`VM_MODE=raid` は既定を一切変えない。** 既定 (`single`) の経路は
@@ -59,9 +59,10 @@ import { printRevisionBanner } from './lib/git-revision.mts'
 
 const DISTRO = 'Ubuntu-24.04'
 const LAB = '/root/vmlab'
-const REPO_WSL = '/mnt/c/dev/autoinstall-ui'
 /** このスクリプトから見たリポジトリのルート（`scripts/` の 1 つ上）。 */
 const REPO_ROOT = join(import.meta.dirname, '..')
+/** 同じ場所を WSL から見たパス（`C:\\dev\\x` → `/mnt/c/dev/x`）。clone した場所に依存させない。 */
+const REPO_WSL = REPO_ROOT.replace(/^([A-Za-z]):[\\/]/, (_m, d: string) => `/mnt/${d.toLowerCase()}/`).replaceAll('\\', '/')
 
 /**
  * どの構成を組むか。**既定は今までどおり単一ディスク・LVM**。
@@ -121,7 +122,7 @@ const IP_PRESET_INDEX = 2
 const NIC_MACS = ['52:54:00:12:34:56', '52:54:00:12:34:57'] as const
 
 /**
- * **利用者の実機構成を、容量だけ縮めて組む。**
+ * **参考構成（SATA×2 + NVMe×2）を、容量だけ縮めて組む。**
  *
  * 実機:  SATA SSD 447.1GB x 2 (sda/sdb) + NVMe 3.5TB x 2 (nvme0n1/nvme1n1)
  * VM  :  60G x 2 + 20G x 2
@@ -236,7 +237,7 @@ function addressOf(profile: AutoinstallProfile): string {
 /**
  * **残っていた 2 つの未検証項目を 1 本で確かめる構成。**
  *
- * `raid` モード（利用者の実機構成）は ESP が sda 1 台なので、
+ * `raid` モード（参考構成）は ESP が sda 1 台なので、
  * `needsRaidEspMirror()` が false になり **`late-commands` が 1 行も出ない**。
  * つまり「2 台目にも GRUB を入れて、どちらが壊れても起動する」という
  * このアプリ独自の補い（落とし穴 98）は**一度も走っていなかった**。
@@ -431,7 +432,7 @@ async function main(): Promise<void> {
     console.log('構成  : ESP を 2 台に置き（GRUB のミラーが走る）、NIC 2 枚を bond で束ねる')
     console.log('        **残っていた 2 つの未検証項目**（2 台目への grub-install / bond）を 1 本で見る')
   } else if (MODE === 'raid') {
-    console.log('構成  : 利用者の実機構成（sda/sdb = ESP は sda のみ + /boot md0 + LVM md1 / nvme x2 = 丸ごと md2）')
+    console.log('構成  : 参考構成（sda/sdb = ESP は sda のみ + /boot md0 + LVM md1 / nvme x2 = 丸ごと md2）')
     console.log('        **容量だけ縮めてある**（実機 447.1GB x2 + 3.5TB x2 → 60G x2 + 20G x2）')
   } else {
     console.log('構成  : 既定（単一ディスク・LVM）')

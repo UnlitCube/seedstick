@@ -16,7 +16,10 @@
 //   7z LZMA2 -mx9 -ms=on : 展開後 398.1 MB -> 99.4 MB (25.0%) / 127 秒（並列）
 //   brotli q5 / q9       : 37.8% / 35.9%（**本体の exe 1 ファイルだけ**での比較）
 //   brotli q11           : 同じ 1 ファイルで 15 分を超えても終わらず、ビルド段には遅すぎる
-// 展開側は 7za.exe を同梱する（`7zip-bin`、MIT、x64 で 1.2 MB）。
+// 展開側は 7za.exe を同梱する（x64 で 1.2 MB）。**7za.exe 本体は 7-Zip 21.07 で
+// GNU LGPL 2.1+**（Igor Pavlov）。MIT なのは npm のラッパー `7zip-bin` だけ。
+// LGPL の義務として、ライセンス文は THIRD_PARTY_NOTICES.txt に入れ、
+// 同じ版のソース (7z2107-src.7z) を release.yml が Release に添付する。
 
 import { spawnSync } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'

@@ -7,7 +7,7 @@
 #   device : optional physical drive path, e.g. \.\PhysicalDrive1
 #            When omitted the script picks the first selectable USB device itself,
 #            which is safer than hard-coding a drive number that may shift between boots.
-$repo = 'C:\dev\autoinstall-ui'
+$repo = Split-Path -Parent $PSScriptRoot
 $which  = if ($args.Count -gt 0) { $args[0] } else { 'write' }
 $device = if ($args.Count -gt 1) { $args[1] } else { $null }
 $log = Join-Path $repo ('.e2e\usb-' + $which + '.log')

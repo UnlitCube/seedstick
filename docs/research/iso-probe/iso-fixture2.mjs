@@ -55,6 +55,17 @@ async function capturePath(rootExtent, rootSize, parts, joliet, tag) {
 }
 
 await add(0, 512 * 64, 'MBR + GPT header + entries (LBA0-63)')
+// MBR の 0〜439 バイトは GRUB のブートコード（GPL-3.0+）。リポジトリ（MIT）に
+// 持ち込まないよう、非ゼロの合成パターンに置き換える。テストが見るのは
+// 「非ゼロであること」と「ISO と USB で一致すること」だけなので、これで足りる。
+{
+  const mbr = chunks.find((c) => c.offset === 0)
+  const buf = Buffer.from(mbr.data, 'base64')
+  const pat = Buffer.from('SEEDSTICK TEST FIXTURE - SYNTHETIC BYTES, NOT GRUB BOOT CODE. ', 'ascii')
+  for (let i = 0; i < 440; i++) buf[i] = pat[i % pat.length]
+  mbr.data = buf.toString('base64')
+  mbr.note += '. MBR bytes 0-439 replaced with a synthetic pattern (the original is GRUB boot code, GPL-3.0+)'
+}
 await add(16 * S, 4 * S, 'volume descriptors 16-19')
 // ISO9660 ツリー
 const root = r.rootDir

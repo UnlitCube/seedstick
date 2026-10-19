@@ -1,8 +1,8 @@
 {
-  "name": "autoinstall-ui",
+  "name": "seedstick",
   "private": true,
   "version": "0.1.0",
-  "description": "Ubuntu Server autoinstall USB creator (Electron, Windows/macOS/Linux)",
+  "description": "Unofficial GUI for building unattended-install USB drives for Ubuntu Server (Electron, Windows/macOS/Linux)",
   "workspaces": [
     "packages/*",
     "apps/*"
@@ -43,5 +43,15 @@
     "typescript": "^5.9.0",
     "vitest": "^4.0.0",
     "ws": "^8.21.3"
+  },
+  "license": "MIT",
+  "author": "UnlitCube",
+  "homepage": "https://unlitcube.github.io/seedstick/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/UnlitCube/seedstick.git"
+  },
+  "bugs": {
+    "url": "https://github.com/UnlitCube/seedstick/issues"
   }
 }

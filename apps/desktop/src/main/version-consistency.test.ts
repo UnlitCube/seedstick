@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url'
 // そのうち 2 つは**作った USB の中身に焼き込まれる**:
 //
 //   profile.meta.toolVersion  →  generate.ts が user-data の先頭コメントに出す
-//                                （`# 生成: autoinstall-ui/0.1.0`）
+//                                （`# 生成: seedstick/0.1.0`）
 //
 // 一方 `seed-builder.ts` の監査記録は `app.getVersion()`（＝package.json）を使う。
 // つまり上げ忘れると、**同じ USB の中で監査記録が 0.2.0、user-data のコメントが 0.1.0**
@@ -51,7 +51,7 @@ interface Site {
 const SITES: readonly Site[] = [
   {
     file: 'packages/shared/src/autoinstall/defaults.ts',
-    pattern: "autoinstall-ui/(\\d+\\.\\d+\\.\\d+)",
+    pattern: "seedstick/(\\d+\\.\\d+\\.\\d+)",
     reason: 'createDefaultProfile の toolVersion の既定引数。user-data のコメントに出る',
   },
   {
@@ -68,12 +68,12 @@ const SITES: readonly Site[] = [
   },
   {
     file: 'apps/desktop/src/renderer/src/store.ts',
-    pattern: "autoinstall-ui/(\\d+\\.\\d+\\.\\d+)",
+    pattern: "seedstick/(\\d+\\.\\d+\\.\\d+)",
     reason: '新規プロファイルと読み込み直しのときの toolVersion',
   },
   {
     file: 'samples/ip-only.json',
-    pattern: "autoinstall-ui/(\\d+\\.\\d+\\.\\d+)",
+    pattern: "seedstick/(\\d+\\.\\d+\\.\\d+)",
     reason: '配布サンプルの meta.toolVersion。samples.test.ts が読む実物',
   },
 ]

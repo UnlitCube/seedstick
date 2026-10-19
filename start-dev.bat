@@ -1,5 +1,5 @@
 @echo off
-rem Autoinstall USB Creator dev launcher - double-click to start (hot reload enabled).
+rem Seedstick dev launcher - double-click to start (hot reload enabled).
 rem Keep this file ASCII-only (cmd.exe on Japanese Windows uses CP932).
 cd /d "%~dp0"
 where npm >nul 2>nul

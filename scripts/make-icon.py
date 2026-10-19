@@ -148,7 +148,7 @@ def main() -> None:
         x += n + pad
     # **リポジトリの中には置かない**（成果物でも設定でもないので、
     # 置くとコミット対象になるか .gitignore を足すことになる）。
-    preview = Path(tempfile.gettempdir()) / "autoinstall-ui-icon-preview.png"
+    preview = Path(tempfile.gettempdir()) / "seedstick-icon-preview.png"
     strip.save(preview)
     print(f"確認用（一時ファイル）: {preview}")
 

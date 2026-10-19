@@ -10,10 +10,12 @@
 //
 // **文言をここに書き写さない。** 辞書 (installer/shared/labels.ts) が正。
 import { writeFileSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { connect } from './cdp.mjs'
 import { DICTIONARIES } from '../apps/desktop/installer/shared/labels.ts'
 
-const OUT = process.env.SHOT_DIR ?? 'C:/Users/user/AppData/Local/Temp'
+const OUT = process.env.SHOT_DIR ?? tmpdir()
 const c = await connect()
 await c.send('Runtime.enable')
 await c.send('Page.enable')
@@ -114,7 +116,7 @@ await expectVisible('options-invalid', t('dir.not-absolute'))
 await shot('inst-03-options-invalid')
 
 // --- 3. 進捗 → 完了（payload が無いので失敗する） ---------------------------
-await typeInstallDir('C:\\Users\\user\\AppData\\Local\\Programs\\Autoinstall USB Creator')
+await typeInstallDir(join(homedir(), 'AppData', 'Local', 'Programs', 'Seedstick'))
 await wait(400)
 await click(t('options.install'))
 await wait(1200)

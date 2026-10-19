@@ -198,7 +198,7 @@ const CASES: Case[] = [
           ? b.storage
           : {
               ...b.storage,
-              match: { kind: 'serial', serial: 'CE0538F1D353' },
+              match: { kind: 'serial', serial: 'DISKSERIAL0001' },
               swap: { mode: 'none', size: '' },
               partitionTable: 'gpt',
             },

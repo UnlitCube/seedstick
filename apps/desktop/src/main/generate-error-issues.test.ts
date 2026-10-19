@@ -43,7 +43,7 @@ vi.mock('electron', () => ({
   },
   shell: { openPath: () => Promise.resolve(''), openExternal: () => Promise.resolve() },
   app: {
-    getName: () => 'Autoinstall USB Creator',
+    getName: () => 'Seedstick',
     getVersion: () => '0.1.0',
     getLocale: () => 'en-US',
     getPath: () => makeTempDir('generate-error-test-'),

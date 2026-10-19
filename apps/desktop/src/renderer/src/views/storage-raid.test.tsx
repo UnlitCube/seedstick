@@ -709,11 +709,11 @@ describe('ESP と /boot の大きさを入力できる', () => {
   })
 })
 
-describe('利用者の実機構成を画面だけで作れる（SATA×2 + NVMe×2）', () => {
+describe('参考構成を画面だけで作れる（SATA×2 + NVMe×2）', () => {
   it('4 台・3 配列を作り終えたとき error が 1 件も残らない', () => {
     const el = render()
     toRaid(el)
-    setUpDisks(el, ['S6RANE0T500001', 'S6RANE0T500002', 'S6CVNE0T900001', 'S6CVNE0T900002'])
+    setUpDisks(el, ['SSDSERIAL0001', 'SSDSERIAL0002', 'NVMESERIAL0001', 'NVMESERIAL0002'])
 
     // ESP は sda だけ。sdb は /boot のミラーには入るが ESP は作らない。
     click(espSwitch(el, 1))
@@ -751,16 +751,16 @@ describe('利用者の実機構成を画面だけで作れる（SATA×2 + NVMe×
     const byId = new Map(raid.disks.map((d) => [d.id, d.match]))
     expect(raid.arrays.map((a) => a.diskIds.map((id) => byId.get(id)))).toEqual([
       [
-        { kind: 'serial', serial: 'S6RANE0T500001' },
-        { kind: 'serial', serial: 'S6RANE0T500002' },
+        { kind: 'serial', serial: 'SSDSERIAL0001' },
+        { kind: 'serial', serial: 'SSDSERIAL0002' },
       ],
       [
-        { kind: 'serial', serial: 'S6RANE0T500001' },
-        { kind: 'serial', serial: 'S6RANE0T500002' },
+        { kind: 'serial', serial: 'SSDSERIAL0001' },
+        { kind: 'serial', serial: 'SSDSERIAL0002' },
       ],
       [
-        { kind: 'serial', serial: 'S6CVNE0T900001' },
-        { kind: 'serial', serial: 'S6CVNE0T900002' },
+        { kind: 'serial', serial: 'NVMESERIAL0001' },
+        { kind: 'serial', serial: 'NVMESERIAL0002' },
       ],
     ])
     expect(raid).toMatchObject({ espSize: '1G', bootSize: '2G' })

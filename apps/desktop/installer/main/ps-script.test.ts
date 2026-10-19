@@ -117,7 +117,7 @@ describe('組み立てたスクリプトの形', () => {
   })
 
   it('「プログラムと機能」のコマンドはパスをダブルクォートで括る', () => {
-    // 既定のインストール先は `…\Programs\Autoinstall USB Creator\` で**空白を含む**。
+    // 既定のインストール先は `…\Programs\Seedstick\` で**空白を含む**。
     // 括らないと CreateProcess が途中で引数を割る。
     const cmd = uninstallCommandFor('C:\\Program Files\\A B\\uninstall.ps1')
     expect(cmd).toMatch(/-File "C:\\Program Files\\A B\\uninstall\.ps1"$/)

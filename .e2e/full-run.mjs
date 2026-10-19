@@ -1,6 +1,11 @@
 // GUI を最初から最後まで実際に操作して、実 USB に書ける状態まで持っていく。
 // 「起動メニューでホストを選ぶ」+「上級者向けキー」を UI から作る。
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { open } from './drive.mjs'
+
+// 選ぶ ISO。既定は ~/images の 24.04.3（下の「ISO を認識する」はこの版を見る）
+const ISO = process.env.ISO_PATH ?? join(homedir(), 'images', 'ubuntu-24.04.3-live-server-amd64.iso')
 
 const d = await open()
 const ok = []
@@ -24,13 +29,13 @@ execFileSync('powershell.exe', [
   '-NoProfile',
   '-Command',
   "Add-Type -AssemblyName System.Windows.Forms; " +
-    "[System.Windows.Forms.SendKeys]::SendWait('C:\\Users\\user\\images\\ubuntu-24.04.3-live-server-amd64.iso'); " +
+    `[System.Windows.Forms.SendKeys]::SendWait('${ISO.replaceAll("'", "''")}'); ` +
     'Start-Sleep -Milliseconds 800; ' +
     "[System.Windows.Forms.SendKeys]::SendWait('{ENTER}')",
 ])
 }
 await d.until(`document.querySelector('main').innerText.includes(${detected})`, 40000, 'ISO 認識')
-check('ISO を認識する', (await d.text()).includes('24.04.3'))
+check('ISO を認識する', (await d.text()).includes(process.env.ISO_PATH ? '' : '24.04.3'))
 await d.shot('.e2e/30-iso.png')
 
 // ------------------------------------------------------------------ 2. 基本設定

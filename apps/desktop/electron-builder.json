@@ -1,61 +1,145 @@
 {
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
-  "appId": "app.autoinstall-ui.desktop",
-  "productName": "Autoinstall USB Creator",
-  "copyright": "Copyright © 2026",
+  "appId": "jp.unlit-cube.seedstick",
+  "productName": "Seedstick",
+  "copyright": "Copyright © 2026 UnlitCube",
   "publish": null,
   "directories": {
     "output": "release",
     "buildResources": "build"
   },
-  "files": ["out/**/*", "!out/installer/**/*", "package.json"],
-  "extraResources": [{ "from": "../../samples", "to": "samples", "filter": ["**/*"] }],
+  "files": [
+    "out/**/*",
+    "!out/installer/**/*",
+    "package.json"
+  ],
+  "extraResources": [
+    {
+      "from": "../../samples",
+      "to": "samples",
+      "filter": [
+        "**/*"
+      ]
+    },
+    {
+      "from": "../../LICENSE",
+      "to": "LICENSE.txt"
+    },
+    {
+      "from": "build/THIRD_PARTY_NOTICES.txt",
+      "to": "THIRD_PARTY_NOTICES.txt"
+    }
+  ],
   "asarUnpack": [],
   "npmRebuild": false,
   "afterPack": "./scripts/after-pack.cjs",
   "win": {
-    "target": [{ "target": "portable", "arch": ["x64"] }],
-    "artifactName": "AutoinstallUSBCreator-${version}-win-${arch}-portable.${ext}",
+    "target": [
+      {
+        "target": "portable",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
+    "artifactName": "Seedstick-${version}-win-${arch}-portable.${ext}",
     "requestedExecutionLevel": "asInvoker"
   },
   "portable": {
-    "artifactName": "AutoinstallUSBCreator-${version}-win-${arch}-portable.${ext}"
+    "artifactName": "Seedstick-${version}-win-${arch}-portable.${ext}"
   },
   "mac": {
     "target": [
-      { "target": "dmg", "arch": ["x64", "arm64"] },
-      { "target": "zip", "arch": ["x64", "arm64"] }
+      {
+        "target": "dmg",
+        "arch": [
+          "x64",
+          "arm64"
+        ]
+      },
+      {
+        "target": "zip",
+        "arch": [
+          "x64",
+          "arm64"
+        ]
+      }
     ],
     "category": "public.app-category.utilities",
-    "artifactName": "AutoinstallUSBCreator-${version}-mac-${arch}.${ext}",
+    "artifactName": "Seedstick-${version}-mac-${arch}.${ext}",
     "identity": null,
     "hardenedRuntime": false,
     "gatekeeperAssess": false,
-    "notarize": false
+    "notarize": false,
+    "extraResources": [
+      {
+        "from": "../../node_modules/electron/dist/LICENSE",
+        "to": "LICENSE.electron.txt"
+      },
+      {
+        "from": "../../node_modules/electron/dist/LICENSES.chromium.html",
+        "to": "LICENSES.chromium.html"
+      }
+    ]
   },
   "dmg": {
-    "artifactName": "AutoinstallUSBCreator-${version}-mac-${arch}.${ext}",
-    "window": { "width": 540, "height": 380 },
+    "artifactName": "Seedstick-${version}-mac-${arch}.${ext}",
+    "window": {
+      "width": 540,
+      "height": 380
+    },
     "contents": [
-      { "x": 150, "y": 205, "type": "file" },
-      { "x": 390, "y": 205, "type": "link", "path": "/Applications" }
+      {
+        "x": 150,
+        "y": 205,
+        "type": "file"
+      },
+      {
+        "x": 390,
+        "y": 205,
+        "type": "link",
+        "path": "/Applications"
+      }
     ]
   },
   "linux": {
     "target": [
-      { "target": "AppImage", "arch": ["x64"] },
-      { "target": "deb", "arch": ["x64"] }
+      {
+        "target": "AppImage",
+        "arch": [
+          "x64"
+        ]
+      },
+      {
+        "target": "deb",
+        "arch": [
+          "x64"
+        ]
+      }
     ],
     "category": "Utility",
-    "artifactName": "AutoinstallUSBCreator-${version}-linux-${arch}.${ext}",
+    "artifactName": "Seedstick-${version}-linux-${arch}.${ext}",
     "desktop": {
       "entry": {
-        "Name": "Autoinstall USB Creator",
+        "Name": "Seedstick",
         "Comment": "Build an unattended Ubuntu Server install USB"
       }
-    }
+    },
+    "executableName": "seedstick",
+    "maintainer": "UnlitCube <unlit.cube@gmail.com>",
+    "synopsis": "Build unattended-install USB drives for Ubuntu Server"
   },
   "deb": {
-    "depends": ["libgtk-3-0", "libnotify4", "libnss3", "libxss1", "libxtst6", "xdg-utils", "libatspi2.0-0", "libsecret-1-0", "policykit-1"]
+    "depends": [
+      "libgtk-3-0",
+      "libnotify4",
+      "libnss3",
+      "libxss1",
+      "libxtst6",
+      "xdg-utils",
+      "libatspi2.0-0",
+      "libsecret-1-0",
+      "pkexec | policykit-1"
+    ]
   }
 }

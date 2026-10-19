@@ -351,7 +351,7 @@ fi
 # インストール先へ複製される）。
 # **スクリプトの「ソース」と「出力」を取り違えない。**
 # インストーラのログには early-commands の**本文**もそのまま記録される。
-# 本文には `sys.stdout.write("… 反映しました: %s\n" % …)` という行があるので、
+# 本文には `sys.stdout.write("seedstick: applied boot parameters: %s\n" % …)` という行があるので、
 # 素直に grep すると **`%s` を答えとして拾う**（実際に拾って偽 FAIL を出した）。
 # 出力側は必ず `ai.` で始まる引数名が並ぶので、そこで見分ける。
 APPLIED=""
@@ -359,14 +359,14 @@ for f in "$MNT"/var/log/installer/installer-journal.txt \
          "$MNT"/var/log/installer/*.log* \
          "$MNT"/var/log/syslog; do
   [ -f "$f" ] || continue
-  hit=$(grep -a -o '起動時の指定を反映しました: ai\.[a-z0-9., ]*' "$f" 2>/dev/null |
+  hit=$(grep -a -o 'applied boot parameters: ai\.[a-z0-9., ]*' "$f" 2>/dev/null |
     grep -v '%s' | tail -1)
   if [ -n "$hit" ]; then APPLIED="$hit"; break; fi
 done
 if [ -n "$APPLIED" ]; then
   echo "RUNTIME_APPLIED_LINE=$APPLIED"
   # 反映された引数の名前だけを並べる（`ai.ipv4 ai.gw ai.dns` のような形）。
-  echo "RUNTIME_APPLIED=$(echo "$APPLIED" | sed 's/.*反映しました:[[:space:]]*//' | tr -d '\r' | tr ',' ' ' | tr -s ' ')"
+  echo "RUNTIME_APPLIED=$(echo "$APPLIED" | sed 's/.*applied boot parameters:[[:space:]]*//' | tr -d '\r' | tr ',' ' ' | tr -s ' ')"
 else
   echo "RUNTIME_APPLIED="
 fi

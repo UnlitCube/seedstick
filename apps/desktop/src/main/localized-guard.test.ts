@@ -33,7 +33,7 @@ import {
 // （media は desktop を import できない）。
 
 vi.mock('electron', () => ({
-  app: { getName: (): string => 'Autoinstall USB Creator', getVersion: (): string => '0.1.0' },
+  app: { getName: (): string => 'Seedstick', getVersion: (): string => '0.1.0' },
 }))
 
 const { buildSeedBundle, SeedBuildError, MAX_PAYLOAD_BYTES } = await import('./seed-builder.js')

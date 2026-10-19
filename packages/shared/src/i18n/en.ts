@@ -4,7 +4,7 @@ import type { MsgKey } from './ja.js'
 // つまり ja に追加したら必ずここにも追加することになり、訳し漏れが起きない。
 export const en = {
   // --- common ---
-  'app.name': 'Autoinstall USB Creator',
+  'app.name': 'Seedstick',
   'app.tagline': 'Build an unattended Ubuntu Server install USB',
   'common.next': 'Next',
   'common.back': 'Back',

@@ -31,7 +31,7 @@ const ja = {
   'rail.uninstallProgress': '削除',
   'rail.uninstallDone': '完了',
 
-  'welcome.title': 'Autoinstall USB Creator',
+  'welcome.title': 'Seedstick',
   'welcome.tagline': 'Ubuntu Server の無人インストール USB を、ISO を再構築せずに作る',
   'welcome.version': 'バージョン {version}',
   'welcome.upgrade': '{version} が既にインストールされています。上書きして更新します。',
@@ -139,7 +139,7 @@ const en = {
   'rail.uninstallProgress': 'Remove',
   'rail.uninstallDone': 'Done',
 
-  'welcome.title': 'Autoinstall USB Creator',
+  'welcome.title': 'Seedstick',
   'welcome.tagline':
     'Build an unattended Ubuntu Server install USB without rebuilding the ISO',
   'welcome.version': 'Version {version}',

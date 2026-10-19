@@ -1,7 +1,7 @@
 # autoinstall の配信方式と完全無人化の条件（一次資料で確定）
 
 調査日: 2026-09-03。根拠はすべて Canonical の公式ドキュメントと subiquity / cloud-init のソースコード。
-取得したソースは `docs/research/sources/` にある。
+取得したソースの固定リンク（上流のコミット SHA つき）は `docs/research/SOURCES.md` にある。
 
 ## 結論（本ツールが採る方式）
 

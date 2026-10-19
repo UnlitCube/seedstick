@@ -1,7 +1,7 @@
 // 日本語が原文。ここに追加したキーは en.ts にも必ず追加する（型で強制される）。
 export const ja = {
   // --- 共通 ---
-  'app.name': 'Autoinstall USB Creator',
+  'app.name': 'Seedstick',
   'app.tagline': 'Ubuntu Server の自動インストール USB を作る',
   'common.next': '次へ',
   'common.back': '戻る',

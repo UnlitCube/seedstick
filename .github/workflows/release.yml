@@ -1,28 +1,29 @@
 # タグ (`v*`) を押したらビルドして GitHub Release に載せる。
 #
-# 出力物は**インストーラとポータブル版の 2 つ**を、Windows と macOS の両方で:
-#
-#   Windows  AutoinstallUSBCreator-<v>-win-x64-Setup.exe     Electron 製インストーラ
-#            AutoinstallUSBCreator-<v>-win-x64-portable.exe  入れずにそのまま起動
-#   macOS    AutoinstallUSBCreator-<v>-mac-{x64,arm64}.dmg   インストーラ（/Applications へドラッグ）
-#            AutoinstallUSBCreator-<v>-mac-{x64,arm64}.zip   ポータブル（.app をそのまま）
+#   Windows  Seedstick-<v>-win-x64-Setup.exe         Electron 製インストーラ
+#            Seedstick-<v>-win-x64-portable.exe      入れずにそのまま起動
+#   macOS    Seedstick-<v>-mac-{x64,arm64}.dmg       インストーラ（/Applications へドラッグ）
+#            Seedstick-<v>-mac-{x64,arm64}.zip       ポータブル（.app をそのまま）
+#   Linux    Seedstick-<v>-linux-x64.AppImage        ポータブル（試験的）
+#            Seedstick-<v>-linux-x64.deb             パッケージ（試験的）
+#   その他   SHA256SUMS.txt / 7z2107-src.7z（Setup.exe が同梱する 7-Zip の LGPL ソース）
 #
 # **ファイル名に空白を入れない。** GitHub は Release アセット名の空白をドットに
 # 置き換えるので、ビルドした名前と配った名前が食い違い、SHA256SUMS も合わなくなる
 # （`electron-builder.json` の `artifactName` を `[0-9A-Za-z._-]` だけにしてある）。
 #
-# **費用**（Private リポジトリなので課金枠を消費する）
-#   Linux $0.006 / Windows $0.010 / macOS $0.062（1 分・USD）。macOS は arm64 も Intel も同額。
-#   この構成だと 1 リリースで**枠の 7 割以上を macOS が占める**。削るならそこ。
-#   `workflow_dispatch` は**ビルドだけで Release を作らない**ので、試すときはそちらを使う。
-#   `timeout-minutes` は全ジョブに必ず入れる（既定は 6 時間。ハングすると枠を焼き切る）。
+# **安い検査を先に。** 版番号・CHANGELOG の節・通知文・ユニットテストを Linux で済ませてから
+# ビルドに入る。以前は CHANGELOG の検査が最後にあり、macOS を含むフルビルドを焼いてから落ちた。
+#
+# `workflow_dispatch` は**ビルドと検査だけで Release を作らない**ので、試すときはそちらを使う。
+# `timeout-minutes` は全ジョブに必ず入れる（既定は 6 時間。ハングすると枠を焼き切る）。
 
 name: release
 
 on:
   push:
     tags: ['v*']
-  workflow_dispatch: # 手動実行は「ビルドが通るか」を見るだけ。Release は作らない
+  workflow_dispatch: # 手動実行は「ビルドと検査が通るか」を見るだけ。Release は作らない
 
 permissions: {}
 
@@ -30,30 +31,42 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false # リリースの途中で殺さない
 
+env:
+  # Setup.exe に同梱する 7za.exe（7-Zip 21.07, LGPL）の完全なソース。
+  # LGPL 2.1 §4 に従い、バイナリと同じ場所（Release）から入手できるようにする。
+  # ハッシュは GitHub (ip7z/7zip) と SourceForge の両方で一致することを確かめた値。
+  SEVENZIP_SRC_URL: https://github.com/ip7z/7zip/releases/download/21.07/7z2107-src.7z
+  SEVENZIP_SRC_SHA256: d1074d56f415aab99d99e597a7b66dc455dba6349ae8a4c89df76475b6a1284c
+
 jobs:
   # ------------------------------------------------------------------
-  # 版番号の突き合わせ。**ビルドを始める前に**落とす。
+  # 版番号・CHANGELOG・通知文・ユニットテスト。**ビルドを始める前に**落とす。
   # ------------------------------------------------------------------
   gate:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 30
     permissions:
       contents: read
     outputs:
       version: ${{ steps.check.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
           cache: npm
           cache-dependency-path: package-lock.json
 
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check "PyYAML==6.0.1"
+
       - run: npm ci
 
       - id: check
-        name: タグと package.json を突き合わせる
+        name: タグ・package.json・CHANGELOG を突き合わせる
         shell: bash
         run: |
           set -euo pipefail
@@ -70,14 +83,35 @@ jobs:
               exit 1
             fi
           fi
+          # リリースノートは CHANGELOG の `## v<version>` の節から取る。無ければここで止める。
+          awk -v ver="$app" '
+            $0 ~ "^## v?" ver "([^0-9]|$)" { on = 1; next }
+            on && /^## / { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then
+            if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+              echo "::error::CHANGELOG.md に '## v$app' の節がありません。"
+              exit 1
+            fi
+            echo "::warning::CHANGELOG.md に '## v$app' の節がありません（手動実行なので続けます）"
+          fi
           echo "version=$app" >> "$GITHUB_OUTPUT"
           echo "version = $app"
 
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-notes
+          path: notes.md
+          if-no-files-found: ignore
+          retention-days: 7
+
       # package.json だけを見るゲートでは、ソースに直書きされた版番号のずれは
       # **1 つも見えない**（user-data のコメントに焼かれる toolVersion など）。
-      # それを数えるのはこのテスト。
-      - name: 直書きの版番号が package.json と一致するか
-        run: npx vitest run apps/desktop/src/main/version-consistency.test.ts
+      # それを数えるのは version-consistency.test.ts（ユニットテストに含まれる）。
+      - run: npm run typecheck
+      - run: node scripts/gen-third-party-notices.mjs --check
+      - run: npm run test:unit
 
   # ------------------------------------------------------------------
   # Windows: インストーラ + ポータブル
@@ -89,32 +123,28 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
           cache: npm
           cache-dependency-path: package-lock.json
 
-      # electron の zip（約 144 MB）と electron-builder のツールセット。
+      # electron の zip（約 144 MB）・ffmpeg の zip・electron-builder のツールセット。
       # **`ELECTRON_CACHE` は electron-builder 26 では読まれない**ので、
       # 既定の置き場所をそのまま保存する。
       - name: electron のキャッシュを復元
         id: cache
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/AppData/Local/electron/Cache
             ~/AppData/Local/electron-builder/Cache
-          key: eb-win-v1-${{ hashFiles('package-lock.json') }}
-          restore-keys: eb-win-v1-
+          key: eb-win-v2-${{ hashFiles('package-lock.json') }}
+          restore-keys: eb-win-v2-
 
       - run: npm ci
-
-      - name: ユニットテスト
-        shell: bash # sh を要求するテストがある（ci.yml のコメント参照）
-        run: npm run test:unit
 
       - name: インストーラ（Electron 製）
         run: npm run dist:installer
@@ -133,30 +163,40 @@ jobs:
           v="$V"
           cd apps/desktop/release
           ls -la *.exe
-          test -f "AutoinstallUSBCreator-$v-win-x64-Setup.exe"    || { echo "::error::インストーラが無い"; exit 1; }
-          test -f "AutoinstallUSBCreator-$v-win-x64-portable.exe" || { echo "::error::ポータブルが無い"; exit 1; }
+          test -f "Seedstick-$v-win-x64-Setup.exe"    || { echo "::error::インストーラが無い"; exit 1; }
+          test -f "Seedstick-$v-win-x64-portable.exe" || { echo "::error::ポータブルが無い"; exit 1; }
           # 名前に GitHub が置換する文字（空白）が入っていないこと
           if ls *.exe | grep -q ' '; then
             echo "::error::ファイル名に空白がある（Release で名前が変わってしまう）"
             exit 1
           fi
+          # 本体（payload の元）に通知文とコーデック抜きの ffmpeg が入っていること
+          d=app/win-unpacked
+          test -f "$d/resources/THIRD_PARTY_NOTICES.txt" || { echo "::error::通知文が無い"; exit 1; }
+          test -f "$d/resources/LICENSE.txt"             || { echo "::error::LICENSE が無い"; exit 1; }
+          [ "$(sha256sum "$d/ffmpeg.dll" | cut -d' ' -f1)" != "$(sha256sum ../../../node_modules/electron/dist/ffmpeg.dll | cut -d' ' -f1)" ] \
+            || { echo "::error::ffmpeg.dll が差し替わっていない"; exit 1; }
+
+      - name: 本体が起動して画面を出すか
+        shell: bash
+        run: node scripts/smoke-packaged.mjs apps/desktop/release/app/win-unpacked/Seedstick.exe --timeout 120
 
       - name: electron のキャッシュを保存
         if: always() && steps.cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/AppData/Local/electron/Cache
             ~/AppData/Local/electron-builder/Cache
-          key: eb-win-v1-${{ hashFiles('package-lock.json') }}
+          key: eb-win-v2-${{ hashFiles('package-lock.json') }}
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dist-windows
           path: apps/desktop/release/*.exe
           if-no-files-found: error
           compression-level: 0 # 中身は LZMA2 済み。zip しても縮まず時間だけ損する
-          retention-days: 7 # 既定 90 日。Private の Artifact 無料枠は 500 MB しかない
+          retention-days: 7
 
   # ------------------------------------------------------------------
   # macOS: dmg（インストーラ） + zip（ポータブル）、x64 と arm64
@@ -164,16 +204,15 @@ jobs:
   macos:
     needs: gate
     # `macos-latest` は使わない（指す先が予告なく上がる）。
-    # 上げるときは runner-images の README で生きているラベルを確かめること
-    # （2026-09 時点: macos-15 / macos-26 と、それぞれの -intel が在る）。
+    # 上げるときは runner-images の README で生きているラベルを確かめること。
     runs-on: macos-15
     timeout-minutes: 60
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
           cache: npm
@@ -181,21 +220,15 @@ jobs:
 
       - name: electron のキャッシュを復元
         id: cache
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/Library/Caches/electron
             ~/Library/Caches/electron-builder
-          key: eb-mac-v1-${{ hashFiles('package-lock.json') }}
-          restore-keys: eb-mac-v1-
+          key: eb-mac-v2-${{ hashFiles('package-lock.json') }}
+          restore-keys: eb-mac-v2-
 
       - run: npm ci
-
-      # **ユニットテストは macOS では回さない。**
-      # `sha256sum` が無い（BSD は shasum）ほか、テストが PATH に置く python3 の
-      # シムが実物を隠すなど、macOS 固有の落ち方をする。
-      # 検査は Windows / Linux のジョブに任せ、ここは型とパッケージだけを見る。
-      - run: npm run typecheck
 
       - name: dmg と zip（x64 / arm64）
         run: npm run dist:mac
@@ -203,7 +236,7 @@ jobs:
       # **署名していないことの影響を、推測ではなく実測で残す。**
       # Apple Silicon は署名の無い実行ファイルを起動しないので、
       # `afterPack` フックで ad-hoc 署名を当てている。それが効いているかを見る。
-      - name: 署名とアーキを確かめる
+      - name: 署名・アーキ・同梱物を確かめる
         shell: bash
         run: |
           set -euo pipefail
@@ -220,9 +253,16 @@ jobs:
               || { echo "::error::$app の署名検証が通らない（Apple Silicon で起動しない）"; exit 1; }
             # Gatekeeper は通らない想定。**通らないことを記録する**（落とさない）。
             spctl -a -vv "$app" 2>&1 || echo "  （想定どおり Gatekeeper は通らない: 未署名配布）"
-            bin="$app/Contents/MacOS/Autoinstall USB Creator"
+            bin="$app/Contents/MacOS/Seedstick"
             test -f "$bin" || { echo "::error::実行ファイルが無い: $bin"; exit 1; }
             lipo -archs "$bin"
+            r="$app/Contents/Resources"
+            for f in LICENSE.txt THIRD_PARTY_NOTICES.txt LICENSE.electron.txt LICENSES.chromium.html samples/ip-only.json; do
+              test -f "$r/$f" || { echo "::error::$app に $f が無い"; exit 1; }
+            done
+            lib="$app/Contents/Frameworks/Electron Framework.framework/Versions/A/Libraries/libffmpeg.dylib"
+            orig="node_modules/electron/dist/Electron.app/Contents/Frameworks/Electron Framework.framework/Versions/A/Libraries/libffmpeg.dylib"
+            echo "libffmpeg shipped=$(shasum -a 256 "$lib" | cut -d' ' -f1) electron=$(shasum -a 256 "$orig" | cut -d' ' -f1)"
           done
           if [ "$found" -eq 0 ]; then
             echo "::error::.app が 1 つも見つからない（走査が空振りしている）"
@@ -230,22 +270,10 @@ jobs:
           fi
           echo "確認した .app: $found 個"
 
-      # **起動するかは、この初回の実行までどこでも確かめていない。**
-      # ホスト型 macOS ランナーで GUI の Electron が上がるかが未知なので、
-      # いまは**記録するだけ**にして、ビルドは落とさない。
-      # 1 度でも起動を確認できたら、ここを判定に格上げすること。
-      - name: 起動するか（記録のみ・判定には使わない）
-        continue-on-error: true
+      # ランナーは arm64。arm64 の .app を実際に起動して画面が出るかを見る。
+      - name: arm64 の .app が起動して画面を出すか
         shell: bash
-        run: |
-          set -x
-          app=$(ls -d apps/desktop/release/mac-arm64/*.app 2>/dev/null | head -1 \
-                || ls -d apps/desktop/release/mac/*.app 2>/dev/null | head -1)
-          [ -n "$app" ] || exit 1
-          open "$app" || exit 1
-          sleep 8
-          pgrep -fl "Autoinstall USB Creator" || { echo "起動していない"; exit 1; }
-          pkill -f "Autoinstall USB Creator" || true
+        run: node scripts/smoke-packaged.mjs apps/desktop/release/mac-arm64/Seedstick.app/Contents/MacOS/Seedstick --timeout 120
 
       - name: できたものを数える
         shell: bash
@@ -257,20 +285,20 @@ jobs:
           cd apps/desktop/release
           ls -la *.dmg *.zip
           for a in x64 arm64; do
-            test -f "AutoinstallUSBCreator-$v-mac-$a.dmg" || { echo "::error::$a の dmg が無い"; exit 1; }
-            test -f "AutoinstallUSBCreator-$v-mac-$a.zip" || { echo "::error::$a の zip が無い"; exit 1; }
+            test -f "Seedstick-$v-mac-$a.dmg" || { echo "::error::$a の dmg が無い"; exit 1; }
+            test -f "Seedstick-$v-mac-$a.zip" || { echo "::error::$a の zip が無い"; exit 1; }
           done
 
       - name: electron のキャッシュを保存
         if: always() && steps.cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/Library/Caches/electron
             ~/Library/Caches/electron-builder
-          key: eb-mac-v1-${{ hashFiles('package-lock.json') }}
+          key: eb-mac-v2-${{ hashFiles('package-lock.json') }}
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dist-macos
           path: |
@@ -281,23 +309,110 @@ jobs:
           retention-days: 7
 
   # ------------------------------------------------------------------
+  # Linux: AppImage + deb（試験的。デバイス列挙と pkexec は実機未検証）
+  # ------------------------------------------------------------------
+  linux:
+    needs: gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: electron のキャッシュを復元
+        id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+          key: eb-linux-v2-${{ hashFiles('package-lock.json') }}
+          restore-keys: eb-linux-v2-
+
+      - run: npm ci
+
+      - name: AppImage と deb
+        run: npm run dist:linux
+
+      - name: 同梱物を確かめる
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=apps/desktop/release/linux-unpacked
+          for f in resources/LICENSE.txt resources/THIRD_PARTY_NOTICES.txt resources/samples/ip-only.json LICENSES.chromium.html; do
+            test -f "$d/$f" || { echo "::error::$f が無い"; exit 1; }
+          done
+          [ "$(sha256sum "$d/libffmpeg.so" | cut -d' ' -f1)" != "$(sha256sum node_modules/electron/dist/libffmpeg.so | cut -d' ' -f1)" ] \
+            || { echo "::error::libffmpeg.so が差し替わっていない"; exit 1; }
+          dpkg-deb --info apps/desktop/release/*.deb
+
+      - name: 起動して画面を出すか（xvfb）
+        shell: bash
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq xvfb > /dev/null
+          xvfb-run -a node scripts/smoke-packaged.mjs apps/desktop/release/linux-unpacked/seedstick --timeout 120
+
+      - name: できたものを数える
+        shell: bash
+        env:
+          V: ${{ needs.gate.outputs.version }}
+        run: |
+          set -euo pipefail
+          v="$V"
+          cd apps/desktop/release
+          ls -la *.AppImage *.deb
+          test -f "Seedstick-$v-linux-x64.AppImage" || { echo "::error::AppImage が無い"; exit 1; }
+          test -f "Seedstick-$v-linux-x64.deb"      || { echo "::error::deb が無い"; exit 1; }
+
+      - name: electron のキャッシュを保存
+        if: always() && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+          key: eb-linux-v2-${{ hashFiles('package-lock.json') }}
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist-linux
+          path: |
+            apps/desktop/release/*.AppImage
+            apps/desktop/release/*.deb
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  # ------------------------------------------------------------------
   # Release を作る。**タグを押したときだけ**（手動実行はビルド確認どまり）
   # ------------------------------------------------------------------
   release:
-    needs: [gate, windows, macos]
+    needs: [gate, windows, macos, linux]
     if: github.event_name == 'push' && github.ref_type == 'tag'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       contents: write # Release を作るのに要る唯一の権限
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: dist
           pattern: dist-*
           merge-multiple: true
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-notes
+          path: .
 
       - name: 集まったものを確かめる
         shell: bash
@@ -306,8 +421,15 @@ jobs:
           cd dist
           ls -la
           n=$(ls | wc -l)
-          # Windows 2 本 + macOS 4 本
-          [ "$n" -eq 6 ] || { echo "::error::成果物が 6 個ではなく $n 個"; exit 1; }
+          # Windows 2 本 + macOS 4 本 + Linux 2 本
+          [ "$n" -eq 8 ] || { echo "::error::成果物が 8 個ではなく $n 個"; exit 1; }
+
+      - name: 7-Zip のソース（LGPL）
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 -o dist/7z2107-src.7z "$SEVENZIP_SRC_URL"
+          echo "$SEVENZIP_SRC_SHA256  dist/7z2107-src.7z" | sha256sum -c -
 
       - name: SHA256SUMS
         shell: bash
@@ -317,39 +439,17 @@ jobs:
           sha256sum * > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
-      # **リリースノートは CHANGELOG から取る。無ければ止める。**
-      # `generate_release_notes` は PR を元にするので、main へ直接コミットする
-      # このリポジトリではほぼ空になる。
-      - name: リリースノートを切り出す
-        shell: bash
-        env:
-          V: ${{ needs.gate.outputs.version }}
-        run: |
-          set -euo pipefail
-          v="$V"
-          # `## v0.1.0` / `## 0.1.0` のどちらでも拾い、次の `## ` の手前まで
-          awk -v ver="$v" '
-            $0 ~ "^## v?" ver "([^0-9]|$)" { on = 1; next }
-            on && /^## / { exit }
-            on { print }
-          ' CHANGELOG.md > notes.md
-          if [ ! -s notes.md ]; then
-            echo "::error::CHANGELOG.md に '## v$v' の節がありません。"
-            echo "::error::'## vNext' を '## v$v' に直してからタグを打ち直してください。"
-            exit 1
-          fi
-          head -20 notes.md
-
       - name: Release を作る
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
+          test -s notes.md || { echo "::error::リリースノートが空"; exit 1; }
           # gh は「ドラフトで作る → 全部上げる → 公開」の順に動くので、
           # 途中で落ちても中途半端に公開された Release は残らない。
           gh release create "$GITHUB_REF_NAME" dist/* \
-            --title "$GITHUB_REF_NAME" \
+            --title "Seedstick $GITHUB_REF_NAME" \
             --notes-file notes.md \
             --verify-tag
 
@@ -362,7 +462,14 @@ jobs:
             echo '```'
             cat dist/SHA256SUMS.txt
             echo '```'
-            echo
-            echo "**このリポジトリは Private です。** Release のアセットは"
-            echo "ログインしていない第三者からは 404 になります（\`curl -LO\` も同じ）。"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # Release が出たら、サイトのダウンロードボタンを新しい版に向け直す。
+  # GITHUB_TOKEN で作った Release は他のワークフローを起動しないので、ここから呼ぶ。
+  pages:
+    needs: release
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/pages.yml

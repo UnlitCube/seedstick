@@ -1,0 +1,24 @@
+# 依存の更新を PR で持ってくる。
+# ワークフローの Action はコミット SHA で固定しているので、その更新もここが担う。
+# npm の本番依存が変わった PR は `node scripts/gen-third-party-notices.mjs` で
+# 通知文を作り直さないと CI が落ちる（意図どおり。ライセンスの見落としを防ぐ）。
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      dev-tooling:
+        dependency-type: development
+      runtime:
+        dependency-type: production

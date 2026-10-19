@@ -10,5 +10,5 @@ docs/research/iso-probe/fixtures/*.json -diff
 docs/research/iso-probe/*/report.json -diff
 
 # 一次資料のコピー。GitHub の言語統計から除外する。
-docs/research/sources/** linguist-vendored
+docs/research/iso-probe/fixtures/** linguist-vendored
 docs/research/schema/** linguist-vendored

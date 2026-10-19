@@ -48,7 +48,7 @@ vi.mock('electron', () => ({
   },
   shell: { openPath: () => Promise.resolve(''), openExternal: () => Promise.resolve() },
   app: {
-    getName: () => 'Autoinstall USB Creator',
+    getName: () => 'Seedstick',
     getVersion: () => '0.1.0',
     getLocale: () => 'ja-JP',
     getPath: () => makeTempDir('ipc-test-'),
@@ -257,7 +257,7 @@ describe('書き出す README は生成物のコメント言語に従う', () =>
     await call('exportBundle', createDefaultProfile())
     const readme = readFileSync(join(dir, 'README.txt'), 'utf8')
     expect(readme).not.toMatch(/[ぁ-んァ-ヶ一-龠]/u)
-    expect(readme).toContain('Autoinstall USB Creator 0.1.0')
+    expect(readme).toContain('Seedstick 0.1.0')
   })
 
   it("commentLanguage='none' のときは UI の言語に落とす（README は誰かが読む）", async () => {

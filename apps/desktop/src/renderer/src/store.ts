@@ -221,7 +221,7 @@ export const useStore = create<AppState>((set, get) => ({
   locale: 'ja',
   settings: null,
   step: 'iso',
-  profile: createDefaultProfile('24.04', 'autoinstall-ui/0.1.0', new Date().toISOString()),
+  profile: createDefaultProfile('24.04', 'seedstick/0.1.0', new Date().toISOString()),
   iso: null,
   isoError: null,
   isoBusy: false,
@@ -559,7 +559,7 @@ export const useStore = create<AppState>((set, get) => ({
     set({
       profile: createDefaultProfile(
         get().iso?.identity.series ?? '24.04',
-        'autoinstall-ui/0.1.0',
+        'seedstick/0.1.0',
         new Date().toISOString(),
       ),
       currentProfileId: null,

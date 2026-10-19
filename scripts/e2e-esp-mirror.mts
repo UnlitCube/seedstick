@@ -252,7 +252,7 @@ check(
 )
 
 console.log('\n■ 2 台目の ESP が本当に無いときだけ「対象なし」と言う')
-// ESP が 1 台目にしか無い機械（利用者の実機構成がこれ）。
+// ESP が 1 台目にしか無い機械（参考構成（SATA×2 + NVMe×2）がこれ）。
 const only = runMirror(sh, { mounts: TARGET_MOUNTS, esps: ['/dev/vda1'] })
 console.log(
   only

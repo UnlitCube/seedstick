@@ -1,7 +1,7 @@
 // @autoinstall/shared — main / renderer / CLI が共有する TS ソース契約
 
-export const APP_ID = 'app.autoinstall-ui.desktop'
-export const APP_NAME = 'Autoinstall USB Creator'
+export const APP_ID = 'jp.unlit-cube.seedstick'
+export const APP_NAME = 'Seedstick'
 
 export * from './autoinstall/advanced.js'
 export * from './autoinstall/model.js'

@@ -1,4 +1,4 @@
-# Autoinstall USB Creator
+# Seedstick
 
 Ubuntu Server の**自動インストール USB** を、GUI で作るツール。
 Windows / macOS / Linux で動きます（Electron）。
@@ -107,8 +107,8 @@ npm run dist:installer  # Windows 向けの Electron 製インストーラを 1 
 
 | | インストーラ | ポータブル |
 |---|---|---|
-| Windows | `AutoinstallUSBCreator-<v>-win-x64-Setup.exe` | `AutoinstallUSBCreator-<v>-win-x64-portable.exe` |
-| macOS | `AutoinstallUSBCreator-<v>-mac-{x64,arm64}.dmg` | `AutoinstallUSBCreator-<v>-mac-{x64,arm64}.zip` |
+| Windows | `Seedstick-<v>-win-x64-Setup.exe` | `Seedstick-<v>-win-x64-portable.exe` |
+| macOS | `Seedstick-<v>-mac-{x64,arm64}.dmg` | `Seedstick-<v>-mac-{x64,arm64}.zip` |
 
 Windows のインストーラは**このユーザーにだけ**入れる（`%LOCALAPPDATA%\Programs`）ので
 管理者権限が要らない。削除は Windows の「アプリと機能」から。
@@ -140,7 +140,7 @@ git tag v0.2.0 && git push origin v0.2.0
   隔離属性は自分で外す必要がある:
 
   ```bash
-  xattr -dr com.apple.quarantine "/Applications/Autoinstall USB Creator.app"
+  xattr -dr com.apple.quarantine "/Applications/Seedstick.app"
   ```
 
   macOS Sequoia (15) 以降は **Control-クリック →「開く」での回避が廃止**されたので、

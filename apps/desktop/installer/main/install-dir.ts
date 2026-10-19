@@ -102,7 +102,7 @@ function freeBytesOf(dir: string): number | null {
 async function isWritable(dir: string): Promise<boolean> {
   // `fs.access(W_OK)` は Windows では読み取り専用属性しか見ないので当てにならない。
   // 実際に書いて消す。**必ず消す**（落とし穴 86: テストが作った一時ファイルが積み上がった）。
-  const probe = join(dir, `.autoinstall-ui-probe-${process.pid}`)
+  const probe = join(dir, `.seedstick-probe-${process.pid}`)
   try {
     await fs.writeFile(probe, '')
     return true

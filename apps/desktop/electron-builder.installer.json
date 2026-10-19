@@ -1,17 +1,17 @@
 {
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
-  "appId": "app.autoinstall-ui.installer",
-  "productName": "Autoinstall USB Creator Setup",
-  "copyright": "Copyright © 2026",
+  "appId": "jp.unlit-cube.seedstick.installer",
+  "productName": "Seedstick Setup",
+  "copyright": "Copyright © 2026 UnlitCube",
   "publish": null,
   "directories": {
     "output": "release",
     "buildResources": "installer-resources"
   },
   "extraMetadata": {
-    "name": "autoinstall-ui-installer",
+    "name": "seedstick-installer",
     "main": "out/installer/main/index.js",
-    "productName": "Autoinstall USB Creator Setup"
+    "productName": "Seedstick Setup"
   },
   "files": [
     "out/installer/**/*",
@@ -34,6 +34,14 @@
     {
       "from": "installer-resources/payload-meta.json",
       "to": "payload-meta.json"
+    },
+    {
+      "from": "../../LICENSE",
+      "to": "LICENSE.txt"
+    },
+    {
+      "from": "build/THIRD_PARTY_NOTICES.txt",
+      "to": "THIRD_PARTY_NOTICES.txt"
     }
   ],
   "asar": true,
@@ -52,9 +60,10 @@
     "requestedExecutionLevel": "asInvoker"
   },
   "portable": {
-    "artifactName": "AutoinstallUSBCreator-${version}-win-x64-Setup.${ext}",
+    "artifactName": "Seedstick-${version}-win-x64-Setup.${ext}",
     "requestExecutionLevel": "user",
     "unicode": true,
     "useZip": false
-  }
+  },
+  "afterPack": "./scripts/after-pack.cjs"
 }

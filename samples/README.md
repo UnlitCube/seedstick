@@ -6,7 +6,7 @@ GUI の「プロファイルを開く」からそのまま読める JSON を置�
 
 | 形態 | サンプルの場所 |
 |---|---|
-| インストーラ版 | インストール先の `resources\samples\`（既定は `%LOCALAPPDATA%\Programs\Autoinstall USB Creator\`。インストール時に変更できる） |
+| インストーラ版 | インストール先の `resources\samples\`（既定は `%LOCALAPPDATA%\Programs\Seedstick\`。インストール時に変更できる） |
 | portable 版 | **実行のたびに一時ディレクトリへ展開されるので、置き場所として当てにしない** |
 | このリポジトリ | `samples/` |
 

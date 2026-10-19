@@ -1,4 +1,4 @@
-# Autoinstall USB Creator
+# Seedstick
 
 Ubuntu Server の**自動インストール USB** を作る GUI ツール。Electron / Windows・macOS・Linux。
 ISO を再構築せず、raw 書き込み + 数セクタのインプレース改変 + `CIDATA` パーティション追加で実現する。
@@ -1086,7 +1086,7 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
 ### Electron 製インストーラ
 
 138. **アンインストーラに Setup.exe を複製しない。**
-    参照実装（別の Electron アプリ）の形をそのまま持ってくると、
+    参照した別の Electron アプリ（非公開）の形をそのまま持ってくると、
     インストール先に **payload を抱えたままの Setup.exe が 196 MB** 置かれる。
     398 MB のアプリに対して 50% の無駄で、実測で合計 **595 MB** になった。
     消すのに要るのは**ショートカット 2 つ・レジストリ 1 キー・フォルダ 1 つ**だけなので、
@@ -1181,7 +1181,7 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
     `backup/before-email-rewrite` という名前のタグが残っていたが、
     実体は**1 世代前**の退避で、最新 4 コミットを含まず、
     **2 回の書き換えが消したはずのもの**を丸ごと抱えていた
-    （`old-personal-address` 10 件、`Co-Authored-By: Claude` 10 行、
+    （使わないと決めた旧個人アドレス 10 件、`Co-Authored-By: Claude` 10 行、
     `Claude-Session:` 2 行）。lightweight タグなので
     `git push` でも `--follow-tags` でも送られないが、
     **`--tags` / `--all --tags` / `--mirror` を 1 度打つだけで恒久的に公開される**
@@ -1214,7 +1214,7 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
     両方の設定に **`"publish": null`** を書いて止める（26 系固有。v27 で既定が変わる予定）。
 
 152. **GitHub は Release アセット名の空白をドットに置き換える。**
-    `Autoinstall USB Creator Setup-0.1.0.exe` は
+    `Autoinstall USB Creator Setup-0.1.0.exe`（旧名。2026-10-20 に Seedstick へ改名） は
     `Autoinstall.USB.Creator.Setup-0.1.0.exe` として配られるので、
     ビルドした名前・`SHA256SUMS` の名前・配った名前が三者三様になる。
     `artifactName` は **`[0-9A-Za-z._-]` だけ**にする
@@ -1254,7 +1254,7 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
 ## 検証済みのこと
 
 - **Electron 製インストーラを、できあがった `Setup.exe` から通しで動かした**
-  （2026-09-11、`Autoinstall USB Creator Setup-0.1.0.exe` 196.1 MB）。
+  （2026-09-11、`Autoinstall USB Creator Setup-0.1.0.exe`（旧名。2026-10-20 に Seedstick へ改名） 196.1 MB）。
   CDP で本物のクリックを送り、**ようこそ → 設定 → 展開 → 完了**まで通したうえで:
   - 進捗が**実際に進む**こと（0% のまま終わっていないこと）
   - 置かれたもの（本体の exe・`resources/app.asar`・`resources/samples/ip-only.json`・
@@ -1291,7 +1291,7 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
   「インストーラ USB」「別の OS が入ったディスク」を混ぜた機械を作り、
   **どちらにも触らず 2 台目だけをミラーする**ことを見る。VM を回さずに数秒で終わる。
 - **RAID + LVM の無人インストールを VM で完走させた** (`npm run e2e:vm:raid`、24.04.3)。
-  利用者の実機構成そのもの（ESP は 1 台目だけ + `/boot` の RAID1 + LVM /、
+  参考構成（SATA×2 + NVMe×2）そのもの（ESP は 1 台目だけ + `/boot` の RAID1 + LVM /、
   **丸ごとメンバーの NVMe 2 台をマウントしない RAID1**）を QEMU で組み、
   インストールを完走させ、**そのシステムを USB 抜きで起動させた**。
   **`grub_device` の位置の誤りはこの経路でしか見つからなかった**
@@ -1399,14 +1399,14 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
 | `npm run e2e:usb-worker` | 同じく実 USB に書くが、**昇格ワーカー + NDJSON 経路**を通す（GUI と同じ経路） |
 | `npm run e2e:verify-usb` | 書き終わった USB を読み戻すだけ（権限が無ければ CIDATA だけ見る） |
 | `npm run e2e:vm` | **WSL2 + QEMU で無人インストールを完走させる**（単一ディスク・LVM）。実 USB は使わない |
-| `npm run e2e:vm:raid` | 同じ経路で**利用者の実機構成**（ディスク 2 台 + NVMe 2 台の RAID1 + LVM）を組む |
+| `npm run e2e:vm:raid` | 同じ経路で**参考構成**（ディスク 2 台 + NVMe 2 台の RAID1 + LVM）を組む |
 | `npm run e2e:vm:mirror` | **ESP を 2 台に置き、NIC 2 枚を bond で束ねる**（2 台目への grub-install と bond の検証） |
 | `npm run e2e:vm:ip` | **配布サンプル `samples/ip-only.json` そのもの**で、起動メニューの項目を選んだことにして入れ、**選んだ IP が実際に反映される**ことを確かめる |
 | `npm test` | typecheck + unit + smoke |
 | `python scripts/make-icon.py` | **アイコンを生成**（`apps/desktop/build/icon.ico` と `icon.png`）。Pillow のみ。`dist:*` の前に 1 度走らせれば足りる |
 | `npm run e2e:uninstall-script` | **生成した `uninstall.ps1` を本物の PowerShell で走らせる**（砂場と専用レジストリキーだけを使う。数秒） |
 | `npm run dist:win` / `dist:mac` / `dist:linux` | electron-builder でパッケージ。**Windows は portable のみ**（インストーラは `dist:installer` が作る）。**macOS は dmg（インストーラ）と zip（ポータブル）を x64 / arm64 で**。`samples/` は `extraResources` で同梱される（落とし穴 131 / 134） |
-| `npm run dist:installer` | **Electron 製インストーラ**を 1 本の exe にまとめる（`AutoinstallUSBCreator-<version>-win-x64-Setup.exe`）。アイコン生成 → 本体を `--dir` → LZMA2 で `payload.7z` → インストーラをビルド → portable で梱包、の 5 段。**5〜6 分**。Windows 専用 |
+| `npm run dist:installer` | **Electron 製インストーラ**を 1 本の exe にまとめる（`Seedstick-<version>-win-x64-Setup.exe`）。アイコン生成 → 本体を `--dir` → LZMA2 で `payload.7z` → インストーラをビルド → portable で梱包、の 5 段。**5〜6 分**。Windows 専用 |
 
 `npm run smoke` は `~/images`・`~/Downloads`・`C:/iso`・`/var/lib/iso` から ISO を探す。
 明示するなら `npm run smoke -- <iso のパス>`。ISO が無ければスキップして正常終了する。

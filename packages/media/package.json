@@ -10,5 +10,15 @@
   },
   "dependencies": {
     "@autoinstall/shared": "*"
+  },
+  "license": "MIT",
+  "author": "UnlitCube",
+  "homepage": "https://unlitcube.github.io/seedstick/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/UnlitCube/seedstick.git"
+  },
+  "bugs": {
+    "url": "https://github.com/UnlitCube/seedstick/issues"
   }
 }

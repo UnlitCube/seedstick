@@ -63,7 +63,12 @@ function ErrorFallback({
 }): React.JSX.Element {
   const t = useT()
   return (
-    <div className="rounded-xl border border-rose-300 bg-rose-50 p-5 dark:border-rose-800 dark:bg-rose-950/40">
+    // data-error-boundary はパッケージ版の起動検査（scripts/smoke-packaged.mjs）が見る目印。
+    // 表示文言で探すと、言語を変えたときに検査が空振りする。
+    <div
+      data-error-boundary
+      className="rounded-xl border border-rose-300 bg-rose-50 p-5 dark:border-rose-800 dark:bg-rose-950/40"
+    >
       <div className="flex items-start gap-3">
         <AlertTriangle className="mt-0.5 size-5 shrink-0 text-rose-600 dark:text-rose-400" aria-hidden />
         <div className="min-w-0 space-y-3">

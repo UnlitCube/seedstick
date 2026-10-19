@@ -14,7 +14,7 @@ import { app } from 'electron'
 import { existsSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
-export const PRODUCT_NAME = 'Autoinstall USB Creator'
+export const PRODUCT_NAME = 'Seedstick'
 /** 展開後に置かれる本体の exe 名。electron-builder の `productName` と一致させる。 */
 export const APP_EXE_NAME = `${PRODUCT_NAME}.exe`
 /**

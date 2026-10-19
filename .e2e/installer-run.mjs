@@ -1,7 +1,7 @@
 // **できあがった Setup.exe を実際に走らせて**、インストールが通ることを確かめる。
 //
 //   1. `npm run dist:installer`
-//   2. `"apps/desktop/release/Autoinstall USB Creator Setup-0.1.0.exe" --remote-debugging-port=9335`
+//   2. `"apps/desktop/release/Seedstick Setup-0.1.0.exe" --remote-debugging-port=9335`
 //   3. `CDP_PORT=9335 npx tsx .e2e/installer-run.mjs`
 //
 // 「.exe ができた」と「それが動く」は別（落とし穴 133）。
@@ -10,11 +10,12 @@
 // **完了後の自動起動は切る**（完了画面を読みたいので）。
 // **文言をここに書き写さない。** 辞書が正。
 import { existsSync, readdirSync, statSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { connect } from './cdp.mjs'
 import { DICTIONARIES } from '../apps/desktop/installer/shared/labels.ts'
 
-const OUT = process.env.SHOT_DIR ?? 'C:/Users/user/AppData/Local/Temp'
+const OUT = process.env.SHOT_DIR ?? tmpdir()
 const c = await connect()
 await c.send('Runtime.enable')
 await c.send('Page.enable')
@@ -123,13 +124,13 @@ if (!done.includes(t('done.ok.title'))) note(`完了画面が成功ではない:
 // --- 3. 置かれたものを確かめる ----------------------------------------------
 const dir = info.defaultInstallDir
 const mustExist = [
-  'Autoinstall USB Creator.exe',
+  'Seedstick.exe',
   'resources/app.asar',
   'resources/samples/ip-only.json',
   'uninstall.ps1',
 ]
 // **Setup.exe の複製が残っていないこと。** 以前はここに 196 MB の複製を置いていた。
-const mustNotExist = ['Uninstall Autoinstall USB Creator.exe']
+const mustNotExist = ['Uninstall Seedstick.exe']
 for (const rel of mustExist) {
   const p = join(dir, rel)
   if (!existsSync(p)) note(`置かれていない: ${p}`)

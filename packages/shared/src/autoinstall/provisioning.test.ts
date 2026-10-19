@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
@@ -676,7 +677,7 @@ describe('URL 取得ペイロードの改ざん検知（実際に sh で実行�
    * 生成されたコマンドをそのまま sh で実行する。
    * curl は file:// を扱えるので、ダウンロードの行も本物のまま通せる。
    */
-  function run(body: string, sha256: string): { code: number; installed: string | null } {
+  function run(body: string, sha256: string): { code: number; output: string; installed: string | null } {
     const dir = mkdtempSync(join(tmpdir(), 'ai-deploy-'))
     try {
       const src = join(dir, 'remote.bin')
@@ -690,13 +691,24 @@ describe('URL 取得ペイロードの改ざん検知（実際に sh で実行�
       const cmd = cmds[0]!.split('/var/tmp/autoinstall-payload.bin').join(
         slash(join(dir, 'tmp.bin')),
       )
-      let code = 0
-      try {
-        execFileSync('sh', ['-c', cmd], { stdio: 'pipe' })
-      } catch (e) {
-        code = (e as { status?: number }).status ?? 1
+      // 生成物は Ubuntu の `sha256sum` を使う。macOS には無い（BSD は `shasum`）ので、
+      // そこだけ同じ書式を受け付けるシムを置く。無いまま走らせると 127 で落ち、
+      // 「改ざんを検知した」側のテストが**誤った理由で緑になる**（落とし穴 116）。
+      const bin = join(dir, 'bin')
+      mkdirSync(bin)
+      if (spawnSync('sh', ['-c', 'command -v sha256sum'], { stdio: 'ignore' }).status !== 0) {
+        writeFileSync(join(bin, 'sha256sum'), '#!/bin/sh\nexec shasum -a 256 "$@"\n', { mode: 0o755 })
       }
-      return { code, installed: existsSync(target) ? readFileSync(target, 'utf8') : null }
+      const r = spawnSync('sh', ['-c', cmd], {
+        env: { ...process.env, PATH: `${slash(bin)}:${process.env['PATH'] ?? ''}` },
+        encoding: 'utf8',
+      })
+      if (r.error) throw r.error
+      return {
+        code: r.status ?? 1,
+        output: `${r.stdout}${r.stderr}`,
+        installed: existsSync(target) ? readFileSync(target, 'utf8') : null,
+      }
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
@@ -707,6 +719,10 @@ describe('URL 取得ペイロードの改ざん検知（実際に sh で実行�
     const r = run('TAMPERED PAYLOAD', good)
     expect(r.code).not.toBe(0)
     expect(r.installed).toBeNull()
+    // 落ちた理由が「ハッシュの不一致」であること（コマンドが見つからない、ではなく）。
+    // GNU の sha256sum も BSD の shasum も、照合に失敗した行に FAILED と出す。
+    expect(r.output).toContain('FAILED')
+    expect(r.output).not.toMatch(/not found|No such file/i)
   })
 
   it('ハッシュが合えば配置され、0 で終わる', () => {

@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { execFileSync } from 'node:child_process'
+import { beforeAll, describe, expect, it } from 'vitest'
+import { spawnSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -79,18 +79,30 @@ function asInstallerConfig(p: AutoinstallProfile): string {
   return stringify(parse(stringify(obj)), { defaultStringType: 'QUOTE_SINGLE', lineWidth: 0 })
 }
 
-/** `python3` が無い環境（Windows など）向けのシム。 */
-function withPython3(dir: string): string {
-  const shim = join(dir, 'python3')
-  writeFileSync(shim, '#!/bin/sh\nexec python "$@"\n', { encoding: 'utf8', mode: 0o755 })
-  return dir
+/**
+ * Windows（Git Bash）には `python3` が無く `python` しか無いので、そこだけシムを置く。
+ *
+ * **macOS / Linux では置かない。** 置くと本物の `python3` を隠し、
+ * `python` が無い環境（macOS の既定）では全件が「見つからない」で落ちる。
+ */
+function pathWithPython3(dir: string): string {
+  const base = process.env['PATH'] ?? ''
+  if (process.platform !== 'win32') return base
+  writeFileSync(join(dir, 'python3'), '#!/bin/sh\nexec python "$@"\n', { encoding: 'utf8', mode: 0o755 })
+  return `${dir}:${base}`
+}
+
+interface ShellRun {
+  status: number | null
+  stderr: string
+  conf: string
 }
 
 /**
- * 生成した early-commands を実際に sh で実行して結果を確かめる。
+ * 生成した early-commands を実際に sh で実行する。
  * シェルや Python の構文ミスは、読んだだけでは見つからない。
  */
-function runEarlyCommands(p: AutoinstallProfile, cmdline: string): Record<string, unknown> {
+function execEarlyCommands(p: AutoinstallProfile, cmdline: string): ShellRun {
   const early = collectEarlyCommands(p)
   if (early.length === 0) throw new Error('early-commands が生成されていません')
   const dir = mkdtempSync(join(tmpdir(), 'ai-subst-'))
@@ -99,20 +111,63 @@ function runEarlyCommands(p: AutoinstallProfile, cmdline: string): Record<string
     const cmd = join(dir, 'cmdline')
     writeFileSync(conf, asInstallerConfig(p), 'utf8')
     writeFileSync(cmd, cmdline, 'utf8')
-    execFileSync('sh', ['-c', early[0]!], {
+    const r = spawnSync('sh', ['-c', early[0]!], {
       env: {
         ...process.env,
         AI_CONF: conf,
         AI_CMDLINE: cmd,
-        PATH: `${withPython3(dir)}:${process.env['PATH'] ?? ''}`,
+        // Windows の Python は既定で cp1252 / cp932 で書くので、診断が読めなくなる
+        PYTHONUTF8: '1',
+        PATH: pathWithPython3(dir),
       },
-      stdio: 'pipe',
+      encoding: 'utf8',
     })
-    return parse(readFileSync(conf, 'utf8')) as Record<string, unknown>
+    if (r.error) throw r.error
+    return { status: r.status, stderr: r.stderr, conf: readFileSync(conf, 'utf8') }
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
 }
+
+/** 成功するはずの実行。失敗したら stderr ごと見せる。 */
+function runEarlyCommands(p: AutoinstallProfile, cmdline: string): Record<string, unknown> {
+  const r = execEarlyCommands(p, cmdline)
+  if (r.status !== 0) throw new Error(`early-commands が exit ${r.status} で終わった:\n${r.stderr}`)
+  return parse(r.conf) as Record<string, unknown>
+}
+
+/**
+ * 失敗するはずの実行。**理由まで返す。**
+ *
+ * 終了コードだけを見ると、PyYAML が無い環境でも「失敗した」ので緑になる
+ * （CI の Windows ランナーで実際にそうなった。落とし穴 116 / 153）。
+ */
+function failEarlyCommands(p: AutoinstallProfile, cmdline: string): string {
+  const r = execEarlyCommands(p, cmdline)
+  if (r.status === 0) throw new Error('early-commands が成功してしまった')
+  return r.stderr
+}
+
+// **前提を 1 回だけ、はっきり確かめる。** 無いと全件が同じ 180 行の失敗を出し、
+// 原因（PyYAML が無い）が読み取れない。黙って skip にもしない（CI で検査が消える）。
+beforeAll(() => {
+  const dir = mkdtempSync(join(tmpdir(), 'ai-pycheck-'))
+  try {
+    const r = spawnSync('sh', ['-c', 'python3 -c "import yaml; print(yaml.__version__)"'], {
+      env: { ...process.env, PYTHONUTF8: '1', PATH: pathWithPython3(dir) },
+      encoding: 'utf8',
+    })
+    if (r.error || r.status !== 0) {
+      throw new Error(
+        'このテストは sh と python3 + PyYAML を要求する（生成した early-commands を実際に走らせるため）。\n' +
+          '  python -m pip install PyYAML==6.0.1\n' +
+          `stderr: ${r.stderr ?? String(r.error)}`,
+      )
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
 
 /** 起動メニューでホストを選ぶ、実際に作れる構成。 */
 function kernelArgProfile(): AutoinstallProfile {
@@ -194,10 +249,9 @@ describe('early-commands（実際に sh + python で実行）', () => {
   // 気づけるように中止する。
   it('危険な文字を含む値は中止になる', () => {
     for (const bad of ['a;rm', 'a"b', 'a$b', 'a&b', 'a|b', 'a`b', 'a<b', "a'b"]) {
-      expect(() =>
-        runEarlyCommands(kernelArgProfile(), `autoinstall ai.hostname=${bad} ---
-`),
-      ).toThrow()
+      const stderr = failEarlyCommands(kernelArgProfile(), `autoinstall ai.hostname=${bad} ---\n`)
+      // 落ちた理由が「使えない文字」であること（PyYAML が無いことではなく）
+      expect(stderr, bad).toContain('boot parameters contain characters that are not allowed: ai.hostname')
     }
   })
 
@@ -281,7 +335,8 @@ describe('反映できなかった引数は失敗にする', () => {
       runtimeValues: runtime({ hostname: 'kernel-arg', network: 'fixed', disk: 'fixed' }),
     }))
     // ai.disk は fields.disk が false なので入れる場所がない
-    expect(() => runEarlyCommands(p, 'autoinstall ai.hostname=web01 ai.disk=X ---\n')).toThrow()
+    const stderr = failEarlyCommands(p, 'autoinstall ai.hostname=web01 ai.disk=X ---\n')
+    expect(stderr).toContain('could not apply boot parameters: ai.disk')
   })
 
   it('反映できる引数だけなら成功する', () => {

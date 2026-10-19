@@ -6,7 +6,7 @@
 表を書き換えるときは必ずこれを走らせて実測に合わせること
 （`yaml` パッケージの 1.1 は PyYAML の 1.1 と同じではない。落とし穴 117）。
 
-    wsl -d Ubuntu-24.04 -u root -- python3 /mnt/c/dev/autoinstall-ui/scripts/vm/pyyaml-compare.py
+    wsl -d Ubuntu-24.04 -u root -- python3 "$(wslpath -a scripts/vm/pyyaml-compare.py)"   # リポジトリのルートで
 
 PyYAML は cloud-init が依存しているので、Ubuntu の live 環境にも WSL にも必ずある。
 """
