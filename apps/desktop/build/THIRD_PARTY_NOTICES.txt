@@ -2367,10 +2367,17 @@ built with NSIS. They contain the NSIS stub and these NSIS plug-ins:
     Source: https://nsis.sourceforge.io/Nsis7z_plug-in
   - StdUtils plug-in - Copyright (C) 2004-2019 LoRd_MuldeR - GNU LGPL 2.1 or later,
     with the clarification below. Source: https://github.com/lordmulder/stdutils
-  - elevate.exe (portable executable only) - MIT License (text below)
+  - elevate.exe (in both the portable executable and the Setup.exe) - MIT License (text below)
     Source: https://github.com/jpassing/elevate
 
 The LGPL 2.1 text is reproduced in section 5.
+
+Source code for the LGPL plug-ins: the plug-ins are the unmodified builds shipped in
+electron-builder nsis-resources 3.4.1. Their source code is available at the URLs above.
+In addition, for at least three years after each Seedstick release, we will provide the
+complete corresponding source code of the nsis7z and StdUtils plug-ins used in that release
+on request, for no more than the cost of providing it: open an issue at
+https://github.com/UnlitCube/seedstick/issues or email unlit.cube@gmail.com.
 
 ------------------------------------------------------------------------------
 NSIS COPYING

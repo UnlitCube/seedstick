@@ -4,8 +4,8 @@
 #            Seedstick-<v>-win-x64-portable.exe      入れずにそのまま起動
 #   macOS    Seedstick-<v>-mac-{x64,arm64}.dmg       インストーラ（/Applications へドラッグ）
 #            Seedstick-<v>-mac-{x64,arm64}.zip       ポータブル（.app をそのまま）
-#   Linux    Seedstick-<v>-linux-x64.AppImage        ポータブル（試験的）
-#            Seedstick-<v>-linux-x64.deb             パッケージ（試験的）
+#   Linux    Seedstick-<v>-linux-x64.deb             パッケージ（試験的）
+#            AppImage は出さない（落とし穴 158: 第三者のライブラリを同梱するため）
 #   その他   SHA256SUMS.txt / 7z2107-src.7z（Setup.exe が同梱する 7-Zip の LGPL ソース）
 #
 # **ファイル名に空白を入れない。** GitHub は Release アセット名の空白をドットに
@@ -262,7 +262,11 @@ jobs:
             done
             lib="$app/Contents/Frameworks/Electron Framework.framework/Versions/A/Libraries/libffmpeg.dylib"
             orig="node_modules/electron/dist/Electron.app/Contents/Frameworks/Electron Framework.framework/Versions/A/Libraries/libffmpeg.dylib"
-            echo "libffmpeg shipped=$(shasum -a 256 "$lib" | cut -d' ' -f1) electron=$(shasum -a 256 "$orig" | cut -d' ' -f1)"
+            shipped=$(shasum -a 256 "$lib" | cut -d' ' -f1)
+            stock=$(shasum -a 256 "$orig" | cut -d' ' -f1)
+            echo "libffmpeg shipped=$shipped electron=$stock"
+            # コーデック入りの既定のまま出さない（after-pack.cjs が差し替える。docs/LEGAL.md の特許の節）
+            [ "$shipped" != "$stock" ] || { echo "::error::$app の libffmpeg.dylib が差し替わっていない"; exit 1; }
           done
           if [ "$found" -eq 0 ]; then
             echo "::error::.app が 1 つも見つからない（走査が空振りしている）"
@@ -309,7 +313,7 @@ jobs:
           retention-days: 7
 
   # ------------------------------------------------------------------
-  # Linux: AppImage + deb（試験的。デバイス列挙と pkexec は実機未検証）
+  # Linux: deb（試験的。デバイス列挙と pkexec は実機未検証）
   # ------------------------------------------------------------------
   linux:
     needs: gate
@@ -338,7 +342,7 @@ jobs:
 
       - run: npm ci
 
-      - name: AppImage と deb
+      - name: deb
         run: npm run dist:linux
 
       - name: 同梱物を確かめる
@@ -367,9 +371,8 @@ jobs:
           set -euo pipefail
           v="$V"
           cd apps/desktop/release
-          ls -la *.AppImage *.deb
-          test -f "Seedstick-$v-linux-x64.AppImage" || { echo "::error::AppImage が無い"; exit 1; }
-          test -f "Seedstick-$v-linux-x64.deb"      || { echo "::error::deb が無い"; exit 1; }
+          ls -la *.deb
+          test -f "Seedstick-$v-linux-x64.deb" || { echo "::error::deb が無い"; exit 1; }
 
       - name: electron のキャッシュを保存
         if: always() && steps.cache.outputs.cache-hit != 'true'
@@ -384,7 +387,6 @@ jobs:
         with:
           name: dist-linux
           path: |
-            apps/desktop/release/*.AppImage
             apps/desktop/release/*.deb
           if-no-files-found: error
           compression-level: 0
@@ -465,11 +467,20 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   # Release が出たら、サイトのダウンロードボタンを新しい版に向け直す。
-  # GITHUB_TOKEN で作った Release は他のワークフローを起動しないので、ここから呼ぶ。
+  #
+  # **pages.yml を main の上で起動する。** ここ（タグの run）から workflow_call で呼ぶと、
+  # Pages の github-pages 環境は既定ブランチからの公開しか許さないので
+  # 「Tag "vX.Y.Z" is not allowed to deploy to github-pages」で拒まれる。
+  # GITHUB_TOKEN で作った Release は他のワークフローを起動しないが、
+  # workflow_dispatch だけは GITHUB_TOKEN からでも起動できる。
   pages:
     needs: release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     permissions:
-      contents: read
-      pages: write
-      id-token: write
-    uses: ./.github/workflows/pages.yml
+      actions: write
+    steps:
+      - name: サイトを作り直す（main で）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --repo "$GITHUB_REPOSITORY" --ref main

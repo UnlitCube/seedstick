@@ -8,7 +8,8 @@ Only the latest release receives fixes.
 
 Please **do not open a public issue.** Report privately through GitHub:
 [**Report a vulnerability**](https://github.com/UnlitCube/seedstick/security/advisories/new)
-(the *Security* tab of the repository).
+(the *Security* tab of the repository). If that form is not available to you, email
+**unlit.cube@gmail.com** with `[SECURITY]` in the subject.
 
 Include what you did, what happened, and what an attacker could gain. A proof of
 concept helps. You should get a first answer within a week. Seedstick is maintained
@@ -22,15 +23,18 @@ target machine. Examples of issues we treat as security problems:
 
 - A way to make the app write to a disk the user did not select, or to a system or
   internal disk.
-- A way for another local process to control or impersonate the elevated write helper
-  (it listens on a one-time `127.0.0.1` port with a token).
+- A way for another local process to control or impersonate the elevated write helper.
+  The helper reports to the app over TCP: the app listens on a one-time `127.0.0.1`
+  port, and only a connection that presents the per-job random token becomes the
+  control channel.
 - A profile file, ISO or field value that makes the generated `user-data` or
   `early-commands` run unintended commands (shell or YAML injection).
 - A way to make the app read and copy files the user did not pick (for example via a
   shared profile JSON).
 - Plain-text login passwords ending up in saved profiles, logs or the USB drive.
-  (Disk-encryption passphrases are written in plain text by design, because the
-  installer needs them; the app warns about this.)
+  (By design, a disk-encryption passphrase is stored in plain text on the USB drive
+  and in saved or exported profiles, because the installer needs it; the app warns
+  about this when one is set.)
 
 ## What is out of scope
 

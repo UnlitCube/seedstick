@@ -1276,8 +1276,7 @@ Date: {date}`,
     'Encryption with the ZFS layout behaves differently across installer versions. Verify on real hardware.',
   'validate.encryptionPassphraseTooShort':
     'The disk encryption passphrase is too short (minimum 8 characters).',
-  'validate.encryptionPassphrasePlainInYaml':
-    'The disk encryption passphrase is written in plain text into the autoinstall YAML. Handle the USB stick accordingly.',
+  'validate.encryptionPassphrasePlainInYaml': 'The disk encryption passphrase is stored in plain text in the autoinstall YAML and in saved or exported profiles. Handle the USB stick and the profile files accordingly.',
   'validate.encryptionRequiresLvm':
     'Disk encryption only works with the LVM layout; it is ignored for {mode}.',
   'validate.wholeDiskRequiresLvm':

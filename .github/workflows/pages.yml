@@ -3,13 +3,15 @@
 # 走るのは 3 つのとき:
 #   - main にサイトの元（文言・辞書・画像・生成スクリプト）が入ったとき
 #   - release.yml が Release を作ったあと（ダウンロードのリンクを新しい版に向け直す。
-#     GITHUB_TOKEN で作った Release は他のワークフローを起動しないので、向こうから呼ぶ）
+#     向こうが `gh workflow run pages.yml --ref main` で起動する。タグの run から
+#     workflow_call で呼ぶと、github-pages 環境が既定ブランチ以外からの公開を拒む）
 #   - 手動
 #
 # **npm ci をしない。** 生成スクリプトは辞書（TypeScript）を Node の型除去で直接読むだけで、
 # 依存パッケージを使わない。Electron を落としてくる数分を毎回払わずに済む。
 #
 # Pages の公開元は「GitHub Actions」にしておくこと（Settings → Pages → Source）。
+# Private のまま（Free プラン）では Pages が使えないので、このワークフローは Public にしてから動く。
 
 name: pages
 
@@ -22,9 +24,9 @@ on:
       - packages/shared/src/i18n/**
       - apps/desktop/installer/shared/labels.ts
       - apps/desktop/installer/shared/locales.ts
+      - apps/desktop/build/icon.png
       - .github/workflows/pages.yml
   workflow_dispatch:
-  workflow_call:
 
 permissions: {}
 
@@ -54,8 +56,6 @@ jobs:
         run: |
           node --version
           node scripts/build-site.mjs
-
-      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
 
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:

@@ -67,6 +67,10 @@ body:
       description: |
         For a failed install, the installer copies its logs to the drive's CIDATA partition
         (on by default: "Collect logs on failure" in the advanced settings)
-        (`installer-journal.log`, `installer-logs.tar.gz`). The most useful part is usually
-        `var/log/installer/subiquity-traceback.txt` inside the archive.
+        (`installer-journal.log`, `installer-logs.tar.gz`). The most useful parts are usually
+        `var/log/installer/subiquity-traceback.txt` and `var/log/installer/subiquity-server-debug.log`
+        inside the archive.
+        **Do not attach `user-data` from the same partition**: it contains the password hash, SSH keys
+        and, with disk encryption, the passphrase in plain text. Before uploading the archive, remove
+        `var/log/installer/autoinstall-user-data` from it for the same reason.
       render: text

@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url'
 import { LOCALE_META, LOCALES } from '../packages/shared/src/i18n/locales.ts'
 import { DICTIONARIES as INSTALLER } from '../apps/desktop/installer/shared/labels.ts'
 import { SITE_STRINGS } from '../docs-site/strings.mjs'
+import { ASSET_PATTERNS } from '../docs-site/assets.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const OUT = join(ROOT, 'site-dist')
@@ -32,12 +33,10 @@ const APP_KEYS = [
   'app.tagline',
   'common.language',
   'about.noWarranty',
-  'about.noImages',
   'about.license',
   'about.disclaimer',
   'about.trademarks',
   'about.source',
-  'image.redistributionNotice',
 ]
 const INSTALLER_KEYS = [
   'welcome.f1.title',
@@ -90,18 +89,6 @@ async function latestRelease() {
 const release = await latestRelease()
 const RELEASES_PAGE = `${REPO_URL}/releases/latest`
 
-/** 成果物の名前の型（electron-builder*.json の artifactName と同じ）。 */
-const ASSET_PATTERNS = {
-  winSetup: /-win-x64-Setup\.exe$/,
-  winPortable: /-win-x64-portable\.exe$/,
-  macArmDmg: /-mac-arm64\.dmg$/,
-  macX64Dmg: /-mac-x64\.dmg$/,
-  macArmZip: /-mac-arm64\.zip$/,
-  macX64Zip: /-mac-x64\.zip$/,
-  linuxDeb: /-linux-x64\.deb$/,
-  linuxAppImage: /-linux-x64\.AppImage$/,
-  sums: /^SHA256SUMS\.txt$/,
-}
 function asset(kind) {
   const hit = release?.assets.find((a) => ASSET_PATTERNS[kind].test(a.name))
   return hit ? { url: hit.url, name: hit.name, size: hit.size } : { url: RELEASES_PAGE, name: null, size: 0 }
@@ -249,6 +236,7 @@ function page(locale) {
             ).join('\n            ')}
           </ul>
           <p class="note">${esc(s.releaseEol)}</p>
+          <p class="note">${esc(s.limitsNote)}</p>
         </div>
       </section>
 
@@ -261,7 +249,7 @@ function page(locale) {
             <li>${esc(s.howStep3)}</li>
           </ol>
           <p>${esc(s.howBody)}</p>
-          <p>${esc(a['about.noImages'])}</p>
+          <p>${esc(s.noImages)}</p>
         </div>
       </section>
 
@@ -288,21 +276,20 @@ function page(locale) {
             <div class="platform">
               <h3>Linux <span>x64 · ${esc(s.experimental)}</span></h3>
               ${dl('linuxDeb', `${s.installer} (.deb)`)}
-              ${dl('linuxAppImage', `${s.portable} (.AppImage)`)}
             </div>
           </div>
-          <p class="links"><a href="${esc(asset('sums').url)}">${esc(s.checksums)} (SHA256SUMS.txt)</a> · <a href="${esc(release?.url ?? `${REPO_URL}/releases`)}">${esc(s.allReleases)}</a></p>
+          <p class="links"><a href="${esc(asset('sums').url)}">${esc(s.checksums)} (SHA256SUMS.txt)</a> · <a href="${REPO_URL}/releases">${esc(s.allReleases)}</a></p>
           <div class="unsigned">
             <h3>${esc(s.unsignedTitle)}</h3>
             <p>${esc(s.unsignedWindows)}</p>
             <p>${esc(s.unsignedMac)}</p>
             <pre><code>xattr -dr com.apple.quarantine "/Applications/Seedstick.app"</code></pre>
           </div>
-          <p class="note">${esc(a['image.redistributionNotice'])}</p>
+          <p class="note">${esc(s.imageNotice)}</p>
         </div>
       </section>
 
-      <section aria-label="Translations">
+      <section aria-label="${esc(s.translationsLabel)}">
         <div class="wrap">
           <p class="note">${esc(s.translationNote)} <a href="${REPO_URL}/blob/main/CONTRIBUTING.md#translations">${esc(s.translationHelp)}</a></p>
         </div>
@@ -376,6 +363,4 @@ copyFileSync(join(ROOT, 'apps', 'desktop', 'build', 'icon.png'), join(OUT, 'icon
 for (const f of readdirSync(join(ROOT, 'docs-site', 'img'))) {
   copyFileSync(join(ROOT, 'docs-site', 'img', f), join(OUT, 'img', f))
 }
-// Pages の Jekyll を通さない（`_` で始まるファイルを落とされないように）
-writeFileSync(join(OUT, '.nojekyll'), '')
 console.log(`site-dist: ${LOCALES.length} languages`)

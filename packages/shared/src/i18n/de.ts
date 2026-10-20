@@ -978,7 +978,7 @@ export const de = {
   'validate.storageYamlSyntax': 'Syntaxfehler im Speicher-YAML: {detail}',
   'validate.zfsEncryptionUnverified': 'Die Verschlüsselung mit dem ZFS-Layout verhält sich je nach Version des Installationsprogramms unterschiedlich. Prüfen Sie es auf echter Hardware.',
   'validate.encryptionPassphraseTooShort': 'Die Passphrase für die Festplattenverschlüsselung ist zu kurz (mindestens 8 Zeichen).',
-  'validate.encryptionPassphrasePlainInYaml': 'Die Passphrase für die Festplattenverschlüsselung wird im Klartext in das autoinstall-YAML geschrieben. Behandeln Sie den USB-Stick entsprechend.',
+  'validate.encryptionPassphrasePlainInYaml': 'Die Passphrase für die Festplattenverschlüsselung wird im Klartext im autoinstall-YAML und in gespeicherten oder exportierten Profilen abgelegt. Behandeln Sie den USB-Stick und die Profildateien entsprechend.',
   'validate.encryptionRequiresLvm': 'Festplattenverschlüsselung funktioniert nur mit dem LVM-Layout; bei {mode} wird sie ignoriert.',
   'validate.wholeDiskRequiresLvm': 'Die ganze Festplatte zu verwenden funktioniert nur mit dem LVM-Layout; bei {mode} wird es ignoriert. Die Einstellung bleibt gespeichert, wird bei diesem Layout aber nicht angezeigt.',
   'validate.diskMatchEmpty': 'Eine Art der Festplattenauswahl wurde gewählt, aber leer gelassen, daher passt keine Festplatte.',
@@ -1295,7 +1295,7 @@ export const de = {
   'review.commentLanguage': 'YAML-Kommentare:',
   'review.commentLanguageUi': 'Wie die Anzeigesprache',
   'review.commentLanguageNone': 'Keine',
-  'image.redistributionNotice': 'Dieses Image ist die offizielle Ubuntu-ISO mit Ihren Einstellungen. Verwenden Sie es selbst oder innerhalb Ihrer Organisation, aber verbreiten oder veröffentlichen Sie es nicht: Die IP-Richtlinie von Canonical erlaubt nicht, veränderte Ubuntu-Images unter den Ubuntu-Marken weiterzugeben.',
+  'image.redistributionNotice': 'Dieses Image ist die offizielle Ubuntu-ISO mit Ihren Einstellungen. Verwenden Sie es selbst oder innerhalb Ihrer Organisation, aber verbreiten oder veröffentlichen Sie es nicht: Die Richtlinie von Canonical zu geistigem Eigentum (IP Rights Policy) erlaubt nicht, veränderte Ubuntu-Images unter den Ubuntu-Marken weiterzugeben.',
   'validate.passwordHashMalformed': 'Der Passwort-Hash ist fehlerhaft (Länge oder Zeichen passen nicht zum crypt(3)-Format). Unter Ubuntu 26.10 schlägt die Installation ganz am Ende fehl; in früheren Versionen funktioniert kein Passwort für die Anmeldung. Geben Sie das Passwort erneut ein.',
   'validate.additionalUserPasswordHashMalformed': 'Der Passwort-Hash für "{username}" ist fehlerhaft. Unter Ubuntu 26.10 schlägt die Installation ganz am Ende fehl; in früheren Versionen funktioniert kein Passwort für die Anmeldung.',
 } satisfies Record<MsgKey, string>

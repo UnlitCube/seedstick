@@ -1263,8 +1263,7 @@ export const ja = {
   'validate.storageYamlSyntax': 'ストレージ YAML の構文エラー: {detail}',
   'validate.zfsEncryptionUnverified': 'ZFS レイアウトでの暗号化はインストーラのバージョンによって挙動が異なります。実機で確認してください。',
   'validate.encryptionPassphraseTooShort': 'ディスク暗号化のパスフレーズが短すぎます（8 文字以上）。',
-  'validate.encryptionPassphrasePlainInYaml':
-    'ディスク暗号化のパスフレーズは autoinstall の YAML に平文で書かれます。USB の取り扱いに注意してください。',
+  'validate.encryptionPassphrasePlainInYaml': 'ディスク暗号化のパスフレーズは、autoinstall の YAML と、保存・書き出したプロファイルに平文で入ります。USB とプロファイルのファイルの扱いに注意してください。',
   'validate.encryptionRequiresLvm': 'ディスク暗号化は LVM レイアウトでのみ使えます（{mode} では無視されます）。',
   'validate.wholeDiskRequiresLvm': 'ディスク全体を使う指定は LVM レイアウトでのみ使えます（{mode} では無視されます）。設定は残っていますが、この構成方法では画面に出ません。',
   'validate.diskMatchEmpty': 'ディスクの指定方法を選んだので、その値も入れてください（空だと一致するディスクがありません）。',

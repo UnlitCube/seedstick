@@ -28,7 +28,7 @@ autoinstall-ui/
 │   └── worker/        昇格ワーカー本体と NDJSON プロトコル
 └── apps/desktop/      @autoinstall/desktop — electron-vite + React 19 + Tailwind 4 + zustand
     └── installer/    **配布用インストーラ（別の Electron アプリ）**
-        ├── shared/   protocol.ts（main ⇄ renderer の契約）/ labels.ts（ja・en の辞書）
+        ├── shared/   protocol.ts（main ⇄ renderer の契約）/ labels.ts（9 言語の辞書）
         ├── main/     展開・ショートカット・レジストリ・片付け（Windows 専用）
         ├── preload/  window.installer
         └── renderer/ ウィザードの UI（アプリ本体とは別の root・別の辞書）
@@ -1038,7 +1038,7 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
     ```
 
     `nsis.artifactName` と `portable.artifactName` に分ける。
-    mac (dmg/zip) と linux (AppImage/deb) は拡張子が違うので衝突しない
+    mac (dmg/zip) と linux (deb) は拡張子が違うので衝突しない
     ——**Windows だけの問題**なので、他を見て「大丈夫」と判断しない。
 
 132. **`electron-builder.json` に `//` のコメントキーを書けない。**
@@ -1279,6 +1279,38 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
     26.10 では**無いのが正しい**。リリースごとの事実として `md5ListsGrubCfg` に持ち、
     行が無いことを期待するリリースでは書き換えを求めない（落とし穴 4 の例外）。
 
+### OSS として公開する前の監査で出たもの（9 巡目）
+
+158. **`artifactName` の `${arch}` は拡張子で書き換わる。** electron-builder の
+    `getArtifactArchName` は x64 を AppImage / rpm で `x86_64`、deb / snap で `amd64` にする。
+    `-linux-${arch}` と書いた deb は `-linux-amd64.deb` になり、release.yml の
+    `test -f "...-linux-x64.deb"` が落ちて **Release が 1 つも出ないところだった**
+    （CI はまだ一度もこの経路を通っていなかった。監査で発覚）。
+    Linux は `x64` を直書きし、`artifact-names.test.ts` が electron-builder 自身の関数で
+    名前を計算して release.yml とサイトのボタン（`docs-site/assets.mjs`）に突き合わせる。
+    **AppImage は出さない。** 既定のツールセットは libappindicator / libindicator（**GPL-3.0**）/
+    libgconf / libnotify / libXss / libXtst を同梱し、新しいツールセットも `lib/<arch>` を写す。
+    その通知文とソースの扱いが済むまでは deb だけ（`docs/LEGAL.md`）。
+
+159. **Git Bash のヒアドキュメントは `\\` を `\` に潰す。** `python - <<'EOF'` で正規表現や
+    Windows のパスを書くと、`\b` が後退文字に、`C:\Users` が `\U` のエスケープになって壊れる
+    （この巡で 4 回踏んだ）。バックスラッシュを含むスクリプトは **Write でファイルに書いてから走らせる**。
+    `python -I` は `PYTHON*` 環境変数を無視するので、出力の文字コードはスクリプトの中で決める。
+
+160. **開発中のアプリとインストーラは Electron の userData を共有する。**
+    どちらも `apps/desktop` の package.json から起動するので同じ `%APPDATA%\Electron` になり、
+    片方が単一インスタンスのロックを持っていると**もう片方は黙って即終了する**
+    （`--remote-debugging-port` も開かない）。インストーラの画面を撮るときはアプリを閉じる。
+
+161. **`installer-resources/payload.7z` が残っていると、開発中のインストーラは本当に入れる。**
+    `installer-shots.mjs` は「payload が無いので失敗する」前提の道具だが、
+    `dist:installer` の後だと `%LOCALAPPDATA%\Programs\Seedstick` へ実際に展開し始める。
+    撮るときは payload を退避してから走らせ、終わったら戻す。
+
+162. **`innerText` は CSS の `text-transform` を反映する。** 見出しを `uppercase` で出していると
+    `"Destination folder"` は `"DESTINATION FOLDER"` として返り、`includes()` が英語系の言語でだけ落ちる
+    （ドイツ語は本文に同じ語があって偶然通っていた）。比べるときは両側を大文字に寄せる。
+
 ## 検証済みのこと
 
 - **Electron 製インストーラを、できあがった `Setup.exe` から通しで動かした**
@@ -1435,7 +1467,7 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
 | `npm test` | typecheck + unit + smoke |
 | `python scripts/make-icon.py` | **アイコンを生成**（`apps/desktop/build/icon.ico` と `icon.png`）。Pillow のみ。`dist:*` の前に 1 度走らせれば足りる |
 | `npm run e2e:uninstall-script` | **生成した `uninstall.ps1` を本物の PowerShell で走らせる**（砂場と専用レジストリキーだけを使う。数秒） |
-| `npm run dist:win` / `dist:mac` / `dist:linux` | electron-builder でパッケージ。**Windows は portable のみ**（インストーラは `dist:installer` が作る）。**macOS は dmg（インストーラ）と zip（ポータブル）を x64 / arm64 で**。`samples/` は `extraResources` で同梱される（落とし穴 131 / 134） |
+| `npm run dist:win` / `dist:mac` / `dist:linux` | electron-builder でパッケージ。**Windows は portable のみ**（インストーラは `dist:installer` が作る）。**macOS は dmg（インストーラ）と zip（ポータブル）を x64 / arm64 で**。**Linux は deb だけ**（AppImage は出さない。落とし穴 158）。`samples/` は `extraResources` で同梱される（落とし穴 131 / 134） |
 | `npm run dist:installer` | **Electron 製インストーラ**を 1 本の exe にまとめる（`Seedstick-<version>-win-x64-Setup.exe`）。アイコン生成 → 本体を `--dir` → LZMA2 で `payload.7z` → インストーラをビルド → portable で梱包、の 5 段。**5〜6 分**。Windows 専用 |
 
 `npm run smoke` は `~/images`・`~/Downloads`・`C:/iso`・`/var/lib/iso` から ISO を探す。

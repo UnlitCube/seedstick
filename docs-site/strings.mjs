@@ -25,20 +25,18 @@ export const SITE_STRINGS = {
     fChecksTitle: '危険な設定は書き込む前に止める',
     fChecksBody:
       'SSH に入れなくなる設定や、インストールの最後で失敗する設定を、USB に書く前にエラーとして知らせます。',
-    fAfterTitle: 'インストールのあとまで',
-    fAfterBody:
-      '追加ユーザー、ファイルの展開、systemd サービス、apt full-upgrade、NVIDIA ドライバと CUDA、RAID + LVM、NIC のボンディングまで設定できます。',
+    fAfterTitle: 'インストーラが聞かないことまで',
+    fAfterBody: 'インストール時の RAID + LVM（UEFI）と NIC のボンディング、インストール後の追加ユーザー・ファイルの展開・systemd サービス・apt full-upgrade・NVIDIA ドライバと CUDA。',
     shotReviewAlt: '確認の画面。生成された YAML に表示言語でコメントが付く',
     shotRuntimeAlt: 'ホスト名・IP・ディスクを起動メニューで選ぶ設定の画面',
     releasesTitle: '対応する Ubuntu',
-    releasesBody: 'live-server の ISO（amd64 / arm64）を使います。',
+    releasesBody: 'amd64 の live-server ISO で確認しています。arm64 の ISO も受け付けますが未検証です。',
     releaseEol: '25.10 は 2026 年 7 月にサポートが終了しました（画面で警告します）。',
     howTitle: '仕組み',
     howStep1: '公式 ISO を選ぶ',
     howStep2: 'GUI で設定する',
     howStep3: 'USB に書き込む',
-    howBody:
-      '公式 ISO をそのまま USB に書き、起動設定の数セクタだけをその場で書き換えて、設定ファイルを入れた小さなパーティションを足します。ISO を作り直さないので、書き込みは ISO のコピーとほぼ同じ時間で終わります。',
+    howBody: '公式 ISO を USB にそのまま写し、grub.cfg とそのファイルシステム上の記録など数セクタだけを USB の上で書き換え、設定ファイルを入れた小さなパーティションを足します。作り直さないので、書き込みは ISO のコピーとほぼ同じ時間で終わり、手元の ISO ファイルは変わりません。',
     downloadTitle: 'ダウンロード',
     installer: 'インストーラ',
     portable: 'ポータブル',
@@ -50,6 +48,10 @@ export const SITE_STRINGS = {
     translationNote:
       'この画面とアプリの 9 言語のうち 7 言語は、機械の助けを借りて英語から訳したもので、母語話者の確認はまだです。',
     translationHelp: '直しを送る',
+    imageNotice: 'Seedstick で作った USB や .img には、改変した Ubuntu のイメージが入っています。自分や組織の中で使うのは構いませんが、他の人へ配布しないでください。Canonical の知的財産権ポリシーは、改変したイメージを Ubuntu の商標のもとで再配布することを認めていません。',
+    noImages: 'Seedstick は Ubuntu を同梱していません。ubuntu.com からダウンロードした ISO を使います。',
+    translationsLabel: '翻訳',
+    limitsNote: '無人インストールは仮想マシンで確認したものです。物理サーバーでの通しと、macOS / Linux での USB の検出は、まだ確認していません。',
   },
   en: {
     metaDescription:
@@ -70,20 +72,18 @@ export const SITE_STRINGS = {
     fChecksTitle: 'Risky settings are stopped before writing',
     fChecksBody:
       'Settings that would lock you out of SSH, or make the install fail at the very end, are reported as errors before anything is written to the drive.',
-    fAfterTitle: 'After the install, too',
-    fAfterBody:
-      'Extra users, files and archives, systemd services, apt full-upgrade, NVIDIA driver and CUDA, RAID + LVM and NIC bonding.',
+    fAfterTitle: 'More than the installer asks',
+    fAfterBody: 'RAID + LVM (UEFI) and NIC bonding at install time; extra users, files and archives, systemd services, apt full-upgrade, NVIDIA driver and CUDA after it.',
     shotReviewAlt: 'The review step: the generated YAML, with comments in the display language',
-    shotRuntimeAlt: 'Choosing hostname, IP address and disk from the boot menu',
+    shotRuntimeAlt: 'Setting up the hostname, IP address and disk to be chosen from the boot menu',
     releasesTitle: 'Supported Ubuntu releases',
-    releasesBody: 'Use the live-server ISO, for amd64 or arm64.',
+    releasesBody: 'Tested with live-server ISOs for amd64. arm64 ISOs are accepted but untested.',
     releaseEol: '25.10 reached end of life in July 2026; the app warns about it.',
     howTitle: 'How it works',
     howStep1: 'Pick the official ISO',
     howStep2: 'Configure in the GUI',
     howStep3: 'Write the USB drive',
-    howBody:
-      'The official ISO is written to the drive as is, a few boot-configuration sectors are patched in place, and a small partition with the configuration is appended. Nothing is rebuilt, so writing takes about as long as copying the ISO.',
+    howBody: 'The official ISO is copied to the drive, a few sectors (grub.cfg and its file-system entries) are patched in place on the drive, and a small partition with the configuration is appended. Nothing is rebuilt, so writing takes about as long as copying the ISO, and your ISO file is never modified.',
     downloadTitle: 'Download',
     installer: 'Installer',
     portable: 'Portable',
@@ -95,6 +95,10 @@ export const SITE_STRINGS = {
     translationNote:
       'Seven of the nine languages of this page and the app were translated from English with machine assistance and have not been reviewed by native speakers yet.',
     translationHelp: 'Send a correction',
+    imageNotice: 'A USB drive or .img made with Seedstick contains a modified Ubuntu image. Use it yourself or inside your organisation, but do not redistribute it: Canonical’s IP rights policy does not allow redistributing modified images under the Ubuntu trademarks.',
+    noImages: 'Seedstick does not bundle Ubuntu. It uses the ISO you download from ubuntu.com.',
+    translationsLabel: 'Translations',
+    limitsNote: 'Unattended installs have been verified in virtual machines. A full install on physical servers, and USB drive detection on macOS and Linux, have not been verified yet.',
   },
   'zh-Hans': {
     metaDescription:
@@ -114,20 +118,18 @@ export const SITE_STRINGS = {
       '主机名、IP 地址和目标磁盘可以从启动菜单中选择，也可以在安装程序中输入。列出 web01、web02 等条目后，插上 U 盘选择即可。',
     fChecksTitle: '写入前拦下危险的设置',
     fChecksBody: '会让你无法通过 SSH 登录、或会让安装在最后阶段失败的设置，会在写入 U 盘之前作为错误提示出来。',
-    fAfterTitle: '连安装后也一并处理',
-    fAfterBody:
-      '追加用户、文件和压缩包的部署、systemd 服务、apt full-upgrade、NVIDIA 驱动和 CUDA、RAID + LVM 以及网卡绑定。',
+    fAfterTitle: '超出安装程序询问的范围',
+    fAfterBody: '安装时的 RAID + LVM（UEFI）和网卡绑定；安装后的追加用户、文件和压缩包部署、systemd 服务、apt full-upgrade、NVIDIA 驱动和 CUDA。',
     shotReviewAlt: '确认画面：生成的 YAML 带有显示语言的注释',
     shotRuntimeAlt: '从启动菜单选择主机名、IP 地址和磁盘的设置画面',
     releasesTitle: '支持的 Ubuntu 版本',
-    releasesBody: '使用 live-server ISO（amd64 或 arm64）。',
+    releasesBody: '已使用 amd64 的 live-server ISO 测试。也接受 arm64 的 ISO，但尚未测试。',
     releaseEol: '25.10 已于 2026 年 7 月停止支持，应用会给出警告。',
     howTitle: '工作原理',
     howStep1: '选择官方 ISO',
     howStep2: '在 GUI 中设置',
     howStep3: '写入 U 盘',
-    howBody:
-      '官方 ISO 会原样写入 U 盘，只就地修改几个启动配置扇区，并追加一个存放配置的小分区。由于不重建任何东西，写入时间与复制 ISO 差不多。',
+    howBody: '官方 ISO 会原样复制到 U 盘，只在 U 盘上就地修改几个扇区（grub.cfg 及其文件系统记录），并追加一个存放配置的小分区。由于不重建任何东西，写入时间与复制 ISO 差不多，你的 ISO 文件也不会被修改。',
     downloadTitle: '下载',
     installer: '安装程序',
     portable: '便携版',
@@ -138,6 +140,10 @@ export const SITE_STRINGS = {
     unsignedMac: 'macOS：把应用复制到“应用程序”后，请移除隔离属性：',
     translationNote: '本页面和应用的 9 种语言中，有 7 种是借助机器从英语翻译的，尚未经过母语人士审校。',
     translationHelp: '提交修改',
+    imageNotice: '用 Seedstick 制作的 U 盘或 .img 中包含修改过的 Ubuntu 映像。可以自己或在组织内部使用，但请不要再分发：根据 Canonical 的知识产权政策，不允许以 Ubuntu 商标再分发修改过的映像。',
+    noImages: 'Seedstick 不附带 Ubuntu，它使用你从 ubuntu.com 下载的 ISO。',
+    translationsLabel: '翻译',
+    limitsNote: '无人值守安装已在虚拟机中验证。在物理服务器上的完整安装，以及 macOS / Linux 上的 U 盘检测，尚未验证。',
   },
   'zh-Hant': {
     metaDescription:
@@ -157,20 +163,18 @@ export const SITE_STRINGS = {
       '主機名稱、IP 位址和目標磁碟可以從開機選單中選擇，也可以在安裝程式中輸入。列出 web01、web02 等項目後，插上隨身碟選擇即可。',
     fChecksTitle: '寫入前攔下危險的設定',
     fChecksBody: '會讓你無法透過 SSH 登入、或會讓安裝在最後階段失敗的設定，會在寫入隨身碟之前以錯誤提示出來。',
-    fAfterTitle: '連安裝後也一併處理',
-    fAfterBody:
-      '額外使用者、檔案和壓縮檔的部署、systemd 服務、apt full-upgrade、NVIDIA 驅動程式和 CUDA、RAID + LVM 以及網路卡綁定。',
+    fAfterTitle: '超出安裝程式詢問的範圍',
+    fAfterBody: '安裝時的 RAID + LVM（UEFI）和網路卡綁定；安裝後的額外使用者、檔案和壓縮檔部署、systemd 服務、apt full-upgrade、NVIDIA 驅動程式和 CUDA。',
     shotReviewAlt: '確認畫面：產生的 YAML 帶有顯示語言的註解',
     shotRuntimeAlt: '從開機選單選擇主機名稱、IP 位址和磁碟的設定畫面',
     releasesTitle: '支援的 Ubuntu 版本',
-    releasesBody: '使用 live-server ISO（amd64 或 arm64）。',
+    releasesBody: '已使用 amd64 的 live-server ISO 測試。也接受 arm64 的 ISO，但尚未測試。',
     releaseEol: '25.10 已於 2026 年 7 月終止支援，應用程式會發出警告。',
     howTitle: '運作方式',
     howStep1: '選擇官方 ISO',
     howStep2: '在 GUI 中設定',
     howStep3: '寫入 USB 隨身碟',
-    howBody:
-      '官方 ISO 會原樣寫入隨身碟，只就地修改幾個開機設定磁區，並附加一個存放設定的小分割區。由於不重新建置任何東西，寫入時間與複製 ISO 差不多。',
+    howBody: '官方 ISO 會原樣複製到隨身碟，只在隨身碟上就地修改幾個磁區（grub.cfg 及其檔案系統記錄），並附加一個存放設定的小分割區。由於不重新建置任何東西，寫入時間與複製 ISO 差不多，你的 ISO 檔案也不會被修改。',
     downloadTitle: '下載',
     installer: '安裝程式',
     portable: '可攜版',
@@ -181,6 +185,10 @@ export const SITE_STRINGS = {
     unsignedMac: 'macOS：把應用程式複製到「應用程式」後，請移除隔離屬性：',
     translationNote: '本頁面和應用程式的 9 種語言中，有 7 種是藉助機器從英文翻譯的，尚未經過母語人士審校。',
     translationHelp: '提交修正',
+    imageNotice: '用 Seedstick 製作的隨身碟或 .img 中包含修改過的 Ubuntu 映像檔。可以自己或在組織內部使用，但請不要再散布：依據 Canonical 的智慧財產權政策，不允許以 Ubuntu 商標再散布修改過的映像檔。',
+    noImages: 'Seedstick 不附帶 Ubuntu，它使用你從 ubuntu.com 下載的 ISO。',
+    translationsLabel: '翻譯',
+    limitsNote: '無人值守安裝已在虛擬機器中驗證。在實體伺服器上的完整安裝，以及 macOS / Linux 上的隨身碟偵測，尚未驗證。',
   },
   ko: {
     metaDescription:
@@ -201,20 +209,18 @@ export const SITE_STRINGS = {
     fChecksTitle: '위험한 설정은 쓰기 전에 막음',
     fChecksBody:
       'SSH로 들어갈 수 없게 되는 설정이나 설치가 맨 마지막에 실패하는 설정을 USB에 쓰기 전에 오류로 알려 줍니다.',
-    fAfterTitle: '설치 후까지',
-    fAfterBody:
-      '추가 사용자, 파일과 압축 파일 배포, systemd 서비스, apt full-upgrade, NVIDIA 드라이버와 CUDA, RAID + LVM, NIC 본딩까지 설정할 수 있습니다.',
+    fAfterTitle: '설치 프로그램이 묻지 않는 것까지',
+    fAfterBody: '설치할 때의 RAID + LVM(UEFI)과 NIC 본딩, 설치 후의 추가 사용자, 파일과 압축 파일 배포, systemd 서비스, apt full-upgrade, NVIDIA 드라이버와 CUDA.',
     shotReviewAlt: '확인 화면: 생성된 YAML에 표시 언어로 주석이 붙습니다',
     shotRuntimeAlt: '호스트 이름, IP 주소, 디스크를 부팅 메뉴에서 고르는 설정 화면',
     releasesTitle: '지원하는 Ubuntu 릴리스',
-    releasesBody: 'live-server ISO(amd64 또는 arm64)를 사용합니다.',
+    releasesBody: 'amd64 live-server ISO로 확인했습니다. arm64 ISO도 받아들이지만 아직 검증하지 않았습니다.',
     releaseEol: '25.10은 2026년 7월에 지원이 끝났습니다. 앱이 경고합니다.',
     howTitle: '동작 방식',
     howStep1: '공식 ISO 선택',
     howStep2: 'GUI에서 설정',
     howStep3: 'USB에 쓰기',
-    howBody:
-      '공식 ISO를 그대로 USB에 쓰고, 부팅 설정이 있는 몇 개의 섹터만 제자리에서 수정한 뒤 설정 파일을 담은 작은 파티션을 덧붙입니다. 아무것도 다시 만들지 않으므로 쓰기는 ISO를 복사하는 시간과 거의 같습니다.',
+    howBody: '공식 ISO를 USB에 그대로 복사하고, USB 위에서 몇 개의 섹터(grub.cfg와 그 파일 시스템 기록)만 제자리에서 수정한 뒤 설정 파일을 담은 작은 파티션을 덧붙입니다. 아무것도 다시 만들지 않으므로 쓰기는 ISO를 복사하는 시간과 거의 같고, 가지고 있는 ISO 파일은 바뀌지 않습니다.',
     downloadTitle: '다운로드',
     installer: '설치 프로그램',
     portable: '포터블',
@@ -226,6 +232,10 @@ export const SITE_STRINGS = {
     translationNote:
       '이 페이지와 앱의 9개 언어 중 7개는 기계의 도움을 받아 영어에서 번역했으며, 아직 원어민의 검토를 받지 않았습니다.',
     translationHelp: '수정 보내기',
+    imageNotice: 'Seedstick으로 만든 USB나 .img에는 수정된 Ubuntu 이미지가 들어 있습니다. 본인이나 조직 내부에서 사용하는 것은 괜찮지만 재배포하지 마세요. Canonical의 지식재산권 정책은 수정된 이미지를 Ubuntu 상표로 재배포하는 것을 허용하지 않습니다.',
+    noImages: 'Seedstick은 Ubuntu를 포함하지 않습니다. ubuntu.com에서 내려받은 ISO를 사용합니다.',
+    translationsLabel: '번역',
+    limitsNote: '무인 설치는 가상 머신에서 확인했습니다. 물리 서버에서의 전체 설치와 macOS / Linux에서의 USB 감지는 아직 확인하지 않았습니다.',
   },
   es: {
     metaDescription:
@@ -246,20 +256,18 @@ export const SITE_STRINGS = {
     fChecksTitle: 'Los ajustes peligrosos se detienen antes de escribir',
     fChecksBody:
       'Los ajustes que te dejarían sin acceso por SSH, o que harían fallar la instalación al final, se muestran como errores antes de escribir nada en la unidad.',
-    fAfterTitle: 'También después de instalar',
-    fAfterBody:
-      'Usuarios adicionales, archivos y archivos comprimidos, servicios de systemd, apt full-upgrade, controlador NVIDIA y CUDA, RAID + LVM y agregación de tarjetas de red.',
+    fAfterTitle: 'Más allá de lo que pregunta el instalador',
+    fAfterBody: 'RAID + LVM (UEFI) y agregación de tarjetas de red durante la instalación; usuarios adicionales, archivos y archivos comprimidos, servicios de systemd, apt full-upgrade, controlador NVIDIA y CUDA después.',
     shotReviewAlt: 'El paso de revisión: el YAML generado, con comentarios en el idioma de la interfaz',
-    shotRuntimeAlt: 'Elegir el nombre de equipo, la dirección IP y el disco en el menú de arranque',
+    shotRuntimeAlt: 'Configurar el nombre de equipo, la dirección IP y el disco para elegirlos en el menú de arranque',
     releasesTitle: 'Versiones de Ubuntu compatibles',
-    releasesBody: 'Usa la ISO live-server, para amd64 o arm64.',
+    releasesBody: 'Probado con ISO live-server para amd64. Las ISO arm64 se aceptan, pero no se han probado.',
     releaseEol: '25.10 dejó de tener soporte en julio de 2026; la aplicación avisa de ello.',
     howTitle: 'Cómo funciona',
     howStep1: 'Elige la ISO oficial',
     howStep2: 'Configura en la interfaz',
     howStep3: 'Escribe la unidad USB',
-    howBody:
-      'La ISO oficial se escribe tal cual en la unidad, se modifican en su sitio unos pocos sectores de la configuración de arranque y se añade una pequeña partición con la configuración. No se reconstruye nada, así que escribir tarda más o menos lo que copiar la ISO.',
+    howBody: 'La ISO oficial se copia a la unidad, se modifican en su sitio unos pocos sectores de la unidad (grub.cfg y sus entradas en el sistema de archivos) y se añade una pequeña partición con la configuración. No se reconstruye nada, así que escribir tarda más o menos lo que copiar la ISO, y tu archivo ISO no se modifica.',
     downloadTitle: 'Descargar',
     installer: 'Instalador',
     portable: 'Portable',
@@ -272,6 +280,10 @@ export const SITE_STRINGS = {
     translationNote:
       'Siete de los nueve idiomas de esta página y de la aplicación se tradujeron del inglés con ayuda automática y aún no los han revisado hablantes nativos.',
     translationHelp: 'Enviar una corrección',
+    imageNotice: 'Una unidad USB o un .img creados con Seedstick contienen una imagen de Ubuntu modificada. Úsala tú mismo o dentro de tu organización, pero no la redistribuyas: la política de propiedad intelectual de Canonical no permite redistribuir imágenes modificadas con las marcas de Ubuntu.',
+    noImages: 'Seedstick no incluye Ubuntu. Usa la ISO que descargas de ubuntu.com.',
+    translationsLabel: 'Traducciones',
+    limitsNote: 'Las instalaciones desatendidas se han verificado en máquinas virtuales. Aún no se ha verificado una instalación completa en servidores físicos, ni la detección de unidades USB en macOS y Linux.',
   },
   fr: {
     metaDescription:
@@ -292,20 +304,18 @@ export const SITE_STRINGS = {
     fChecksTitle: 'Les réglages risqués sont arrêtés avant l’écriture',
     fChecksBody:
       'Les réglages qui vous empêcheraient de vous connecter en SSH, ou qui feraient échouer l’installation tout à la fin, sont signalés comme erreurs avant toute écriture sur la clé.',
-    fAfterTitle: 'Et après l’installation',
-    fAfterBody:
-      'Utilisateurs supplémentaires, fichiers et archives, services systemd, apt full-upgrade, pilote NVIDIA et CUDA, RAID + LVM et agrégation de cartes réseau.',
+    fAfterTitle: 'Au-delà des questions de l’installateur',
+    fAfterBody: 'RAID + LVM (UEFI) et agrégation de cartes réseau pendant l’installation ; utilisateurs supplémentaires, fichiers et archives, services systemd, apt full-upgrade, pilote NVIDIA et CUDA ensuite.',
     shotReviewAlt: 'L’étape de vérification : le YAML généré, commenté dans la langue d’affichage',
-    shotRuntimeAlt: 'Choisir le nom d’hôte, l’adresse IP et le disque dans le menu de démarrage',
+    shotRuntimeAlt: 'Configurer le nom d’hôte, l’adresse IP et le disque à choisir dans le menu de démarrage',
     releasesTitle: 'Versions d’Ubuntu prises en charge',
-    releasesBody: 'Utilisez l’ISO live-server, pour amd64 ou arm64.',
+    releasesBody: 'Testé avec les ISO live-server pour amd64. Les ISO arm64 sont acceptées mais n’ont pas été testées.',
     releaseEol: 'La 25.10 n’est plus prise en charge depuis juillet 2026 ; l’application le signale.',
     howTitle: 'Fonctionnement',
     howStep1: 'Choisir l’ISO officielle',
     howStep2: 'Configurer dans l’interface',
     howStep3: 'Écrire la clé USB',
-    howBody:
-      'L’ISO officielle est écrite telle quelle sur la clé, quelques secteurs de la configuration de démarrage sont modifiés sur place et une petite partition contenant la configuration est ajoutée. Rien n’est reconstruit : l’écriture prend à peu près le temps d’une copie de l’ISO.',
+    howBody: 'L’ISO officielle est copiée sur la clé, quelques secteurs (grub.cfg et ses entrées dans le système de fichiers) sont modifiés sur place sur la clé, et une petite partition contenant la configuration est ajoutée. Rien n’est reconstruit : l’écriture prend à peu près le temps d’une copie de l’ISO, et votre fichier ISO n’est jamais modifié.',
     downloadTitle: 'Télécharger',
     installer: 'Installateur',
     portable: 'Portable',
@@ -318,6 +328,10 @@ export const SITE_STRINGS = {
     translationNote:
       'Sept des neuf langues de cette page et de l’application ont été traduites depuis l’anglais avec une aide automatique et n’ont pas encore été relues par des locuteurs natifs.',
     translationHelp: 'Proposer une correction',
+    imageNotice: 'Une clé USB ou un .img créés avec Seedstick contiennent une image Ubuntu modifiée. Utilisez-la vous-même ou au sein de votre organisation, mais ne la redistribuez pas : la politique de propriété intellectuelle de Canonical n’autorise pas la redistribution d’images modifiées sous les marques Ubuntu.',
+    noImages: 'Seedstick n’inclut pas Ubuntu. Il utilise l’ISO que vous téléchargez sur ubuntu.com.',
+    translationsLabel: 'Traductions',
+    limitsNote: 'Les installations automatiques ont été vérifiées sur des machines virtuelles. Une installation complète sur des serveurs physiques, ainsi que la détection des clés USB sous macOS et Linux, n’ont pas encore été vérifiées.',
   },
   de: {
     metaDescription:
@@ -338,20 +352,18 @@ export const SITE_STRINGS = {
     fChecksTitle: 'Riskante Einstellungen werden vor dem Schreiben gestoppt',
     fChecksBody:
       'Einstellungen, die Sie von SSH aussperren oder die Installation ganz am Ende scheitern lassen würden, werden als Fehler gemeldet, bevor etwas auf den Stick geschrieben wird.',
-    fAfterTitle: 'Auch nach der Installation',
-    fAfterBody:
-      'Weitere Benutzer, Dateien und Archive, systemd-Dienste, apt full-upgrade, NVIDIA-Treiber und CUDA, RAID + LVM sowie gebündelte Netzwerkkarten.',
+    fAfterTitle: 'Mehr, als das Installationsprogramm fragt',
+    fAfterBody: 'RAID + LVM (UEFI) und gebündelte Netzwerkkarten bei der Installation; weitere Benutzer, Dateien und Archive, systemd-Dienste, apt full-upgrade, NVIDIA-Treiber und CUDA danach.',
     shotReviewAlt: 'Der Überprüfungsschritt: das erzeugte YAML, kommentiert in der Anzeigesprache',
-    shotRuntimeAlt: 'Hostname, IP-Adresse und Festplatte im Startmenü auswählen',
+    shotRuntimeAlt: 'Hostname, IP-Adresse und Festplatte für die Auswahl im Startmenü einrichten',
     releasesTitle: 'Unterstützte Ubuntu-Versionen',
-    releasesBody: 'Verwenden Sie die live-server-ISO für amd64 oder arm64.',
+    releasesBody: 'Getestet mit live-server-ISOs für amd64. arm64-ISOs werden angenommen, sind aber ungetestet.',
     releaseEol: 'Die Unterstützung für 25.10 endete im Juli 2026; die App weist darauf hin.',
     howTitle: 'So funktioniert es',
     howStep1: 'Offizielle ISO wählen',
     howStep2: 'In der Oberfläche einrichten',
     howStep3: 'USB-Stick schreiben',
-    howBody:
-      'Die offizielle ISO wird unverändert auf den Stick geschrieben, einige Sektoren der Startkonfiguration werden direkt angepasst, und eine kleine Partition mit der Konfiguration wird angehängt. Nichts wird neu gebaut, daher dauert das Schreiben etwa so lange wie das Kopieren der ISO.',
+    howBody: 'Die offizielle ISO wird auf den Stick kopiert, einige Sektoren (grub.cfg und ihre Dateisystemeinträge) werden direkt auf dem Stick angepasst, und eine kleine Partition mit der Konfiguration wird angehängt. Nichts wird neu gebaut, daher dauert das Schreiben etwa so lange wie das Kopieren der ISO, und Ihre ISO-Datei bleibt unverändert.',
     downloadTitle: 'Download',
     installer: 'Installationsprogramm',
     portable: 'Portabel',
@@ -364,6 +376,10 @@ export const SITE_STRINGS = {
     translationNote:
       'Sieben der neun Sprachen dieser Seite und der App wurden maschinengestützt aus dem Englischen übersetzt und noch nicht von Muttersprachlern geprüft.',
     translationHelp: 'Korrektur einsenden',
+    imageNotice: 'Ein mit Seedstick erstellter USB-Stick oder eine .img-Datei enthält ein verändertes Ubuntu-Image. Verwenden Sie es selbst oder innerhalb Ihrer Organisation, aber geben Sie es nicht weiter: Die Richtlinie von Canonical zu geistigem Eigentum (IP Rights Policy) erlaubt nicht, veränderte Images unter den Ubuntu-Marken weiterzugeben.',
+    noImages: 'Seedstick enthält kein Ubuntu. Es verwendet die ISO, die Sie von ubuntu.com herunterladen.',
+    translationsLabel: 'Übersetzungen',
+    limitsNote: 'Unbeaufsichtigte Installationen wurden in virtuellen Maschinen geprüft. Eine vollständige Installation auf physischen Servern sowie die Erkennung von USB-Sticks unter macOS und Linux sind noch nicht geprüft.',
   },
   'pt-BR': {
     metaDescription:
@@ -384,20 +400,18 @@ export const SITE_STRINGS = {
     fChecksTitle: 'Configurações arriscadas são barradas antes da gravação',
     fChecksBody:
       'Configurações que deixariam você sem acesso por SSH, ou que fariam a instalação falhar bem no final, aparecem como erros antes de qualquer gravação no pendrive.',
-    fAfterTitle: 'Também depois da instalação',
-    fAfterBody:
-      'Usuários extras, arquivos e pacotes compactados, serviços do systemd, apt full-upgrade, driver NVIDIA e CUDA, RAID + LVM e agregação de placas de rede.',
+    fAfterTitle: 'Além do que o instalador pergunta',
+    fAfterBody: 'RAID + LVM (UEFI) e agregação de placas de rede na instalação; usuários extras, arquivos e pacotes compactados, serviços do systemd, apt full-upgrade, driver NVIDIA e CUDA depois.',
     shotReviewAlt: 'A etapa de revisão: o YAML gerado, com comentários no idioma da interface',
-    shotRuntimeAlt: 'Escolhendo nome de host, endereço IP e disco no menu de inicialização',
+    shotRuntimeAlt: 'Configurando nome de host, endereço IP e disco para escolher no menu de inicialização',
     releasesTitle: 'Versões do Ubuntu suportadas',
-    releasesBody: 'Use a ISO live-server, para amd64 ou arm64.',
+    releasesBody: 'Testado com ISOs live-server para amd64. ISOs arm64 são aceitas, mas não foram testadas.',
     releaseEol: 'O 25.10 deixou de ter suporte em julho de 2026; o aplicativo avisa sobre isso.',
     howTitle: 'Como funciona',
     howStep1: 'Escolha a ISO oficial',
     howStep2: 'Configure na interface',
     howStep3: 'Grave o pendrive',
-    howBody:
-      'A ISO oficial é gravada no pendrive como está, alguns setores da configuração de inicialização são alterados no lugar e uma pequena partição com a configuração é acrescentada. Nada é reconstruído, então a gravação leva mais ou menos o tempo de copiar a ISO.',
+    howBody: 'A ISO oficial é copiada para o pendrive, alguns setores (o grub.cfg e seus registros no sistema de arquivos) são alterados no lugar, no próprio pendrive, e uma pequena partição com a configuração é acrescentada. Nada é reconstruído, então a gravação leva mais ou menos o tempo de copiar a ISO, e o seu arquivo ISO não é modificado.',
     downloadTitle: 'Baixar',
     installer: 'Instalador',
     portable: 'Portátil',
@@ -410,5 +424,9 @@ export const SITE_STRINGS = {
     translationNote:
       'Sete dos nove idiomas desta página e do aplicativo foram traduzidos do inglês com ajuda automática e ainda não foram revisados por falantes nativos.',
     translationHelp: 'Enviar uma correção',
+    imageNotice: 'Um pendrive ou .img criado com o Seedstick contém uma imagem do Ubuntu modificada. Use-a você mesmo ou dentro da sua organização, mas não a redistribua: a política de propriedade intelectual da Canonical não permite redistribuir imagens modificadas com as marcas Ubuntu.',
+    noImages: 'O Seedstick não inclui o Ubuntu. Ele usa a ISO que você baixa em ubuntu.com.',
+    translationsLabel: 'Traduções',
+    limitsNote: 'As instalações desassistidas foram verificadas em máquinas virtuais. Uma instalação completa em servidores físicos e a detecção de pendrives no macOS e no Linux ainda não foram verificadas.',
   },
 }

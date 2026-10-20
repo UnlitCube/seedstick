@@ -24,7 +24,19 @@ const APP = join(ROOT, 'apps', 'desktop')
 const OUT = join(APP, 'build', 'THIRD_PARTY_NOTICES.txt')
 const LICENSES = join(APP, 'build', 'licenses')
 
-const FORBIDDEN = /\b(A?GPL|LGPL|SSPL|UNKNOWN|UNLICENSED)\b/i
+/**
+ * 本番依存に**許す**ライセンス（許可リスト）。ここに無いものは止める。
+ * 禁止リストにしていたときは MPL / EPL / CDDL / CC-BY-SA や `SEE LICENSE IN …` が素通りしていた。
+ * SPDX の式は `A OR B` なら 1 つでも許せばよく、`A AND B` なら全部が要る。
+ */
+const PERMISSIVE = new Set(['MIT', 'ISC', 'BSD-2-Clause', 'BSD-3-Clause', 'Apache-2.0', '0BSD', 'CC0-1.0', 'BlueOak-1.0.0'])
+
+function isPermissive(expr) {
+  const e = String(expr).trim().replace(/^\((.*)\)$/, '$1')
+  if (/\sOR\s/.test(e)) return e.split(/\s+OR\s+/).some(isPermissive)
+  if (/\sAND\s/.test(e)) return e.split(/\s+AND\s+/).every(isPermissive)
+  return PERMISSIVE.has(e)
+}
 
 /**
  * devDependency だが、**コードが配布物（renderer の束・CSS）に入る**もの。
@@ -159,10 +171,17 @@ function render(packages) {
   out.push('    Source: https://nsis.sourceforge.io/Nsis7z_plug-in')
   out.push('  - StdUtils plug-in - Copyright (C) 2004-2019 LoRd_MuldeR - GNU LGPL 2.1 or later,')
   out.push('    with the clarification below. Source: https://github.com/lordmulder/stdutils')
-  out.push('  - elevate.exe (portable executable only) - MIT License (text below)')
+  out.push('  - elevate.exe (in both the portable executable and the Setup.exe) - MIT License (text below)')
   out.push('    Source: https://github.com/jpassing/elevate')
   out.push('')
   out.push('The LGPL 2.1 text is reproduced in section 5.')
+  out.push('')
+  out.push('Source code for the LGPL plug-ins: the plug-ins are the unmodified builds shipped in')
+  out.push('electron-builder nsis-resources 3.4.1. Their source code is available at the URLs above.')
+  out.push('In addition, for at least three years after each Seedstick release, we will provide the')
+  out.push('complete corresponding source code of the nsis7z and StdUtils plug-ins used in that release')
+  out.push('on request, for no more than the cost of providing it: open an issue at')
+  out.push('https://github.com/UnlitCube/seedstick/issues or email unlit.cube@gmail.com.')
   out.push('')
   out.push(SUB)
   out.push('NSIS COPYING')
@@ -204,9 +223,9 @@ function render(packages) {
 }
 
 const packages = collect()
-const bad = packages.filter((p) => FORBIDDEN.test(p.license))
+const bad = packages.filter((p) => !isPermissive(p.license))
 if (bad.length > 0) {
-  console.error('本番依存にコピーレフト／不明なライセンスがある（配布物の扱いを決めてから足すこと）:')
+  console.error('本番依存に、許可リストに無いライセンスがある（配布物の扱いを決めてから PERMISSIVE に足すこと）:')
   for (const p of bad) console.error(`  ${p.name}@${p.version}: ${p.license}`)
   process.exit(1)
 }

@@ -978,7 +978,7 @@ export const zhHans = {
   'validate.storageYamlSyntax': '存储 YAML 语法错误：{detail}',
   'validate.zfsEncryptionUnverified': 'ZFS 布局下的加密在不同版本的安装程序中行为不同。请在实机上确认。',
   'validate.encryptionPassphraseTooShort': '磁盘加密口令太短（至少 8 个字符）。',
-  'validate.encryptionPassphrasePlainInYaml': '磁盘加密口令会以明文写入 autoinstall YAML。请妥善保管 U 盘。',
+  'validate.encryptionPassphrasePlainInYaml': '磁盘加密口令会以明文保存在 autoinstall YAML 以及保存或导出的配置文件中。请妥善保管 U 盘和配置文件。',
   'validate.encryptionRequiresLvm': '磁盘加密只适用于 LVM 布局；在 {mode} 下会被忽略。',
   'validate.wholeDiskRequiresLvm': '使用整块磁盘只适用于 LVM 布局；在 {mode} 下会被忽略。该设置仍会保存，但在此布局下不显示。',
   'validate.diskMatchEmpty': '已选择磁盘匹配方式但未填写，因此不会匹配任何磁盘。',
