@@ -7,7 +7,7 @@
 // **文言は 1 つも直書きしない**（`shared/labels.ts` を引く）。
 // これは `labels.test.ts` が機械で数える。
 
-import { Component, useCallback, useEffect, useState, type ReactNode } from 'react'
+import { Component, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import type {
   InstallProgress,
   InstallResult,
@@ -32,9 +32,13 @@ export function App(): React.JSX.Element {
   // main が OS の言語を返すまでは、ブラウザ側の並びで仮に選ぶ（同じ規則）。
   const [locale, setLocale] = useState<Locale>(() => negotiateLocale([...navigator.languages]))
   const [info, setInfo] = useState<InstallerInfo | null>(null)
+  // 利用者が選んだら、あとから届いた main の答えで上書きしない
+  const picked = useRef(false)
 
   useEffect(() => {
-    void window.installer.locale().then(setLocale)
+    void window.installer.locale().then((l) => {
+      if (!picked.current) setLocale(l)
+    })
     void window.installer.info().then(setInfo)
   }, [])
 
@@ -42,10 +46,15 @@ export function App(): React.JSX.Element {
     document.documentElement.lang = INSTALLER_LOCALES[locale].htmlLang
   }, [locale])
 
+  const pickLocale = useCallback((l: Locale) => {
+    picked.current = true
+    setLocale(l)
+  }, [])
+
   return (
     <LocaleContext.Provider value={locale}>
       <Ambient />
-      {info === null ? <Booting /> : <Shell info={info} />}
+      {info === null ? <Booting /> : <Shell info={info} onLocaleChange={pickLocale} />}
     </LocaleContext.Provider>
   )
 }
@@ -76,7 +85,13 @@ function Booting(): React.JSX.Element {
   )
 }
 
-function Shell({ info }: { readonly info: InstallerInfo }): React.JSX.Element {
+function Shell({
+  info,
+  onLocaleChange,
+}: {
+  readonly info: InstallerInfo
+  readonly onLocaleChange: (locale: Locale) => void
+}): React.JSX.Element {
   const t = useT()
   // `--uninstall` で起動されたか、ようこそ画面で「アンインストール」を選んだか。
   const [uninstalling, setUninstalling] = useState(info.uninstallMode)
@@ -85,6 +100,7 @@ function Shell({ info }: { readonly info: InstallerInfo }): React.JSX.Element {
       <TitleBar
         title={info.productName}
         subtitle={uninstalling ? t('app.uninstall') : t('app.setup')}
+        onLocaleChange={onLocaleChange}
         onClose={() => void window.installer.close()}
         onMinimize={() => void window.installer.minimize()}
       />

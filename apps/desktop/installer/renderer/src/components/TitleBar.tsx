@@ -1,20 +1,23 @@
 // 枠なしウィンドウの上端。帯全体がドラッグ領域で、右のボタンだけ除く。
 //
-// 出すのは最小化と閉じるだけ。ウィザードは大きさを変えられない
+// 出すのは言語の選択と最小化と閉じるだけ。ウィザードは大きさを変えられない
 // （段ごとの版組を固定幅で作っているので、広げても得が無い）。
 
-import { useT } from '../i18n.js'
+import { INSTALLER_LOCALES, LOCALES, isLocale, type Locale } from '../../../shared/locales.js'
+import { useLocale, useT } from '../i18n.js'
 import { Mark } from './Mark.js'
 
 interface Props {
   readonly title: string
   readonly subtitle?: string
+  readonly onLocaleChange: (locale: Locale) => void
   readonly onClose: () => void
   readonly onMinimize: () => void
 }
 
-export function TitleBar({ title, subtitle, onClose, onMinimize }: Props): React.JSX.Element {
+export function TitleBar({ title, subtitle, onLocaleChange, onClose, onMinimize }: Props): React.JSX.Element {
   const t = useT()
+  const locale = useLocale()
   return (
     <header className="drag relative z-10 flex h-12 items-center border-b border-white/5 px-4">
       <div className="flex items-center gap-2.5 text-sm">
@@ -28,6 +31,23 @@ export function TitleBar({ title, subtitle, onClose, onMinimize }: Props): React
         ) : null}
       </div>
       <div className="no-drag ml-auto flex items-center gap-1">
+        {/* 言語の名前は訳さない（その言語自身での名前）。`data-locale` は E2E の目印 */}
+        <select
+          data-locale
+          value={locale}
+          onChange={(e) => {
+            if (isLocale(e.target.value)) onLocaleChange(e.target.value)
+          }}
+          aria-label={t('common.language')}
+          title={t('common.language')}
+          className="mr-1 h-7 rounded-md border border-white/10 bg-transparent px-2 text-xs text-white/70 hover:bg-white/10 focus:outline-none"
+        >
+          {LOCALES.map((l) => (
+            <option key={l} value={l} lang={INSTALLER_LOCALES[l].htmlLang} className="bg-slate-900">
+              {INSTALLER_LOCALES[l].endonym}
+            </option>
+          ))}
+        </select>
         <button
           type="button"
           onClick={onMinimize}

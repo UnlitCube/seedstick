@@ -650,7 +650,7 @@ export const de = {
   'dialog.filterAllFiles': 'Alle Dateien',
   'bundle.readme': 'Konfiguration für die unbeaufsichtigte Installation von Ubuntu Server\n\nVerwendung dieser Dateien (wenn Sie den USB-Stick mit einem anderen Werkzeug erstellen):\n1. Schreiben Sie die Ubuntu-live-server-ISO mit Rufus / balenaEtcher (DD-Modus) auf einen USB-Stick.\n2. Formatieren Sie einen zweiten USB-Stick als FAT32 und geben Sie ihm die Datenträgerbezeichnung CIDATA.\n3. Kopieren Sie user-data und meta-data darauf.\n4. Stecken Sie beide Sticks ein und starten Sie den Server.\n5. Drücken Sie im GRUB-Menü e, fügen Sie am Ende der linux-Zeile (vor ---) autoinstall hinzu und starten Sie mit Strg+X.\n   Hinweis: Ohne dies hält das Installationsprogramm bei "Continue with autoinstall? (yes|no)" an.\n\nWenn Sie den USB-Stick mit diesem Werkzeug erstellen, werden die Schritte 2 bis 5 für Sie erledigt.\n\nAchtung: Dateien aus der App-Bereitstellung werden hier nicht exportiert.\n         late-commands hängt die CIDATA-Partition ein und liest sie von dort.\n\nErzeugt mit: {tool}\nDatum: {date}',
   'profile.library': 'Profile',
-  'profile.unsaved': 'Nicht gespeicherte Einstellungen',
+  'profile.unsaved': 'Ungespeichert',
   'profile.dirty': 'Sie haben nicht gespeicherte Änderungen',
   'profile.save': 'Speichern',
   'profile.saveAs': 'Speichern unter',

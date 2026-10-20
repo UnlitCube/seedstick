@@ -22,6 +22,12 @@ describe('インストーラとアプリ本体の言語', () => {
     }
   })
 
+  it('言語の選択肢に出す名前が同じ', () => {
+    for (const l of LOCALES) {
+      expect(INSTALLER_LOCALES[l as keyof typeof INSTALLER_LOCALES]?.endonym, l).toBe(LOCALE_META[l].endonym)
+    }
+  })
+
   it('インストーラの辞書が全言語ぶんある', () => {
     expect(Object.keys(INSTALLER_DICTIONARIES).sort()).toEqual([...LOCALES].sort())
   })

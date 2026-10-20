@@ -20,7 +20,22 @@ const c = await connect()
 await c.send('Runtime.enable')
 await c.send('Page.enable')
 
-const locale = await c.eval('return await window.installer.locale()')
+// `SHOT_LOCALE=de` のように指定すると、タイトルバーの言語の選択欄で切り替えてから撮る
+// （ネイティブの <select> は CDP の入力で開けないので、値を入れて change を送る）。
+let locale = await c.eval('return await window.installer.locale()')
+if (process.env.SHOT_LOCALE && process.env.SHOT_LOCALE !== locale) {
+  const ok = await c.eval(`
+    const sel = document.querySelector('select[data-locale]')
+    if (!sel) return false
+    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set
+    setter.call(sel, ${JSON.stringify(process.env.SHOT_LOCALE)})
+    sel.dispatchEvent(new Event('change', { bubbles: true }))
+    return sel.value === ${JSON.stringify(process.env.SHOT_LOCALE)}
+  `)
+  if (!ok) throw new Error(`言語を切り替えられません: ${process.env.SHOT_LOCALE}`)
+  locale = process.env.SHOT_LOCALE
+  await new Promise((r) => setTimeout(r, 300))
+}
 const t = (key) => DICTIONARIES[locale][key]
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -87,8 +102,11 @@ async function typeInstallDir(value) {
 const problems = []
 const bodyText = () => c.eval("return document.body.innerText.replace(/\\s+/g, ' ')")
 async function expectVisible(label, text) {
-  const body = await bodyText()
-  if (!body.includes(text)) problems.push(`${label}: 画面に無い -> ${text}`)
+  // 見出しは CSS の text-transform: uppercase で大文字にしており、innerText はその見た目を返す
+  // （"Destination folder" → "DESTINATION FOLDER"）。両側を大文字に寄せて比べる
+  // （ß → SS も toUpperCase が同じ規則で揃える）。
+  const body = (await bodyText()).toUpperCase()
+  if (!body.includes(text.replace(/\s+/g, ' ').toUpperCase())) problems.push(`${label}: 画面に無い -> ${text}`)
 }
 
 // --- 1. ようこそ ------------------------------------------------------------

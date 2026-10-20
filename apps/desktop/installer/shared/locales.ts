@@ -7,15 +7,15 @@
 // apps/desktop/src/main/installer-locales.test.ts（両方を import できる場所）が見る。
 
 export const INSTALLER_LOCALES = {
-  ja: { htmlLang: 'ja' },
-  en: { htmlLang: 'en' },
-  'zh-Hans': { htmlLang: 'zh-Hans' },
-  'zh-Hant': { htmlLang: 'zh-Hant' },
-  ko: { htmlLang: 'ko' },
-  es: { htmlLang: 'es' },
-  fr: { htmlLang: 'fr' },
-  de: { htmlLang: 'de' },
-  'pt-BR': { htmlLang: 'pt-BR' },
+  ja: { htmlLang: 'ja', endonym: '日本語' },
+  en: { htmlLang: 'en', endonym: 'English' },
+  'zh-Hans': { htmlLang: 'zh-Hans', endonym: '简体中文' },
+  'zh-Hant': { htmlLang: 'zh-Hant', endonym: '繁體中文' },
+  ko: { htmlLang: 'ko', endonym: '한국어' },
+  es: { htmlLang: 'es', endonym: 'Español' },
+  fr: { htmlLang: 'fr', endonym: 'Français' },
+  de: { htmlLang: 'de', endonym: 'Deutsch' },
+  'pt-BR': { htmlLang: 'pt-BR', endonym: 'Português (Brasil)' },
 } as const
 
 export type Locale = keyof typeof INSTALLER_LOCALES

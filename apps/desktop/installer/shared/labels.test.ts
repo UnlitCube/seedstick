@@ -41,7 +41,13 @@ interface Allowed {
  * 意図的な例外。**1 件ずつ理由を書く。**
  * 使われていない例外は下のテストが落とす（実態と食い違ったまま残らないように）。
  */
-const ALLOWLIST: readonly Allowed[] = []
+const ALLOWLIST: readonly Allowed[] = [
+  // 言語の選択肢に出す「その言語自身での名前」。どの表示言語でも同じ文字列を出すのが正しい
+  // （英語の画面で「日本語」を探す人のための表記で、訳すと見つけられなくなる）。
+  { file: 'shared/locales.ts', text: "endonym: '日本語'", reason: '言語の自称は訳さない' },
+  { file: 'shared/locales.ts', text: "endonym: '简体中文'", reason: '言語の自称は訳さない' },
+  { file: 'shared/locales.ts', text: "endonym: '繁體中文'", reason: '言語の自称は訳さない' },
+]
 
 /** 走査する対象。`shared/labels.ts` は辞書そのものなので当然除く。 */
 function sourceFiles(): string[] {

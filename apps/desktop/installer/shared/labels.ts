@@ -26,6 +26,7 @@ const ja = {
   'common.back': '戻る',
   'common.close': '閉じる',
   'common.minimize': '最小化',
+  'common.language': '表示言語',
 
   'app.setup': 'セットアップ',
   'app.uninstall': 'アンインストール',
@@ -136,6 +137,7 @@ const en = {
   'common.back': 'Back',
   'common.close': 'Close',
   'common.minimize': 'Minimize',
+  'common.language': 'Display language',
 
   'app.setup': 'Setup',
   'app.uninstall': 'Uninstall',
@@ -247,6 +249,7 @@ const zhHans = {
   'common.back': '返回',
   'common.close': '关闭',
   'common.minimize': '最小化',
+  'common.language': '显示语言',
 
   'app.setup': '安装',
   'app.uninstall': '卸载',
@@ -350,6 +353,7 @@ const zhHant = {
   'common.back': '返回',
   'common.close': '關閉',
   'common.minimize': '縮到最小',
+  'common.language': '顯示語言',
 
   'app.setup': '安裝',
   'app.uninstall': '解除安裝',
@@ -453,6 +457,7 @@ const ko = {
   'common.back': '뒤로',
   'common.close': '닫기',
   'common.minimize': '최소화',
+  'common.language': '표시 언어',
 
   'app.setup': '설치',
   'app.uninstall': '제거',
@@ -556,6 +561,7 @@ const es = {
   'common.back': 'Atrás',
   'common.close': 'Cerrar',
   'common.minimize': 'Minimizar',
+  'common.language': 'Idioma de la interfaz',
 
   'app.setup': 'Instalación',
   'app.uninstall': 'Desinstalar',
@@ -659,6 +665,7 @@ const fr = {
   'common.back': 'Retour',
   'common.close': 'Fermer',
   'common.minimize': 'Réduire',
+  'common.language': 'Langue d’affichage',
 
   'app.setup': 'Installation',
   'app.uninstall': 'Désinstaller',
@@ -762,6 +769,7 @@ const de = {
   'common.back': 'Zurück',
   'common.close': 'Schließen',
   'common.minimize': 'Minimieren',
+  'common.language': 'Anzeigesprache',
 
   'app.setup': 'Einrichtung',
   'app.uninstall': 'Deinstallieren',
@@ -865,6 +873,7 @@ const ptBR = {
   'common.back': 'Voltar',
   'common.close': 'Fechar',
   'common.minimize': 'Minimizar',
+  'common.language': 'Idioma da interface',
 
   'app.setup': 'Instalação',
   'app.uninstall': 'Desinstalar',
