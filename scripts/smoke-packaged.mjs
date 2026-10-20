@@ -78,6 +78,8 @@ async function evaluate(ws, expression) {
   for (;;) {
     const msg = await new Promise((r) => ws.once('message', (m) => r(JSON.parse(m.toString()))))
     if (msg.id !== id) continue
+    // 文書の差し替え中は「Execution context was destroyed」が result ではなく error で返る
+    if (msg.error) throw new Error(JSON.stringify(msg.error))
     if (msg.result?.exceptionDetails) throw new Error(JSON.stringify(msg.result.exceptionDetails))
     return msg.result?.result?.value
   }
@@ -92,12 +94,17 @@ try {
   })
   const deadline = Date.now() + TIMEOUT_S * 1000
   let state
+  let lastError = null
   while (Date.now() < deadline) {
-    state = await evaluate(
-      ws,
-      `(async () => ({
+    // DevTools にページが出た直後は、まだ文書が差し替わる途中のことがある
+    // （Linux の CI で `document.documentElement` が null だった）。
+    // 投げたら「まだ」とみなして待ち直し、最後まで読めなければその理由を出す。
+    try {
+      state = await evaluate(
+        ws,
+        `(async () => ({
         title: document.title,
-        lang: document.documentElement.lang,
+        lang: document.documentElement ? document.documentElement.lang : null,
         textLen: document.body ? document.body.innerText.length : 0,
         buttons: document.querySelectorAll('button').length,
         bridge: typeof window.autoinstall,
@@ -106,11 +113,18 @@ try {
           ? await window.autoinstall.getSettings().then((s) => typeof s, (e) => 'error: ' + e)
           : 'no bridge',
       }))()`,
-    )
+      )
+      lastError = null
+    } catch (e) {
+      lastError = e
+      await sleep(500)
+      continue
+    }
     if (state.textLen > 200 || state.boundary) break
     await sleep(500)
   }
   ws.close()
+  if (state === undefined) throw lastError ?? new Error('画面の状態を一度も読めなかった')
   console.log(JSON.stringify(state, null, 2))
   const failures = []
   if (!(state.textLen > 200)) failures.push(`本文が描画されていない (${state.textLen} 文字)`)

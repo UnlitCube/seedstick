@@ -1323,6 +1323,20 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
     手元で確かめるには、テストのコピーの先頭で platform を darwin にして走らせる
     （上書きを外すと CI と同じ 3 件が落ちることまで確認した）。
 
+164. **Electron 44 の npm パッケージは postinstall で本体を落とさない。**
+    `node_modules/electron/dist` は**最初に `require('electron')` したとき**に作られる
+    （`package.json` に `scripts` が無く、`index.js` が無ければ `install.js` を呼ぶ）。
+    electron-builder は自分のキャッシュから組むのでパッケージ自体はできるが、
+    mac の `extraResources`（`dist/LICENSE` → `LICENSE.electron.txt`）は
+    `file source doesn't exist` と**警告だけ出して黙って抜け**、ライセンス文の無い .app ができた。
+    Windows の CI では別の何かが先に触っていたので気づかなかった（mac / linux の
+    リリースビルドで初めて落ちた）。`apps/desktop/scripts/dist.mjs` が
+    パッケージの前に `require('electron')` する。
+    同じ原因で、Linux の「libffmpeg が差し替わったか」は
+    `[ "$(sha256sum 同梱)" != "$(sha256sum 無いファイル)" ]` の形だったので
+    **ハッシュ != 空文字で誤って通っていた**（落とし穴 123 の再発。`$(…)` の失敗は
+    `[ ]` の中だと errexit に届かない）。両辺を変数に取り、空でないことを見てから比べる。
+
 ## 検証済みのこと
 
 - **Electron 製インストーラを、できあがった `Setup.exe` から通しで動かした**

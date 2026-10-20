@@ -128,6 +128,9 @@ jobs:
         run: |
           set -euo pipefail
           cd apps/desktop
+          # Electron 44 は postinstall で本体を落とさない（初回の require で落ちる）。
+          # 後の「中身を数える」が node_modules/electron/dist と比べるので、ここで実体化する。
+          node -e "require('electron')"
           npx electron-vite build
           npx electron-builder --win --dir \
             --config electron-builder.json \

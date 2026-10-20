@@ -23,6 +23,14 @@ if (targets.length === 0) {
 
 console.log(`electron ${electronVersion} でパッケージします (${targets.join(' ')})`)
 
+// **Electron 44 の npm パッケージには postinstall が無い。** 本体のバイナリは
+// 最初に `require('electron')` されたときに `node_modules/electron/dist` へ落ちてくる。
+// electron-builder は自分のキャッシュから組むので、ここが空でもパッケージはできるが、
+// mac の `extraResources`（`dist/LICENSE` / `dist/LICENSES.chromium.html`）は
+// 「file source doesn't exist」と**警告だけ出して黙って抜ける**。
+// CI の mac / linux では何もここを触らないので、ライセンス文の無い .app ができていた。
+require('electron')
+
 // electron-vite build を先に通す
 const build = spawnSync('npx', ['electron-vite', 'build'], {
   cwd: appDir,

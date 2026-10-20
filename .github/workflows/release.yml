@@ -353,8 +353,14 @@ jobs:
           for f in resources/LICENSE.txt resources/THIRD_PARTY_NOTICES.txt resources/samples/ip-only.json LICENSES.chromium.html; do
             test -f "$d/$f" || { echo "::error::$f が無い"; exit 1; }
           done
-          [ "$(sha256sum "$d/libffmpeg.so" | cut -d' ' -f1)" != "$(sha256sum node_modules/electron/dist/libffmpeg.so | cut -d' ' -f1)" ] \
-            || { echo "::error::libffmpeg.so が差し替わっていない"; exit 1; }
+          # 比較の両辺は**変数に取ってから**比べる。`[ "$(…)" != "$(…)" ]` の形だと
+          # 片方のファイルが無くても sha256sum の失敗が errexit に届かず、
+          # 「ハッシュ != 空文字」で**誤って通る**（実際に通っていた。落とし穴 123）。
+          shipped=$(sha256sum "$d/libffmpeg.so" | cut -d' ' -f1)
+          stock=$(sha256sum node_modules/electron/dist/libffmpeg.so | cut -d' ' -f1)
+          echo "libffmpeg shipped=$shipped electron=$stock"
+          [ -n "$shipped" ] && [ -n "$stock" ] || { echo "::error::libffmpeg.so のハッシュが取れない"; exit 1; }
+          [ "$shipped" != "$stock" ] || { echo "::error::libffmpeg.so が差し替わっていない"; exit 1; }
           dpkg-deb --info apps/desktop/release/*.deb
 
       - name: 起動して画面を出すか（xvfb）
