@@ -399,15 +399,21 @@ jobs:
           retention-days: 7
 
   # ------------------------------------------------------------------
-  # Release を作る。**タグを押したときだけ**（手動実行はビルド確認どまり）
+  # 集めて確かめ、Release を作る。
+  #
+  # **Release を作る手順だけがタグ限定。** 以前はジョブごとタグ限定にしていたので、
+  # 手動実行ではここが 1 行も走らず、v0.1.0 のタグで初めて
+  # 「成果物が 8 個ではなく 7 個」で落ちた（AppImage をやめたあとも数が 8 のままだった）。
+  # 集めた物の確認・7-Zip のソース・SHA256SUMS は手動実行でも走らせる。
   # ------------------------------------------------------------------
   release:
     needs: [gate, windows, macos, linux]
-    if: github.event_name == 'push' && github.ref_type == 'tag'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       contents: write # Release を作るのに要る唯一の権限
+    env:
+      VERSION: ${{ needs.gate.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -426,11 +432,29 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          test -n "$VERSION" || { echo "::error::gate から版番号を受け取れていない"; exit 1; }
           cd dist
           ls -la
+          # **数ではなく名前で数える。** 数だけだと、作る物を変えたときに取り残される。
+          # この一覧は artifact-names.test.ts が electron-builder の計算する名前と
+          # 1 対 1 で突き合わせる（足りなくても多くても落ちる）。
+          expected=(
+            "Seedstick-$VERSION-win-x64-Setup.exe"
+            "Seedstick-$VERSION-win-x64-portable.exe"
+            "Seedstick-$VERSION-mac-x64.dmg"
+            "Seedstick-$VERSION-mac-x64.zip"
+            "Seedstick-$VERSION-mac-arm64.dmg"
+            "Seedstick-$VERSION-mac-arm64.zip"
+            "Seedstick-$VERSION-linux-x64.deb"
+          )
+          for f in "${expected[@]}"; do
+            test -s "$f" || { echo "::error::$f が無い（または空）"; exit 1; }
+          done
           n=$(ls | wc -l)
-          # Windows 2 本 + macOS 4 本 + Linux 2 本
-          [ "$n" -eq 8 ] || { echo "::error::成果物が 8 個ではなく $n 個"; exit 1; }
+          [ "$n" -eq "${#expected[@]}" ] || {
+            echo "::error::一覧に無いファイルがある（${#expected[@]} 個のはずが $n 個）"
+            exit 1
+          }
 
       - name: 7-Zip のソース（LGPL）
         shell: bash
@@ -448,6 +472,7 @@ jobs:
           cat SHA256SUMS.txt
 
       - name: Release を作る
+        if: github.event_name == 'push' && github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -486,6 +511,7 @@ jobs:
   # workflow_dispatch だけは GITHUB_TOKEN からでも起動できる。
   pages:
     needs: release
+    if: github.event_name == 'push' && github.ref_type == 'tag'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:

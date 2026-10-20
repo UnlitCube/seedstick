@@ -124,6 +124,18 @@ describe('成果物の名前', () => {
     for (const e of expected) expect(NAMES, `release.yml が探す ${e}`).toContain(e)
   })
 
+  // 上の検査は「探す名前が作られるか」の片向きだけで、Release に載せる物の数は見ていなかった。
+  // release ジョブは「Linux 2 本」のまま 8 個を待ち続け、AppImage をやめたあとの
+  // v0.1.0 のタグで初めて落ちた（そのジョブはタグでしか走らなかった）。
+  it('release ジョブが待つ一覧が、作られる名前と過不足なく一致する', () => {
+    const yml = read('.github/workflows/release.yml')
+    const block = /^\s*expected=\(\n([\s\S]*?)\n\s*\)$/m.exec(yml)
+    expect(block, 'release.yml に expected=( … ) が無い').not.toBeNull()
+    const listed = [...block![1]!.matchAll(/"([^"]+)"/g)].map((m) => m[1]!.replace('$VERSION', VERSION))
+    expect(listed.length).toBeGreaterThanOrEqual(7)
+    expect([...listed].sort()).toEqual([...NAMES].sort())
+  })
+
   it('サイトのダウンロードボタンが作られる名前に 1 対 1 で当たる', async () => {
     const mod = (await import(pathToFileURL(join(REPO_ROOT, 'docs-site/assets.mjs')).href)) as {
       ASSET_PATTERNS: Record<string, RegExp>

@@ -160,7 +160,9 @@ To check the layout in every language:
 `.github/workflows/release.yml` builds on Windows, macOS and Linux, uploads the
 packages and `SHA256SUMS.txt` to a GitHub Release, and then starts `pages.yml` on
 `main` to point the website's download buttons at the new files. A manual run
-(`workflow_dispatch`) only checks that the build works and creates no release.
+(`workflow_dispatch`) runs everything except those last two steps: the builds, the
+check that exactly the expected files were collected, and `SHA256SUMS.txt`. Run it
+before tagging whenever you change what gets built or how it is named.
 While the version is 0.x (tags `v0.*`), the release is published as a GitHub
 *pre-release*, matching the experimental status in the README. The website build
 takes the newest non-draft release, pre-releases included, so its download buttons
