@@ -1,4 +1,4 @@
-import { afterAll, afterEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { cleanupTempDirs, makeTempDir } from './test-support/temp-files.js'
 import { EventEmitter } from 'node:events'
 
@@ -119,6 +119,18 @@ afterEach(() => {
 // ここで日本語の文面を正として固定すると、English に切り替えても直らない状態が
 // テストで守られてしまう（落とし穴 56）。だから見るのは文面ではなくキー。
 const JAPANESE = /[぀-ヿ㐀-鿿]/
+
+// このファイルは **Windows の経路**（昇格した PowerShell と taskkill）を、spawn を差し替えて再現する。
+// write-supervisor は `process.platform` を実行時に見るので、macOS / Linux の CI では
+// POSIX の経路（process.kill）に入り、差し替えた taskkill が一度も呼ばれずに落ちていた。
+// このファイルの間だけ win32 に見せて、どの OS の CI でも同じ経路を確かめる。
+const realPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!
+beforeAll(() => {
+  Object.defineProperty(process, 'platform', { ...realPlatform, value: 'win32' })
+})
+afterAll(() => {
+  Object.defineProperty(process, 'platform', realPlatform)
+})
 
 describe('書き込みの文言はキーで運ぶ', () => {
   it('二重に start すると write.errorAlreadyRunning を返す', async () => {

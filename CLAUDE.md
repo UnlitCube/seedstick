@@ -1311,6 +1311,18 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
     `"Destination folder"` は `"DESTINATION FOLDER"` として返り、`includes()` が英語系の言語でだけ落ちる
     （ドイツ語は本文に同じ語があって偶然通っていた）。比べるときは両側を大文字に寄せる。
 
+163. **Windows でしか通らないテストは、Linux / macOS の CI で初めて落ちる。**
+    公開用のリポジトリで CI を回したら、Windows 以外で 7 件落ちた（それまで CI が
+    Linux / macOS で緑になったことは一度も無かった）。
+    - `installer/main/install-dir.ts` が `node:path` を使っており、POSIX では `C:\…` が相対パス。
+      インストーラは Windows 専用なので **`path.win32` を明示**した（Windows では同じ動き）。
+    - `write-shutdown.test.ts` は taskkill の経路を spawn の差し替えで再現するが、
+      write-supervisor は `process.platform` を実行時に見るので POSIX では別の経路に入る。
+      **そのファイルの間だけ `process.platform` を win32 に見せる**（全体を偽ると rollup の
+      ネイティブ版の選択まで変わって vitest が起動しない）。
+    手元で確かめるには、テストのコピーの先頭で platform を darwin にして走らせる
+    （上書きを外すと CI と同じ 3 件が落ちることまで確認した）。
+
 ## 検証済みのこと
 
 - **Electron 製インストーラを、できあがった `Setup.exe` から通しで動かした**

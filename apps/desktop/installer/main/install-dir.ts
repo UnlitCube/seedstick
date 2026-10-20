@@ -12,8 +12,13 @@
 // 後者は投げる。**どちらも同じ関数から導く**ので食い違わない。
 
 import { promises as fs, statfsSync, statSync } from 'node:fs'
-import { isAbsolute, join, normalize, parse } from 'node:path'
+import { win32 } from 'node:path'
 import type { DirCheck, DirProblem } from '../shared/protocol.js'
+
+// インストーラは Windows でしか動かないので、パスは**常に Windows の規則で**扱う。
+// `node:path` のままだと macOS / Linux の CI では `C:\…` が相対パス扱いになり、
+// 形の検査そのものが別物になる（テストが Windows でしか通らなかった）。
+const { isAbsolute, join, normalize, parse } = win32
 
 // 必要な容量は `paths.ts` の `resolveAssets().needBytes` が持つ
 // （ビルド時に実測して `payload-meta.json` へ書いたもの）。
