@@ -1,5 +1,12 @@
 import { ja, type MsgKey } from './ja.js'
 import { en } from './en.js'
+import { zhHans } from './zh-Hans.js'
+import { zhHant } from './zh-Hant.js'
+import { ko } from './ko.js'
+import { es } from './es.js'
+import { fr } from './fr.js'
+import { de } from './de.js'
+import { ptBR } from './pt-BR.js'
 import { FALLBACK_LOCALE, LOCALE_META, type Locale } from './locales.js'
 
 export type { MsgKey }
@@ -18,7 +25,17 @@ export {
  * 言語ごとの辞書。**全キーを持つことを型で強制する**（`satisfies Record<MsgKey, string>`）。
  * 言語を足すときは `locales.ts` の表に 1 行と、ここに 1 つ。
  */
-export const DICTIONARIES: Readonly<Record<Locale, Readonly<Record<MsgKey, string>>>> = { ja, en }
+export const DICTIONARIES: Readonly<Record<Locale, Readonly<Record<MsgKey, string>>>> = {
+  ja,
+  en,
+  'zh-Hans': zhHans,
+  'zh-Hant': zhHant,
+  ko,
+  es,
+  fr,
+  de,
+  'pt-BR': ptBR,
+}
 
 /** その言語の訳文。無ければ en、それも無ければ ja（原文）、それも無ければキー名。 */
 function lookup(locale: Locale, key: string): string {

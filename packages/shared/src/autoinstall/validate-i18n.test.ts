@@ -335,6 +335,8 @@ const MUTATIONS: Record<string, () => AutoinstallProfile> = {
           user({ id: 'u5', username: 'plainpw', passwordHash: 'plaintext', sudo: 'nopasswd' }),
           user({ id: 'u6', username: 'badkey', sshAuthorizedKeys: ['nope'] }),
           user({ id: 'u7', username: 'nologin', passwordHash: '' }),
+          // 接頭辞は crypt だが本体が短い——26.10 の chpasswd が拒む形（落とし穴 156）
+          user({ id: 'u8', username: 'shorthash', passwordHash: '$6$salt$short' }),
         ],
       },
     }),
@@ -431,6 +433,16 @@ const MUTATIONS: Record<string, () => AutoinstallProfile> = {
     }),
   'ユーザー名の形が不正': () =>
     broken({ ...base(), user: { ...base().user, username: 'Bad Name' } }),
+  // chpasswd は受け付けるが SHA-512 ではない（yescrypt）。
+  // '$6$short' は形が崩れているので passwordHashMalformed の側に回った
+  'パスワードハッシュが SHA-512 以外': () =>
+    broken({
+      ...base(),
+      user: {
+        ...base().user,
+        passwordHash: '$y$j9T$saltsaltsaltsalt$oP99llOUKosYBQkgSa64zQcw9gJcIuPM562m9zhLRy3',
+      },
+    }),
   'SSH の鍵が 1 つも無い': () =>
     broken({
       ...base(),

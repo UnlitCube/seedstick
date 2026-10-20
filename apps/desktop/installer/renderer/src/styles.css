@@ -69,6 +69,23 @@ body {
   user-select: none;
 }
 
+/* 漢字は言語ごとに字形が違う（同じ符号位置でも日本・簡体・繁体で形が変わる）ので、
+   上の日本語フォントを先頭にしたままだと中国語の画面が日本式の字形になる。
+   ハングルは日本語フォントに無いことが多いので、韓国語も明示する。
+   `<html lang>` は App.tsx が言語に合わせて書き換える。 */
+html:lang(zh-Hans) body {
+  font-family: "Inter", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans SC",
+    ui-sans-serif, system-ui, sans-serif;
+}
+html:lang(zh-Hant) body {
+  font-family: "Inter", "PingFang TC", "Microsoft JhengHei UI", "Microsoft JhengHei", "Noto Sans TC",
+    ui-sans-serif, system-ui, sans-serif;
+}
+html:lang(ko) body {
+  font-family: "Inter", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR",
+    ui-sans-serif, system-ui, sans-serif;
+}
+
 input,
 textarea {
   user-select: text;

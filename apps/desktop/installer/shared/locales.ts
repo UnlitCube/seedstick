@@ -9,6 +9,13 @@
 export const INSTALLER_LOCALES = {
   ja: { htmlLang: 'ja' },
   en: { htmlLang: 'en' },
+  'zh-Hans': { htmlLang: 'zh-Hans' },
+  'zh-Hant': { htmlLang: 'zh-Hant' },
+  ko: { htmlLang: 'ko' },
+  es: { htmlLang: 'es' },
+  fr: { htmlLang: 'fr' },
+  de: { htmlLang: 'de' },
+  'pt-BR': { htmlLang: 'pt-BR' },
 } as const
 
 export type Locale = keyof typeof INSTALLER_LOCALES

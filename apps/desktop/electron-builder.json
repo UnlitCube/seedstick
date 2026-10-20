@@ -140,6 +140,9 @@
       "libatspi2.0-0",
       "libsecret-1-0",
       "pkexec | policykit-1"
+    ],
+    "recommends": [
+      "fonts-noto-cjk"
     ]
   }
 }

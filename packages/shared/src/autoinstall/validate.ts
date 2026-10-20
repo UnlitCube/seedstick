@@ -4,7 +4,7 @@ import { SERIES_FEATURES } from './model.js'
 import { GenerateError, buildAutoinstallObject, collectPackages, parseOverlay } from './generate.js'
 import { formatLocalized, localized } from '../i18n/index.js'
 import type { LocalizedText, MsgKey, MsgParams } from '../i18n/index.js'
-import { isValidSha512CryptHash, looksLikeCryptHash } from '../crypt/validate.js'
+import { isAcceptedByChpasswd, isValidSha512CryptHash, looksLikeCryptHash } from '../crypt/validate.js'
 import { getPreset } from './presets.js'
 import { ARCHIVE_REQUIREMENTS } from './provisioning.js'
 import { CUDA_REPO_DISTRO, cudaPackages, isValidServiceName } from './provisioning.js'
@@ -751,6 +751,11 @@ export function validateProfile(profile: AutoinstallProfile): ValidationResult {
     add('error', 'user.passwordHash', 'validate.passwordMissing')
   } else if (!looksLikeCryptHash(profile.user.passwordHash)) {
     add('error', 'user.passwordHash', 'validate.passwordPlainText')
+  } else if (!isAcceptedByChpasswd(profile.user.passwordHash)) {
+    // 26.10 の subiquity は postinstall で `chpasswd --encrypted` に通し、
+    // 形の崩れたハッシュはそこで拒まれてインストールの最後で失敗する（落とし穴 156）。
+    // それより前のリリースでも、どんなパスワードとも一致しないのでログインできない。
+    add('error', 'user.passwordHash', 'validate.passwordHashMalformed')
   } else if (!isValidSha512CryptHash(profile.user.passwordHash)) {
     add('warning', 'user.passwordHash', 'validate.passwordHashNotSha512')
   }
@@ -1152,6 +1157,14 @@ export function validateProfile(profile: AutoinstallProfile): ValidationResult {
         'error',
         `${where}.passwordHash`,
         'validate.additionalUserPasswordPlainText',
+        { username: u.username },
+      )
+    } else if (u.passwordHash && !isAcceptedByChpasswd(u.passwordHash)) {
+      // 追加ユーザーは全リリースで late-commands の `chpasswd -e` を通る（落とし穴 156）
+      add(
+        'error',
+        `${where}.passwordHash`,
+        'validate.additionalUserPasswordHashMalformed',
         { username: u.username },
       )
     }

@@ -507,7 +507,7 @@ export const en = {
   'postinstall.extraKernelArgs': 'Extra kernel arguments',
   'postinstall.extraKernelArgsHint':
     'Appended to the kernel line in GRUB. You do not need to add autoinstall; it is put there for you. The characters ; & | are not allowed.',
-  'postinstall.fileChars': '{n} characters',
+  'postinstall.fileChars': '{n, plural, one {# character} other {# characters}}',
   'postinstall.fileModeHint': 'e.g. 0644',
   'postinstall.fileNameHint': 'Name on the USB stick',
   'postinstall.fileOwnerHint': 'e.g. root',
@@ -577,8 +577,8 @@ export const en = {
   'review.interactive': 'Some sections will be asked interactively during install',
   'review.aptUpgradeOff': 'No',
   'review.aptUpgradeOn': 'Yes',
-  'review.deploymentCount': '{n} items',
-  'review.deploymentCountWithSize': '{n} items ({size})',
+  'review.deploymentCount': '{n, plural, one {# item} other {# items}}',
+  'review.deploymentCountWithSize': '{n, plural, one {# item} other {# items}} ({size})',
   'review.diskRaw': 'Custom (curtin)',
   'review.exportDescription': 'You can export the settings on their own, without writing a USB.',
   'review.exportFolder': 'Export everything to a folder',
@@ -602,7 +602,7 @@ export const en = {
   'review.runtimeAllFixed': 'None (all fixed)',
   'review.runtimeInteractive': 'manual entry',
   'review.runtimeKernelArg': 'boot menu',
-  'review.runtimeMenuCount': '{n} menu entries',
+  'review.runtimeMenuCount': '{n, plural, one {# menu entry} other {# menu entries}}',
   'review.shutdownPowerOff': 'Power off',
   'review.shutdownReboot': 'Reboot',
   'review.sshDisabled': 'Disabled',
@@ -909,7 +909,7 @@ Date: {date}`,
     'This user can become root without entering a password. For an account that only runs a service, choose "None" instead.',
   'users.passwordAlreadySet':
     'A password is already set. Fill this in only if you want to change it.',
-  'users.sshKeyCount': '{n} SSH keys',
+  'users.sshKeyCount': '{n, plural, one {# SSH key} other {# SSH keys}}',
 
   // Option labels (SHELL_CHOICES in provisioning.ts)
   'users.shellBash': 'bash (default)',
@@ -1185,7 +1185,7 @@ Date: {date}`,
   'migrate.enumReset':
     'The value {value} for {field} was not recognized, so it was reset to the default {fallback}.',
   'migrate.itemsDropped':
-    'Skipped {count} entry/entries under {category} because they were not in a valid format.',
+    'Skipped {count, plural, one {# entry} other {# entries}} under {category} because they were not in a valid format.',
   'migrate.storageModeReset':
     'The disk layout method ({mode}) was not recognized, so it was reset to the default. The disk selection itself has been kept. Check it before you write.',
   'migrate.fromV1':
@@ -1215,7 +1215,7 @@ Date: {date}`,
   'migrate.field.raidDiskUsage': 'how the disk is used (storage.raid.disks[].usage)',
   'migrate.field.raidRootFstype': 'the file system for root (storage.raid.rootFstype)',
   'migrate.raidDiskRefDropped':
-    '{count} disk reference(s) held by RAID arrays pointed at disks that are not in this profile, so those references were removed. Check that no array is now short of members.',
+    '{count, plural, one {# disk reference} other {# disk references}} held by RAID arrays pointed at disks that are not in this profile, so they were removed. Check that no array is now short of members.',
   'migrate.category.bondMember': 'network cards bonded together',
   'migrate.field.bondMode': 'the bond mode (network.parameters.mode)',
   'migrate.field.bondLacpRate': 'the LACP rate (network.parameters.lacpRate)',
@@ -1249,6 +1249,8 @@ Date: {date}`,
     'The password is plain text. A crypt(3) hash starting with $6$ is required.',
   'validate.passwordHashNotSha512':
     'The password hash is not standard SHA-512 crypt. Verify that login works.',
+  'validate.passwordHashMalformed':
+    'The password hash is malformed (its length or characters do not match the crypt(3) format). On Ubuntu 26.10 the install fails at the very end; on earlier releases no password will work for logging in. Enter the password again.',
   'validate.sshKeyMalformed':
     'SSH public key #{n} is malformed. Expected one line like "ssh-ed25519 AAAA...".',
   'validate.sshKeysWithoutServer':
@@ -1335,6 +1337,8 @@ Date: {date}`,
   'validate.additionalUserNameReserved': '"{username}" is reserved by the system.',
   'validate.additionalUserNameDuplicated': 'Username "{username}" is duplicated.',
   'validate.additionalUserPasswordPlainText': 'The password for "{username}" is plain text.',
+  'validate.additionalUserPasswordHashMalformed':
+    'The password hash for "{username}" is malformed. On Ubuntu 26.10 the install fails at the very end; on earlier releases no password will work for logging in.',
   'validate.additionalUserNoLogin':
     '"{username}" has neither a password nor an SSH key and cannot log in (the account will be locked).',
   'validate.additionalUserSshKeyMalformed': 'SSH key #{n} for "{username}" is malformed.',
@@ -1375,7 +1379,7 @@ Date: {date}`,
   'validate.interactiveSectionsUnsupported':
     'Ubuntu {series} has no interactive-sections, so a missing value falls back to the default instead of prompting.',
   'validate.hostsWithoutKernelArgs':
-    '{n} host(s) are configured, but every value is fixed, so no boot menu is built and the list is not used.',
+    '{n, plural, one {# host is} other {# hosts are}} configured, but every value is fixed, so no boot menu is built and the list is not used.',
   'validate.kernelArgsWithoutHosts':
     'Values are passed as kernel arguments but no hosts are registered, so you will have to type them in GRUB with the e key.',
   'validate.hostLabelInvalid':
@@ -1429,7 +1433,7 @@ Date: {date}`,
     'The array name "{name}" is not valid (start with a letter or digit, then letters, digits, . _ - only, up to 32 characters).',
   'validate.raidArrayNameDuplicated': 'The array name "{name}" is used more than once.',
   'validate.raidUnknownDiskRef':
-    'Array "{name}" refers to {count} disk(s) that are not in this configuration. Check that it still has enough members.',
+    'Array "{name}" refers to {count, plural, one {# disk} other {# disks}} that are not in this configuration. Check that it still has enough members.',
   'validate.raidDiskDuplicatedInArray':
     'Array "{name}" lists the same disk twice, which includes listing it both as a member and as a spare.',
   'validate.raidDiskInTwoArraysOfSameRole':
@@ -1445,7 +1449,7 @@ Date: {date}`,
   'validate.raidWholeDiskEsp':
     'Disk #{n} is set to be used as one whole member, yet it is also asked to hold an EFI system partition. No partition table is written to it, so there is nowhere to put one. Either turn the ESP off or switch the disk back to being partitioned.',
   'validate.raidWholeDiskInBootArray':
-    'Array "{name}" (which holds /boot) has {count} disk(s) used as one whole member. No partitions are cut on those disks, so there is no room for /boot. Switch them back to being partitioned or remove them from this array.',
+    'Array "{name}" (which holds /boot) has {count, plural, one {# disk} other {# disks}} used as one whole member. No partitions are cut on those disks, so there is no room for /boot. Switch them back to being partitioned or remove them from this array.',
   'validate.raidArrayNotMounted':
     'Array "{name}" is only assembled: it is not formatted and not mounted. Create a filesystem on it and add it to /etc/fstab after the installation (this is fine if that is what you intended).',
   'validate.raidDiskUnused':
@@ -1461,7 +1465,7 @@ Date: {date}`,
   'validate.raidGrubMirrorUnverified':
     'Copying the bootloader to the second and later boot disks writes its result to /var/log/autoinstall-raid-esp.log on the installed system. That step has not been verified on real hardware yet, so confirm that the machine still starts with the first disk removed.',
   'validate.raidGrubMirrorUnreachableDisk':
-    '{count} of the disks that get an EFI system partition are not members of any array backing / or /boot. The bootloader is only mirrored to disks this install actually uses, so those {count} disks will not receive a copy and cannot boot if the first disk fails. Either add them to the / or /boot RAID, or do not create an EFI system partition on them.',
+    '{count, plural, one {# of the disks that get an EFI system partition is} other {# of the disks that get an EFI system partition are}} not a member of any array backing / or /boot. The bootloader is only mirrored to disks this install actually uses, so {count, plural, one {that disk} other {those disks}} will not receive a copy and cannot boot if the first disk fails. Either add them to the / or /boot RAID, or do not create an EFI system partition on them.',
   'validate.raidGrubOnlyOnFirstDisk':
     'The bootloader is installed only on the first boot disk. If that disk fails, the machine will not start even though the RAID survives.',
   'validate.raidMatchIgnored':

@@ -12,6 +12,32 @@ export function isValidSha512CryptHash(value: string): boolean {
 }
 
 /**
+ * shadow の `chpasswd --encrypted` が受け付ける形。
+ *
+ * **Ubuntu 26.10 の chpasswd (passwd 1:4.19.3) に実際に食わせて確かめた**
+ * （`validate.test.ts` の表がその結果）。26.10 の subiquity は管理ユーザーを
+ * cloud-init に任せず postinstall で `chpasswd --encrypted` に通すので、
+ * ここで弾かれる形はインストールの**最後の段階**で失敗する（落とし穴 156）。
+ * 追加ユーザーは全リリースで late-commands の `chpasswd -e` を通る。
+ *
+ * - salt は `$` `:` 改行以外なら何でもよい（`-` `_` も通る）が 16 文字まで
+ * - `rounds=` は 1000〜999999999（先頭 0 は不可）
+ * - `$7$`（scrypt）と `$gy$`（gost-yescrypt）は libxcrypt が作れても chpasswd が拒む
+ */
+const CHPASSWD_HASH_SHAPES: readonly RegExp[] = [
+  /^\$6\$(?:rounds=[1-9]\d{3,8}\$)?[^$:\n]{1,16}\$[./A-Za-z0-9]{86}$/,
+  /^\$5\$(?:rounds=[1-9]\d{3,8}\$)?[^$:\n]{1,16}\$[./A-Za-z0-9]{43}$/,
+  /^\$1\$[^$:\n]{1,8}\$[./A-Za-z0-9]{22}$/,
+  /^\$2[abxy]\$\d{2}\$[./A-Za-z0-9]{53}$/,
+  /^\$y\$[./A-Za-z0-9]+\$[./A-Za-z0-9]{1,86}\$[./A-Za-z0-9]{43}$/,
+]
+
+/** `chpasswd --encrypted` がそのまま受け付ける crypt ハッシュか。 */
+export function isAcceptedByChpasswd(value: string): boolean {
+  return CHPASSWD_HASH_SHAPES.some((re) => re.test(value))
+}
+
+/**
  * 貼り付けで紛れ込む改行を除去する。パスワードや SSH 公開鍵の入力欄で使う。
  *
  * 前後の空白はパスワードの一部かもしれないので触らない

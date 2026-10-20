@@ -28,6 +28,13 @@ import {
 const SAFETY_TERMS = {
   ja: /消去/,
   en: /erase/i,
+  'zh-Hans': /清除|擦除|抹除|删除/,
+  'zh-Hant': /清除|抹除|刪除/,
+  ko: /삭제|지워/,
+  es: /borr/i,
+  fr: /effac/i,
+  de: /gelöscht|lösch/i,
+  'pt-BR': /apag/i,
 } satisfies Record<Locale, RegExp>
 
 /** その言語の訳文に出てよい文字体系の外にある 1 文字を探す正規表現（表から作る）。 */
@@ -104,6 +111,22 @@ describe('i18n', () => {
     // 区切りが _ の形（POSIX のロケール）も読める
     expect(negotiateLocale(['ja_JP.UTF-8'.split('.')[0]!])).toBe('ja')
     for (const l of LOCALES) expect(negotiateLocale([l]), l).toBe(l)
+    // 中国語は地域ではなく文字体系で分ける
+    expect(negotiateLocale(['zh-CN'])).toBe('zh-Hans')
+    expect(negotiateLocale(['zh-SG'])).toBe('zh-Hans')
+    expect(negotiateLocale(['zh'])).toBe('zh-Hans')
+    expect(negotiateLocale(['zh-TW'])).toBe('zh-Hant')
+    expect(negotiateLocale(['zh-HK'])).toBe('zh-Hant')
+    expect(negotiateLocale(['zh-MO'])).toBe('zh-Hant')
+    expect(negotiateLocale(['zh-Hant-TW'])).toBe('zh-Hant')
+    expect(negotiateLocale(['zh_TW'])).toBe('zh-Hant')
+    // ポルトガル語は pt-BR しか持たないので pt-PT も寄せる
+    expect(negotiateLocale(['pt-PT'])).toBe('pt-BR')
+    expect(negotiateLocale(['pt'])).toBe('pt-BR')
+    expect(negotiateLocale(['ko-KR'])).toBe('ko')
+    expect(negotiateLocale(['es-MX'])).toBe('es')
+    expect(negotiateLocale(['fr-CA'])).toBe('fr')
+    expect(negotiateLocale(['de-AT'])).toBe('de')
     expect(isLocale('en')).toBe(true)
     expect(isLocale('xx')).toBe(false)
     expect(isLocale('__proto__')).toBe(false)

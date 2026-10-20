@@ -55,6 +55,7 @@ import {
   minimumDiskSize,
   planUsbLayout,
 } from '../packages/media/src/index.js'
+import { sha512Crypt } from '../packages/shared/src/crypt/sha512crypt.js'
 import { printRevisionBanner } from './lib/git-revision.mts'
 
 const DISTRO = 'Ubuntu-24.04'
@@ -404,6 +405,11 @@ async function main(): Promise<void> {
   // インストール後に見分けられる値にする。
   // **ISO と設定のリリースを揃える。** 食い違うと、そのリリースに無いキーを出しうる。
   const base = createDefaultProfile(iso0.series)
+  // VM の中だけで使う使い捨て。乱数から作ってすぐ捨てるので平文はどこにも残らない（規約）。
+  // **形だけ似せた偽物を書いてはいけない**: 以前は本体 81 文字の偽ハッシュを置いていて、
+  // 26.10 の chpasswd (shadow 4.19) が「invalid password hash」で拒み、
+  // インストールが最後の段階で止まった（落とし穴 156）。24.04 までは誰も検査しなかった。
+  const VM_PASSWORD_HASH = sha512Crypt(randomBytes(24).toString('base64'))
   const common: AutoinstallProfile = {
     ...base,
     basics: { ...base.basics, hostname: 'vm-e2e' },
@@ -411,8 +417,7 @@ async function main(): Promise<void> {
       ...base.user,
       username: 'vmadmin',
       realname: 'VM E2E',
-      // VM の中だけで使う使い捨て。平文は持たない（規約）。
-      passwordHash: '$6$vme2e$Qv1sKq4bWbG3hQeYwZ7YyQ0cQ9hQb1s2Y3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S9t0U1v2W3x4Y5z6.',
+      passwordHash: VM_PASSWORD_HASH,
     },
   }
   const profile: AutoinstallProfile =

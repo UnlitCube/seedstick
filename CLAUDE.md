@@ -1251,6 +1251,34 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
     **IP アドレス (`10.0.2.100`) を 20 件拾って落ちる**ので、
     版番号が実際に現れる形（`autoinstall-ui/<semver>` など）だけを指定する。
 
+### Ubuntu 26.10 に対応したとき
+
+156. **26.10 の `chpasswd` はハッシュの形を検査する。形の崩れたハッシュはインストールの最後で落ちる。**
+    26.10 の subiquity は管理ユーザーを postinstall で作り、
+    `curtin in-target -- chpasswd --encrypted` でパスワードを入れる。
+    passwd 1:4.19.3 の chpasswd は `invalid password hash` で拒み、
+    **ディスクを全部書き終えた最後の段階で** `An error occurred` になる（VM で実際に踏んだ）。
+    24.04 までは誰も形を見なかったので、`e2e-vm.mts` の**本体 81 文字の偽ハッシュ**が
+    何十回も緑のまま通っていた（どのパスワードとも一致しないのでログインはできなかった）。
+    - 受け付ける形は**消費者に食わせて決めた**（`crypt/validate.test.ts` の表、30 通り）。
+      `$6$` は本体 86 文字・salt 16 文字まで・`rounds=` は 1000〜999999999、
+      `$7$`（scrypt）と `$gy$` は libxcrypt で作れても**拒まれる**。
+    - `looksLikeCryptHash` は接頭辞しか見ないので、それとは別に `isAcceptedByChpasswd` で
+      **error** にする（管理ユーザーと追加ユーザーの両方。追加ユーザーは全リリースで
+      late-commands の `chpasswd -e` を通る）。
+    - テスト用のハッシュは**形だけ似せて手書きしない**。乱数のパスワードから
+      `sha512Crypt` で作って捨てる（平文は残らない）。
+    - 調べ方: 失敗したインストールでも `error-commands` が CIDATA に
+      `installer-logs.tar.gz` を残すので、`subiquity-traceback.txt` で
+      `create_users` → `chpasswd --encrypted` までたどれる。chpasswd の stderr は
+      ログに残らないので、**インストール済みのディスクに chroot して同じ入力を流す**と理由が出る
+      （WSL でラベルが読めないので CIDATA は第 4 パーティションを名指しする。落とし穴 90）。
+
+157. **26.10 の `md5sum.txt` には `./boot/grub/grub.cfg` の行が無い。**
+    22.04〜26.04 にはあったので「行が見つからない＝更新に失敗した」と扱っていたが、
+    26.10 では**無いのが正しい**。リリースごとの事実として `md5ListsGrubCfg` に持ち、
+    行が無いことを期待するリリースでは書き換えを求めない（落とし穴 4 の例外）。
+
 ## 検証済みのこと
 
 - **Electron 製インストーラを、できあがった `Setup.exe` から通しで動かした**
@@ -1359,7 +1387,9 @@ zustand 5 / TypeScript 5.9 / vitest 4 / Node 22+（`node:zlib` の `crc32` を�
 
 - **実機**からの起動と、完全無人インストールの完走
   （**VM では 3 構成とも通した**。単一ディスク・LVM **14/14** /
-  RAID + LVM **30/30** / ESP 2 台 + bond **33/33**。いずれも 2026-09-10・24.04.3。実機は未実施）
+  RAID + LVM **30/30** / ESP 2 台 + bond **33/33**。いずれも 2026-09-10・24.04.3。
+  **26.10 は単一ディスク・LVM を 14/14**（2026-10-20。最初の 1 回は落とし穴 156 で 9/14）。
+  RAID / bond / IP の 3 構成は 26.10 では未実施。実機は未実施）
 - ~~起動メニューから選んだホストの値が実機で反映されるか~~
   **→ VM で通した**（`npm run e2e:vm:ip`。配布サンプル `samples/ip-only.json` そのもので、
   メニューの 2 番目を選んだ状態でインストールし、`10.0.2.101/24` が入り、

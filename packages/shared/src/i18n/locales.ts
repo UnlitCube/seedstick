@@ -42,6 +42,55 @@ export const LOCALE_META = {
     scripts: ['Latin'],
     fullwidthPunctuation: false,
   },
+  'zh-Hans': {
+    endonym: '简体中文',
+    htmlLang: 'zh-Hans',
+    intl: 'zh-CN',
+    scripts: ['Han', 'Latin'],
+    fullwidthPunctuation: true,
+  },
+  'zh-Hant': {
+    endonym: '繁體中文',
+    htmlLang: 'zh-Hant',
+    intl: 'zh-TW',
+    scripts: ['Han', 'Latin'],
+    fullwidthPunctuation: true,
+  },
+  ko: {
+    endonym: '한국어',
+    htmlLang: 'ko',
+    intl: 'ko-KR',
+    scripts: ['Hangul', 'Latin'],
+    fullwidthPunctuation: false,
+  },
+  es: {
+    endonym: 'Español',
+    htmlLang: 'es',
+    intl: 'es-ES',
+    scripts: ['Latin'],
+    fullwidthPunctuation: false,
+  },
+  fr: {
+    endonym: 'Français',
+    htmlLang: 'fr',
+    intl: 'fr-FR',
+    scripts: ['Latin'],
+    fullwidthPunctuation: false,
+  },
+  de: {
+    endonym: 'Deutsch',
+    htmlLang: 'de',
+    intl: 'de-DE',
+    scripts: ['Latin'],
+    fullwidthPunctuation: false,
+  },
+  'pt-BR': {
+    endonym: 'Português (Brasil)',
+    htmlLang: 'pt-BR',
+    intl: 'pt-BR',
+    scripts: ['Latin'],
+    fullwidthPunctuation: false,
+  },
 } as const satisfies Record<string, LocaleMeta>
 
 export type Locale = keyof typeof LOCALE_META
