@@ -1,6 +1,51 @@
-# 変更履歴
+# Changelog
 
-## vNext
+## v0.1.0
+
+The first public release of **Seedstick**: a GUI that builds unattended-install USB
+drives for Ubuntu Server without rebuilding the ISO.
+
+> **Seedstick erases things.** Writing erases the selected USB drive, and a machine
+> booted from it erases its target disk without asking. Read the safety note in the
+> [README](https://github.com/UnlitCube/seedstick#readme) first.
+
+### What it does
+
+- A 10-step wizard that generates the `autoinstall` configuration (shown live, with
+  comments in your language) and writes it to a USB drive or a `.img` file, with
+  read-back verification.
+- Ubuntu Server **22.04 LTS, 24.04 LTS, 25.10 (end of life, with a warning),
+  26.04 LTS and 26.10**, live-server ISOs for amd64 and arm64.
+- System disks, internal disks and drives over 2 TB are never offered as targets.
+- Validation that stops settings which would lock you out or make the install fail
+  late, before anything is written.
+- Hostname, IP address and target disk can be picked from the boot menu, so one
+  drive can install many machines.
+- Post-install setup: extra users, files and archives, systemd services,
+  `apt full-upgrade`, NVIDIA driver and CUDA, RAID + LVM, NIC bonding.
+- 9 languages: Japanese, English, Simplified Chinese, Traditional Chinese, Korean,
+  Spanish, French, German, Portuguese (Brazil).
+
+### Downloads
+
+Windows installer and portable `.exe`, macOS `.dmg` and `.zip` for Intel and
+Apple Silicon, Linux `.deb` and `.AppImage` (experimental). Check the files against
+`SHA256SUMS.txt`.
+
+### Known limitations
+
+- **Builds are not code-signed.** Windows SmartScreen and macOS Gatekeeper will
+  warn; see the README for how to proceed.
+- Unattended installs were verified end to end in virtual machines (24.04: single
+  disk, RAID + LVM, bonding, boot-menu IP selection; 26.10: single disk) and writing
+  was verified on a real USB drive. **A full install on physical servers has not
+  been verified yet**, nor 802.3ad bonding against a real switch, booting from the
+  second disk of a RAID pair, or device enumeration and elevation on macOS and Linux
+  hardware.
+- Seven of the nine languages were translated with machine assistance and have not
+  been reviewed by native speakers. Corrections are welcome.
+
+## 開発の記録（v0.1.0 より前・日本語）
 
 ### ✨ 新機能
 

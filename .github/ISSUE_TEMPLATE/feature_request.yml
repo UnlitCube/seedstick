@@ -1,0 +1,20 @@
+name: Feature request
+description: Suggest something Seedstick should do.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: Describe the situation (how many machines, what hardware, what you do today).
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help?
+  - type: textarea
+    id: autoinstall
+    attributes:
+      label: Is it possible in autoinstall today?
+      description: If you know the autoinstall / cloud-init / curtin key that does this, link it.

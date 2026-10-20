@@ -1,0 +1,76 @@
+# GitHub Pages のサイト（scripts/build-site.mjs が site-dist/ に作る）を公開する。
+#
+# 走るのは 3 つのとき:
+#   - main にサイトの元（文言・辞書・画像・生成スクリプト）が入ったとき
+#   - release.yml が Release を作ったあと（ダウンロードのリンクを新しい版に向け直す。
+#     GITHUB_TOKEN で作った Release は他のワークフローを起動しないので、向こうから呼ぶ）
+#   - 手動
+#
+# **npm ci をしない。** 生成スクリプトは辞書（TypeScript）を Node の型除去で直接読むだけで、
+# 依存パッケージを使わない。Electron を落としてくる数分を毎回払わずに済む。
+#
+# Pages の公開元は「GitHub Actions」にしておくこと（Settings → Pages → Source）。
+
+name: pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs-site/**
+      - scripts/build-site.mjs
+      - packages/shared/src/i18n/**
+      - apps/desktop/installer/shared/labels.ts
+      - apps/desktop/installer/shared/locales.ts
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+  workflow_call:
+
+permissions: {}
+
+# 公開は 1 本ずつ。走っている公開は止めない（途中で切ると半端なサイトが残りうる）。
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # 辞書を .ts のまま読むので、型除去が既定で有効な 22.18 以降が要る
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+
+      - name: サイトを作る
+        env:
+          # 最新の Release を読んで、ダウンロードのリンクをファイルに直接向ける
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          node --version
+          node scripts/build-site.mjs
+
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site-dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

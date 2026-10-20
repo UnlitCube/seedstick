@@ -1,170 +1,183 @@
 # Seedstick
 
-Ubuntu Server の**自動インストール USB** を、GUI で作るツール。
-Windows / macOS / Linux で動きます（Electron）。
+**Build an unattended-install USB drive for Ubuntu Server, with a GUI.**
+Pick the official ISO, fill in a wizard, write the drive. Plug it into a server,
+power on, and the install runs to the end on its own: hostname, users, network,
+disk layout, packages and post-install setup included.
 
-USB を挿してサーバーの電源を入れるだけで、ホスト名・ユーザー・ネットワーク・ディスク構成・
-インストールするソフトウェア・インストール後の設定まで、すべて自動でセットアップされます。
-
-```
-┌──────────────┐   ┌──────────────────┐   ┌──────────────────┐
-│ ISO を選ぶ    │ → │ 設定を GUI で作る  │ → │ USB に書き込む     │
-│ (公式 ISO)    │   │ (YAML を自動生成)  │   │ (安全確認つき)     │
-└──────────────┘   └──────────────────┘   └──────────────────┘
-```
-
-## 特徴
-
-- **初心者でも迷わない** — 10 ステップのウィザード。すべての項目に日本語の説明が付き、
-  生成される YAML をその場で確認できます。
-- **危険な設定を書き込み前に止める** — 「SSH のパスワード認証を切ったのに公開鍵が無い」など、
-  サーバーに触れなくなる設定をエラーとして検出します。
-- **システムディスクは選べない** — 内蔵ディスク・OS の入ったディスク・2 TB 超のドライブは
-  一覧に出ません。書き込み前に「消去」の入力を求めます。
-- **書き込み後に読み戻して検証** — 安価な USB メモリの不良を検出します。
-- **ISO を再構築しない** — 数セクタのインプレース改変だけなので、書き込み時間は ISO のコピーと
-  ほぼ同じです。ISO ファイル自体は一切変更しません。
-- **設定を保存して使い回せる** — 名前を付けて保存し、あとから開いて修正できます。
-  同じ構成のサーバーを何台も作るときに便利です。
-- **インストール後まで自動化** — 追加ユーザーの作成、アプリの展開、systemd サービスの登録、
-  apt full-upgrade、NVIDIA ドライバと CUDA の導入まで、GUI から設定できます。
-- **1 本の USB を何台にも使い回せる** — ホスト名・IP・インストール先ディスクは、
-  起動メニューから選ぶか、インストーラの画面で入力するかを項目ごとに選べます。
-  `web01` `web02` … と並べておけば、挿して選ぶだけで機械ごとに違う値が入ります。
-- **上級者向けの逃げ道** — netplan / curtin の YAML を直接書けます。生成結果に任意の YAML を
-  マージすることもできます。
-- **日本語 / 英語** — UI も、生成される YAML のコメントも切り替えられます。
-
-## 動作の仕組み
-
-USB は次のレイアウトになります。
+Windows · macOS · Linux (Electron) · MIT License ·
+[Website](https://unlitcube.github.io/seedstick/) · [日本語の README](README.ja.md)
 
 ```
- LBA0    1..63          64 ────────── ISO 末尾   1MiB境界 ──────── ディスク末尾
-┌─────┬──────────────┬────────────────────────┬──┬──────────────┬──────────┐
-│ MBR │ GPT (primary)│ ISO9660 │ ESP │ Gap1   │  │ CIDATA (FAT) │ GPT backup│
-│0xEE │              │ ← 公式 ISO をそのまま →   │  │ user-data    │           │
-└─────┴──────────────┴────────────────────────┴──┴──────────────┴──────────┘
+┌────────────────┐   ┌──────────────────────┐   ┌──────────────────────┐
+│ Pick the ISO   │ → │ Configure in the GUI │ → │ Write the USB drive  │
+│ (official one) │   │ (YAML is generated)  │   │ (with safety checks) │
+└────────────────┘   └──────────────────────┘   └──────────────────────┘
 ```
 
-1. 公式 ISO をそのまま raw 書き込みします（BIOS / UEFI の起動互換性は公式イメージと同一）。
-2. ISO 内の `/boot/grub/grub.cfg` だけをインプレースで書き換え、カーネル引数に `autoinstall`
-   を追加します。**これが無いと「Continue with autoinstall? (yes|no)」で止まります。**
-3. ISO の後ろに `CIDATA` ラベルの FAT パーティションを足し、`user-data` / `meta-data` を置きます。
+> [!CAUTION]
+> **This tool erases things, twice.**
+> 1. Writing **erases the whole USB drive** you select.
+> 2. A machine booted from that drive **erases its target disk without asking**.
+>    That is what "unattended" means: nobody is asked to confirm.
+>
+> Keep the drive away from machines you did not mean to reinstall, label it, and
+> on machines with several disks select the target disk by **serial number**, not
+> "largest disk". Seedstick is provided **without warranty** (see [LICENSE](LICENSE)).
 
-「起動メニューから選ぶ」を使うと、`grub.cfg` にホストごとの menuentry を足し、
-`ai.hostname=web01` のようなカーネル引数を渡します。インストール開始直前に走る
-`early-commands` がそれを読み、`/autoinstall.yaml` を **YAML として読み書きして**
-該当箇所だけを差し替えます（autoinstall の設定は early-commands の後に読み直される、と
-公式リファレンスに明記されています）。生成される YAML には最初から既定値が入っているので、
-引数が無い既定のエントリで起動してもそのまま完走します。
-`grub.cfg` は 1 セクタ (2048 バイト) に収める必要があるため、残り容量を画面に表示します。
-   cloud-init の NoCloud データソースがこのラベルを自動で見つけます。
-4. GPT をディスクサイズに合わせて作り直します。
+## Features
 
-`CIDATA` パーティションは Windows / macOS からも普通のドライブとして見えるので、
-作成後に `user-data` を手で微修正することもできます。アプリのアーカイブを同梱した場合も
-ここに入り、インストール時に `mount -L CIDATA` して展開します。
+- **A 10-step wizard with explanations for every field.** The generated
+  `autoinstall` YAML is shown live, with comments in your language.
+- **Stops dangerous settings before writing.** For example "SSH password login is
+  off but no public key is registered" (you would be locked out), or a malformed
+  password hash that makes Ubuntu 26.10's installer fail at the very end.
+- **System disks are never offered.** Internal disks, the disk the OS runs from and
+  anything over 2 TB are filtered out while enumerating. You type a confirmation
+  word before anything is written.
+- **Read-back verification** after writing catches bad cheap USB sticks.
+- **The ISO is not rebuilt.** A few sectors are patched in place on the drive and a
+  small `CIDATA` partition is appended, so writing takes about as long as copying
+  the ISO. Your ISO file itself is never modified.
+- **One drive for many machines.** Hostname, IP address and target disk can be
+  fixed, picked from the boot menu (`web01`, `web02`, …) or typed in the installer.
+- **After the install, too.** Extra users, files and archives (carried on the drive
+  or downloaded on first boot), systemd services, `apt full-upgrade`, NVIDIA
+  driver and CUDA, RAID + LVM, NIC bonding.
+- **Escape hatches for experts.** Write netplan or curtin YAML directly, or merge
+  your own YAML over the generated config.
+- **Save and reuse profiles** as JSON.
+- **9 languages:** 日本語, English, 简体中文, 繁體中文, 한국어, Español, Français,
+  Deutsch, Português (Brasil). See [Translations](#translations).
 
-### インストール後にできること
+## Supported Ubuntu releases
 
-| 項目 | いつ実行されるか |
+| Release | Status |
 |---|---|
-| 追加ユーザーの作成（sudo・グループ・SSH 鍵） | インストール直後（再起動前） |
-| ファイル / アーカイブの展開（USB 同梱） | インストール直後（再起動前） |
-| systemd サービスの登録と有効化 | インストール直後（再起動前） |
-| apt full-upgrade | インストール直後（再起動前） |
-| URL からのダウンロードと展開 | 初回起動時（ネットワーク接続後） |
-| NVIDIA ドライバ / CUDA の導入 | 初回起動時（完了後に自動再起動） |
+| 22.04 LTS (Jammy) | supported |
+| 24.04 LTS (Noble) | supported, verified end-to-end in a VM (single disk, RAID + LVM, bonding) |
+| 25.10 (Questing) | usable, but **end of life since July 2026** — the app warns |
+| 26.04 LTS (Resolute) | supported |
+| 26.10 (Stonking) | supported, verified end-to-end in a VM (single disk) |
 
-詳しい根拠（一次資料からの引用と実測データ）は [docs/research/](docs/research/) にあります。
+Use the **live-server** ISO (amd64 or arm64). NVIDIA driver / CUDA setup needs an
+amd64 ISO and an LTS release (NVIDIA publishes no CUDA repository for 25.10 or 26.10).
 
-## 使い方
+## Download
 
-1. [Ubuntu 公式サイト](https://ubuntu.com/download/server)から **live-server** の ISO を
-   ダウンロードします（このツールは ISO を同梱・再配布しません）。
-2. アプリを起動し、ISO を選びます。
-3. ウィザードに従って設定します。「確認」ステップで生成される YAML を確認できます。
-   設定は「保存」しておけば、あとから開いて修正できます。
-4. USB メモリを選び、「消去」と入力して書き込みます。
+Get the latest build from the
+[Releases page](https://github.com/UnlitCube/seedstick/releases/latest).
+Each release has a `SHA256SUMS.txt`.
 
-対応バージョン: Ubuntu Server **22.04 LTS / 24.04 LTS / 25.10 / 26.04 LTS**（amd64・arm64）
-ただし NVIDIA ドライバ / CUDA の導入は amd64 (x86_64) の ISO のみ。
-
-## 開発
-
-```bash
-npm install
-npm run dev        # 開発起動（Windows なら start-dev.bat をダブルクリックでも可）
-npm test           # typecheck + 単体テスト + 実 ISO スモークテスト
-npm run dist:win   # パッケージ（macOS は dist:mac、Linux は dist:linux）
-npm run dist:installer  # Windows 向けの Electron 製インストーラを 1 本の exe に
-```
-
-## 配布
-
-出力物は **インストーラ**と**ポータブル版**の 2 つを、Windows と macOS の両方で作る。
-
-| | インストーラ | ポータブル |
+| | Installer | Portable |
 |---|---|---|
-| Windows | `Seedstick-<v>-win-x64-Setup.exe` | `Seedstick-<v>-win-x64-portable.exe` |
-| macOS | `Seedstick-<v>-mac-{x64,arm64}.dmg` | `Seedstick-<v>-mac-{x64,arm64}.zip` |
+| Windows (x64) | `Seedstick-<v>-win-x64-Setup.exe` | `Seedstick-<v>-win-x64-portable.exe` |
+| macOS (Intel / Apple Silicon) | `Seedstick-<v>-mac-{x64,arm64}.dmg` | `Seedstick-<v>-mac-{x64,arm64}.zip` |
+| Linux (x64, experimental) | `Seedstick-<v>-linux-x64.deb` | `Seedstick-<v>-linux-x64.AppImage` |
 
-Windows のインストーラは**このユーザーにだけ**入れる（`%LOCALAPPDATA%\Programs`）ので
-管理者権限が要らない。削除は Windows の「アプリと機能」から。
-macOS の dmg は `/Applications` へドラッグする従来どおりの形。
+The Windows installer installs for the current user only (no administrator rights
+needed) and is removed from *Settings → Apps*. Writing to a USB drive asks for
+administrator / root rights at that moment only; the app itself runs unprivileged.
 
-### リリースのしかた
+### The builds are not code-signed (yet)
 
-`CHANGELOG.md` の `## vNext` を `## v0.2.0` に直し、版番号を上げてタグを押す:
-
-```bash
-# 版番号は package.json だけでなくソースにも直書きされている。
-# 上げ忘れは npm run test:unit が赤くして教える（version-consistency.test.ts）
-npm run test:unit
-git tag v0.2.0 && git push origin v0.2.0
-```
-
-`.github/workflows/release.yml` が Windows と macOS でビルドし、
-6 つの成果物と `SHA256SUMS.txt` を GitHub Release に載せる。
-**手動実行 (`workflow_dispatch`) はビルドが通るかを見るだけで、Release は作らない。**
-
-### 署名していないことの影響
-
-コード署名は保留している。そのため:
-
-- **Windows**: 初回起動で SmartScreen の「WindowsによってPCが保護されました」が出る。
-  「詳細情報」→「実行」で進める。
-- **macOS**: Gatekeeper は通らない。Apple Silicon で起動できるように
-  **ad-hoc 署名**だけは当ててある（`apps/desktop/scripts/after-pack.cjs`）が、
-  隔離属性は自分で外す必要がある:
+- **Windows:** SmartScreen shows "Windows protected your PC" on first launch.
+  Click **More info → Run anyway**.
+- **macOS:** Gatekeeper blocks the app. The app is ad-hoc signed so it runs on
+  Apple Silicon, but you have to remove the quarantine flag yourself:
 
   ```bash
   xattr -dr com.apple.quarantine "/Applications/Seedstick.app"
   ```
 
-  macOS Sequoia (15) 以降は **Control-クリック →「開く」での回避が廃止**されたので、
-  システム設定 →「プライバシーとセキュリティ」から許可するか、上のコマンドを使う。
+  (On macOS 15 Sequoia and later, Control-click → Open no longer bypasses this; use
+  the command above or *System Settings → Privacy & Security*.)
+- **Linux:** device enumeration and the `pkexec` elevation have not been tested on
+  real hardware yet. Reports are welcome.
 
-### 受け取り方（このリポジトリは Private）
+## How to use
 
-**Private リポジトリの Release アセットは、ログインしていない第三者からは 404 になる**
-（ブラウザでも `curl -LO` でも同じ）。受け取る人には次のどれかが要る:
+1. Download the **live-server** ISO from
+   [ubuntu.com](https://ubuntu.com/download/server). Seedstick does not bundle or
+   redistribute Ubuntu images.
+2. Start Seedstick and pick the ISO.
+3. Go through the wizard. The **Review** step shows the generated YAML and any
+   problems found. Save the profile if you want to reuse it.
+4. Choose the USB drive, type the confirmation word and write.
+   You can also save a `.img` file instead and write it later with any tool.
 
-- このリポジトリへの read 権限を持つ GitHub アカウント（`gh release download` が使える）
-- または、配布専用の Public リポジトリに Release だけを置く（ソースは Private のまま）
+> [!NOTE]
+> A drive or `.img` made by Seedstick contains a **modified Ubuntu image**. Use it
+> yourself or inside your organisation, but do not redistribute it: Canonical's
+> [IP rights policy](https://ubuntu.com/legal/intellectual-property-policy) does
+> not allow redistributing modified images under the Ubuntu trademarks.
 
-`SHA256SUMS.txt` も同じ認証経路で配る以上、**改ざん検出ではなく破損検出**として読むこと。
+## How it works
 
-| ドキュメント | 内容 |
-|---|---|
-| [CLAUDE.md](CLAUDE.md) | アーキテクチャ、規約、落とし穴の台帳 |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 設計の詳細 |
-| [docs/research/R2-delivery-and-boot.md](docs/research/R2-delivery-and-boot.md) | autoinstall の配信方式（一次資料での裏取り） |
-| [docs/research/ISO-FACTS.md](docs/research/ISO-FACTS.md) | 実 ISO の物理構造の実測データ |
+```
+ LBA0    1..63          64 ────────── end of ISO   1 MiB ──────── end of disk
+┌─────┬──────────────┬─────────────────────────┬──┬──────────────┬───────────┐
+│ MBR │ GPT (primary)│ ISO9660 │ ESP │ Gap1    │  │ CIDATA (FAT) │ GPT backup│
+│0xEE │              │ ← official ISO, as is → │  │ user-data    │           │
+└─────┴──────────────┴─────────────────────────┴──┴──────────────┴───────────┘
+```
 
-## ライセンスと商標
+1. The official ISO is written raw, so BIOS / UEFI boot behaves exactly like the
+   official image.
+2. Only `/boot/grub/grub.cfg` inside the ISO is patched in place to add the
+   `autoinstall` kernel argument (without it the installer stops at
+   *"Continue with autoinstall? (yes|no)"*). The matching line of `md5sum.txt` and
+   the Joliet directory records are updated too.
+3. A FAT partition labelled `CIDATA` is appended with `user-data` and `meta-data`.
+   cloud-init's NoCloud data source finds it automatically.
+4. The GPT is rebuilt to fit the drive. The partition table is written last, so a
+   drive pulled out halfway never looks bootable.
 
-本ツールは MIT ライセンスです。Ubuntu は Canonical Ltd. の登録商標であり、本ツールは
-Canonical とは無関係です。Ubuntu の ISO イメージは同梱・再配布せず、利用者が公式サイトから
-入手したものを使う設計にしています。
+Values picked from the boot menu travel as kernel arguments (`ai.hostname=web01`);
+an `early-commands` script reads them and rewrites `/autoinstall.yaml` as YAML just
+before the install starts. The generated config always contains working defaults,
+so booting the default entry still completes.
+
+The research behind these choices, with citations to primary sources and
+measurements from real ISOs, is in [docs/research/](docs/research/).
+
+## Building from source
+
+Node.js 22 or later.
+
+```bash
+npm install
+npm run dev              # development (on Windows, start-dev.bat also works)
+npm test                 # typecheck + unit tests + smoke test with a real ISO (skipped if none)
+npm run dist:win         # Windows portable (dist:mac / dist:linux for the others)
+npm run dist:installer   # Windows installer (Setup.exe)
+```
+
+More checks (a full matrix with real ISOs, unattended installs in QEMU on WSL2,
+writing to a real USB drive) are listed in [CLAUDE.md](CLAUDE.md#開発コマンド),
+the project's developer notes (in Japanese).
+
+## Translations
+
+The UI was written in Japanese and English. The other seven languages were
+**translated from English with machine assistance** and checked automatically
+(placeholders, plural forms, scripts, layout overflow in every screen), but not yet
+by native speakers. **Corrections are very welcome** — see
+[CONTRIBUTING.md](CONTRIBUTING.md#translations).
+
+## Contributing and security
+
+- Bugs and ideas: [issues](https://github.com/UnlitCube/seedstick/issues).
+  See [CONTRIBUTING.md](CONTRIBUTING.md).
+- Security problems: please report privately, see [SECURITY.md](SECURITY.md).
+- Everyone is expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## License and trademarks
+
+Seedstick is released under the [MIT License](LICENSE).
+Third-party licenses ship with every package as `THIRD_PARTY_NOTICES.txt`.
+
+Seedstick is an independent open-source project. It is not affiliated with,
+endorsed by, or sponsored by Canonical Ltd. Ubuntu and Canonical are registered
+trademarks of Canonical Ltd. Other names are trademarks of their respective owners.
+Details: [docs/LEGAL.md](docs/LEGAL.md).

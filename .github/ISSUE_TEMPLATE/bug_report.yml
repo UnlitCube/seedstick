@@ -1,0 +1,72 @@
+name: Bug report
+description: Something does not work as described.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. **Do not paste secrets.** A saved profile JSON can contain
+        the disk-encryption passphrase in plain text, password hashes and SSH keys.
+        Remove them (and hostnames or IP addresses you consider private) before posting.
+        Security problems: please use [private reporting](https://github.com/UnlitCube/seedstick/security/advisories/new) instead.
+  - type: input
+    id: version
+    attributes:
+      label: Seedstick version
+      description: Shown in the About dialog (the "i" button at the top right).
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Your computer
+      options:
+        - Windows
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Linux
+    validations:
+      required: true
+  - type: input
+    id: iso
+    attributes:
+      label: Ubuntu ISO file name
+      placeholder: ubuntu-24.04.3-live-server-amd64.iso
+  - type: dropdown
+    id: stage
+    attributes:
+      label: Where did it go wrong?
+      options:
+        - In the app (wizard, review, saving profiles)
+        - Writing the USB drive / saving the .img
+        - Booting the target machine from the drive
+        - During the unattended install
+        - After the install (first boot, services, users, GPU)
+        - The Windows installer (Setup.exe)
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: |
+        For a failed install, the installer copies its logs to the drive's CIDATA partition
+        (on by default: "Collect logs on failure" in the advanced settings)
+        (`installer-journal.log`, `installer-logs.tar.gz`). The most useful part is usually
+        `var/log/installer/subiquity-traceback.txt` inside the archive.
+      render: text

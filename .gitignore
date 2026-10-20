@@ -20,3 +20,6 @@ apps/desktop/installer-resources/
 scripts/dev/
 .e2e/*.png
 .e2e/*.log
+
+# scripts/build-site.mjs の出力（GitHub Pages）
+site-dist/

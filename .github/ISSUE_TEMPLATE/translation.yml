@@ -1,0 +1,45 @@
+name: Translation
+description: A wrong, unnatural or missing translation.
+labels: [translation]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Seven of the nine languages were translated from English with machine assistance,
+        so native-speaker corrections are very welcome. You can also edit the dictionary
+        directly; see [CONTRIBUTING.md](https://github.com/UnlitCube/seedstick/blob/main/CONTRIBUTING.md#translations).
+  - type: dropdown
+    id: language
+    attributes:
+      label: Language
+      options:
+        - 简体中文 (zh-Hans)
+        - 繁體中文 (zh-Hant)
+        - 한국어 (ko)
+        - Español (es)
+        - Français (fr)
+        - Deutsch (de)
+        - Português (Brasil) (pt-BR)
+        - English (en)
+        - 日本語 (ja)
+    validations:
+      required: true
+  - type: input
+    id: where
+    attributes:
+      label: Where is it shown?
+      placeholder: "Disk step, the warning under the disk selector"
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: Current text
+    validations:
+      required: true
+  - type: textarea
+    id: suggested
+    attributes:
+      label: Suggested text
+    validations:
+      required: true
