@@ -60,7 +60,7 @@ Windows · macOS · Linux (Electron) · MIT License ·
 | Release | Status | Unattended install verified in a VM (UEFI) |
 |---|---|---|
 | 22.04 LTS (Jammy) | supported; end of life April 2027 (the app warns from six months before) | no completed run yet |
-| 24.04 LTS (Noble) | supported | 24.04.3: single disk, RAID + LVM, ESP on two disks + bonding, IP picked from the boot menu |
+| 24.04 LTS (Noble) | supported | 24.04.5: single disk. 24.04.3: single disk, RAID + LVM, ESP on two disks + bonding, IP picked from the boot menu |
 | 25.10 (Questing) | usable, but **end of life since the end of July 2026** (the app warns) | not run |
 | 26.04 LTS (Resolute) | supported | not run (no ISO tested yet) |
 | 26.10 (Stonking) | supported | single disk |
