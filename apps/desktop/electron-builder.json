@@ -121,7 +121,7 @@
     },
     "executableName": "seedstick",
     "maintainer": "UnlitCube <unlit.cube@gmail.com>",
-    "synopsis": "Build unattended-install USB drives for Ubuntu Server"
+    "synopsis": "Build unattended-install USB drives for Ubuntu Server (experimental)"
   },
   "deb": {
     "depends": [

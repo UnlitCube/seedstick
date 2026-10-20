@@ -6,6 +6,7 @@ import type { MsgKey } from './ja.js'
 export const ko = {
   'app.name': 'Seedstick',
   'app.tagline': 'Ubuntu Server 무인 설치 USB 만들기',
+  'app.experimental': '실험적',
   'common.next': '다음',
   'common.language': '표시 언어',
   'common.back': '뒤로',
@@ -321,7 +322,8 @@ export const ko = {
   'storage.raidBootSize': '/boot 크기',
   'storage.raidBootSizeHint': '/boot를 보관하는 어레이가 있을 때만 사용됩니다. 예: 2G.',
   'storage.raidMirrorBootloader': '다른 부팅 디스크에도 부트로더 설치',
-  'storage.raidMirrorBootloaderHint': 'curtin은 부트로더를 디스크 하나에만 설치합니다. 이 옵션은 설치가 끝날 때 이를 복사해 첫 번째 디스크가 고장 나도 기기가 부팅되게 합니다. 이 절차는 아직 실제 하드웨어에서 검증되지 않았습니다.',
+  'storage.raidMirrorBootloaderHint':
+    'curtin은 부트로더를 디스크 하나에만 설치합니다. 이 옵션은 설치가 끝날 때 이를 복사해 첫 번째 디스크가 고장 나도 기기가 부팅될 수 있게 합니다. 복사가 실행되는 것은 가상 머신에서 확인했지만, 두 번째 디스크만으로 부팅하는 것은 가상 머신에서도 실제 하드웨어에서도 아직 시도하지 않았습니다.',
   'storage.raidPtableIgnored': 'RAID + LVM은 이 설정을 사용하지 않습니다. 파티션 테이블은 항상 GPT입니다.',
   'storage.layoutZfsHint': 'ZFS 루트를 사용하며, 스냅샷과 데이터 무결성 검사가 훨씬 강력합니다.',
   'storage.modelHint': '예: Samsung SSD*. 와일드카드를 사용할 수 있습니다.',
@@ -335,7 +337,8 @@ export const ko = {
   'storage.serialHint': 'CT500MX*처럼 와일드카드를 사용할 수 있습니다. 디스크가 여러 개인 기기에서는 원하는 디스크를 지정하는 가장 확실한 방법입니다.',
   'storage.serialLabel': '일련번호',
   'storage.usbExcluded': '설치 USB 자체는 이 규칙에 절대 일치하지 않습니다(설치 프로그램이 제외합니다).',
-  'storage.warningBody': '설치 대상으로 선택한 디스크는 기존 파티션을 포함해 완전히 삭제됩니다. 운영 중인 기기에 사용하기 전에 가상 머신에서 이 USB를 한 번 시험해 보세요.',
+  'storage.warningBody':
+    '설치 대상으로 선택한 디스크는 기존 파티션을 포함해 완전히 삭제됩니다. 실제 기기에 사용하기 전에 가상 머신에서 이 USB를 한 번 시험해 보세요.',
   'software.source': '설치 범위',
   'software.sourceFull': '표준(ubuntu-server)',
   'software.sourceMinimal': '최소(ubuntu-server-minimal)',
@@ -546,7 +549,8 @@ export const ko = {
   'write.troubleApplied': '실제로 적용된 설정은 {path}에서 확인할 수 있습니다(root만 읽기 가능).',
   'write.troubleLogs': '로그는 설치된 시스템의 {path}에 남습니다.',
   'write.troubleTitle': '문제가 생기면',
-  'write.verifyOptionHint': '쓴 데이터를 다시 읽어 해시를 비교하므로 저가 USB 드라이브의 결함을 잡아냅니다.',
+  'write.verifyOptionHint':
+    '쓴 데이터를 다시 읽어 해시를 비교합니다. 저가 USB 드라이브에서 흔한 쓰기 오류를 잡아낼 수 있습니다.',
   'write.deviceGone': '장치가 사라졌습니다. 다시 꽂고 목록을 새로 고치세요.',
   'write.deviceNotWritable': '이 장치에는 쓸 수 없습니다. 장치 목록을 새로 고치세요.',
   'write.deviceStalled': 'USB 드라이브 쓰기가 더 이상 진행되지 않습니다. 뽑혔을 수 있습니다. 다시 꽂고 드라이브를 다시 만드세요.',
@@ -842,7 +846,8 @@ export const ko = {
   'runtime.grubFreeHint': 'ISO를 다시 만들지 않고 제자리에서 수정하므로 부팅 메뉴는 2048바이트 안에 들어가야 합니다.',
   'runtime.grubTooLarge': '호스트가 너무 많습니다. 부팅 메뉴가 2048바이트를 넘었습니다. 행을 지우거나 메뉴 이름을 줄이세요.',
   'runtime.howItWorks': '동작 방식',
-  'runtime.howItWorksBody': '부팅 메뉴 항목은 ai.hostname= 같은 커널 인수를 넘깁니다. 설치가 시작되기 직전에 autoinstall.yaml에서 해당하는 부분만 다시 씁니다. 인수가 없으면 프로필의 값을 사용하므로 멈추지 않습니다.',
+  'runtime.howItWorksBody':
+    '부팅 메뉴 항목은 ai.hostname= 같은 커널 인수를 넘깁니다. 설치가 시작되기 직전에 autoinstall.yaml에서 해당하는 부분만 다시 씁니다. 인수가 없으면 프로필의 값을 그대로 사용합니다. 인수가 있는데 적용할 수 없으면 모든 기기가 같은 값을 갖게 되지 않도록 설치가 중단됩니다.',
   'runtime.previewTitle': '부팅 메뉴 미리 보기',
   'runtime.needIso': 'ISO를 선택하면 실제 부팅 메뉴를 미리 볼 수 있습니다.',
   'runtime.grubFreeBytes': '{bytes}바이트',
@@ -1086,7 +1091,8 @@ export const ko = {
   'validate.raidSizeInvalid': '{field}에 지정한 크기 "{value}"이(가) 올바르지 않습니다. 4G나 512M처럼 쓰세요.',
   'validate.raidVolumeGroupNameInvalid': '볼륨 그룹 이름 "{name}"이(가) 올바르지 않습니다(영문자, 숫자, + _ . -만 사용, -로 시작할 수 없음).',
   'validate.raidRootNameInvalid': '루트의 논리 볼륨 이름 "{name}"이(가) 올바르지 않습니다(영문자, 숫자, + _ . -만 사용, -로 시작할 수 없음).',
-  'validate.raidGrubMirrorUnverified': '두 번째 이후 부팅 디스크로 부트로더를 복사한 결과는 설치된 시스템의 /var/log/autoinstall-raid-esp.log에 기록됩니다. 이 단계는 아직 실제 하드웨어에서 검증되지 않았으니, 첫 번째 디스크를 뺀 상태로도 기기가 시작되는지 확인하세요.',
+  'validate.raidGrubMirrorUnverified':
+    '두 번째 이후 부팅 디스크로 부트로더를 복사한 결과는 설치된 시스템의 /var/log/autoinstall-raid-esp.log에 기록됩니다. 이 단계는 가상 머신에서 실행되는 것만 확인했고 두 번째 디스크만으로 부팅하는 것은 아직 시도하지 않았으니, 첫 번째 디스크를 뺀 상태로도 기기가 시작되는지 확인하세요.',
   'validate.raidGrubMirrorUnreachableDisk': 'EFI 시스템 파티션을 받는 디스크 중 {count}개가 / 또는 /boot를 담는 어떤 어레이의 멤버도 아닙니다. 부트로더는 이번 설치가 실제로 쓰는 디스크에만 복제되므로 그 디스크들에는 사본이 가지 않고, 첫 번째 디스크가 고장 나면 부팅할 수 없습니다. / 또는 /boot의 RAID에 추가하거나 그 디스크들에는 EFI 시스템 파티션을 만들지 마세요.',
   'validate.raidGrubOnlyOnFirstDisk': '부트로더가 첫 번째 부팅 디스크에만 설치됩니다. 그 디스크가 고장 나면 RAID가 살아 있어도 기기가 시작되지 않습니다.',
   'validate.raidMatchIgnored': 'RAID + LVM에서는 "어느 디스크에 설치할지" 선택자가 무시되고, 대신 RAID 설정의 디스크 목록이 쓰입니다.',
@@ -1267,6 +1273,8 @@ export const ko = {
   'about.version': '버전 {version}',
   'about.license': 'MIT 라이선스의 오픈 소스 소프트웨어. Copyright (c) 2026 UnlitCube',
   'about.noWarranty': '어떠한 보증도 없이 제공됩니다. 이 도구는 대상 USB 드라이브를 삭제합니다. 이 드라이브로 부팅한 기기는 누군가 개입하지 않는 한 묻지 않고 대상 디스크를 삭제합니다.',
+  'about.experimental':
+    'Seedstick은 실험적인 프로젝트입니다. 무인 설치는 가상 머신에서만 검증되었고, 물리 서버에서는 아직 검증되지 않았습니다. 기능, 설정, 저장된 프로필의 형식은 버전에 따라 바뀔 수 있습니다. 디스크 내용이 사라져도 괜찮은 기기에서 시험해 보고, 운영 환경의 시스템에는 아직 사용하지 마세요.',
   'about.disclaimer': 'Seedstick은 독립 오픈 소스 프로젝트이며 Canonical Ltd.와 제휴하거나 그 승인 또는 후원을 받지 않았습니다. Ubuntu와 Canonical은 Canonical Ltd.의 등록 상표입니다.',
   'about.noImages': 'Ubuntu 이미지는 포함되어 있지 않습니다. 이 도구는 공식 사이트에서 내려받은 ISO를 이 컴퓨터에서 사용합니다.',
   'about.trademarks': 'Windows는 Microsoft 그룹 회사의 상표입니다. Apple과 macOS는 Apple Inc.의 상표입니다. NVIDIA와 CUDA는 NVIDIA Corporation의 상표입니다. 그 밖의 이름은 각 소유자의 상표입니다.',

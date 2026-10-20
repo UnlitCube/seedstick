@@ -6,6 +6,7 @@ import type { MsgKey } from './ja.js'
 export const fr = {
   'app.name': 'Seedstick',
   'app.tagline': 'Créer une clé USB d’installation automatique d’Ubuntu Server',
+  'app.experimental': 'Expérimental',
   'common.next': 'Suivant',
   'common.language': 'Langue de l’interface',
   'common.back': 'Retour',
@@ -321,7 +322,8 @@ export const fr = {
   'storage.raidBootSize': 'Taille de /boot',
   'storage.raidBootSizeHint': 'Utilisé seulement quand une grappe contient /boot. Par exemple 2G.',
   'storage.raidMirrorBootloader': 'Installer aussi le chargeur d’amorçage sur les autres disques de démarrage',
-  'storage.raidMirrorBootloaderHint': 'curtin n’installe le chargeur d’amorçage que sur un disque. Ceci le copie à la fin de l’installation pour que la machine démarre encore si le premier disque tombe en panne. La procédure n’a pas encore été vérifiée sur du matériel réel.',
+  'storage.raidMirrorBootloaderHint':
+    'curtin n’installe le chargeur d’amorçage que sur un disque. Ceci le copie à la fin de l’installation pour que la machine puisse encore démarrer si le premier disque tombe en panne. L’exécution de la copie a été constatée dans une machine virtuelle, mais le démarrage à partir du seul deuxième disque n’a pas encore été essayé, ni dans une machine virtuelle ni sur du matériel réel.',
   'storage.raidPtableIgnored': 'RAID + LVM n’utilise pas ce réglage. La table de partitions est toujours GPT.',
   'storage.layoutZfsHint': 'Utilise une racine ZFS, avec des instantanés et une vérification d’intégrité bien plus puissants.',
   'storage.modelHint': 'Par exemple Samsung SSD*. Les caractères génériques sont acceptés.',
@@ -335,7 +337,8 @@ export const fr = {
   'storage.serialHint': 'Les caractères génériques sont acceptés, comme dans CT500MX*. Sur une machine à plusieurs disques, c’est la façon la plus fiable de désigner le bon.',
   'storage.serialLabel': 'Numéro de série',
   'storage.usbExcluded': 'La clé USB d’installation elle-même n’est jamais sélectionnée par ces règles (l’installateur l’exclut).',
-  'storage.warningBody': 'Le disque choisi pour l’installation est entièrement effacé, partitions existantes comprises. Essayez la clé USB une fois dans une machine virtuelle avant de l’utiliser sur une machine de production.',
+  'storage.warningBody':
+    'Le disque choisi pour l’installation est entièrement effacé, partitions existantes comprises. Essayez la clé USB une fois dans une machine virtuelle avant de l’utiliser sur une machine réelle.',
   'software.source': 'Étendue de l’installation',
   'software.sourceFull': 'Standard (ubuntu-server)',
   'software.sourceMinimal': 'Minimale (ubuntu-server-minimal)',
@@ -546,7 +549,8 @@ export const fr = {
   'write.troubleApplied': 'Les réglages réellement appliqués sont consultables dans {path} (lisible par root uniquement).',
   'write.troubleLogs': 'Les journaux sont conservés dans {path} sur le système installé.',
   'write.troubleTitle': 'En cas de problème',
-  'write.verifyOptionHint': 'Relit les données écrites et compare les empreintes, ce qui détecte les défauts des clés USB bon marché.',
+  'write.verifyOptionHint':
+    'Relit les données écrites et compare les empreintes. Cela permet de détecter les erreurs d’écriture, fréquentes avec les clés USB bon marché.',
   'write.deviceGone': 'Le périphérique a disparu. Réinsérez-le et actualisez la liste.',
   'write.deviceNotWritable': 'Impossible d’écrire sur ce périphérique. Actualisez la liste des périphériques.',
   'write.deviceStalled': 'L’écriture sur la clé USB n’avance plus. Elle a peut-être été retirée. Réinsérez-la et recréez la clé.',
@@ -842,7 +846,8 @@ export const fr = {
   'runtime.grubFreeHint': 'Le menu de démarrage doit tenir dans 2048 octets, car l’ISO est modifiée sur place au lieu d’être reconstruite.',
   'runtime.grubTooLarge': 'Trop d’hôtes : le menu de démarrage ne tient plus dans 2048 octets. Supprimez des lignes ou raccourcissez les noms du menu.',
   'runtime.howItWorks': 'Fonctionnement',
-  'runtime.howItWorksBody': 'Les entrées du menu de démarrage transmettent des arguments du noyau comme ai.hostname=. Juste avant le début de l’installation, seules les parties correspondantes d’autoinstall.yaml sont réécrites. Sans argument, la valeur du profil est utilisée : rien ne reste bloqué.',
+  'runtime.howItWorksBody':
+    'Les entrées du menu de démarrage transmettent des arguments du noyau comme ai.hostname=. Juste avant le début de l’installation, seules les parties correspondantes d’autoinstall.yaml sont réécrites. Sans argument, la valeur du profil est utilisée telle quelle. Si un argument est présent mais ne peut pas être appliqué, l’installation s’arrête, pour éviter que toutes les machines ne se retrouvent avec la même valeur.',
   'runtime.previewTitle': 'Aperçu du menu de démarrage',
   'runtime.needIso': 'Sélectionnez une ISO pour prévisualiser le vrai menu de démarrage.',
   'runtime.grubFreeBytes': '{bytes} octets',
@@ -1086,7 +1091,8 @@ export const fr = {
   'validate.raidSizeInvalid': 'La taille « {value} » indiquée pour {field} n’est pas valide ; écrivez-la sous la forme 4G ou 512M.',
   'validate.raidVolumeGroupNameInvalid': 'Le nom de groupe de volumes « {name} » n’est pas valide (lettres, chiffres et + _ . - uniquement, sans commencer par -).',
   'validate.raidRootNameInvalid': 'Le nom de volume logique « {name} » pour la racine n’est pas valide (lettres, chiffres et + _ . - uniquement, sans commencer par -).',
-  'validate.raidGrubMirrorUnverified': 'La copie du chargeur d’amorçage vers le deuxième disque de démarrage et les suivants écrit son résultat dans /var/log/autoinstall-raid-esp.log sur le système installé. Cette étape n’a pas encore été vérifiée sur du matériel réel : confirmez que la machine démarre encore une fois le premier disque retiré.',
+  'validate.raidGrubMirrorUnverified':
+    'La copie du chargeur d’amorçage vers le deuxième disque de démarrage et les suivants écrit son résultat dans /var/log/autoinstall-raid-esp.log sur le système installé. L’exécution de cette étape n’a été constatée que dans une machine virtuelle, et le démarrage à partir du seul deuxième disque n’a pas encore été essayé : confirmez que la machine démarre encore une fois le premier disque retiré.',
   'validate.raidGrubMirrorUnreachableDisk': '{count, plural, one {# des disques recevant une partition système EFI n’est membre} other {# des disques recevant une partition système EFI ne sont membres}} d’aucune grappe portant / ou /boot. Le chargeur d’amorçage n’est recopié que sur les disques réellement utilisés par cette installation : {count, plural, one {ce disque ne recevra} other {ces disques ne recevront}} donc pas de copie et ne pourront pas démarrer si le premier disque tombe en panne. Ajoutez-les au RAID de / ou de /boot, ou ne créez pas de partition système EFI dessus.',
   'validate.raidGrubOnlyOnFirstDisk': 'Le chargeur d’amorçage n’est installé que sur le premier disque de démarrage. S’il tombe en panne, la machine ne démarrera pas, même si le RAID survit.',
   'validate.raidMatchIgnored': 'Avec RAID + LVM, le sélecteur « sur quel disque installer » est ignoré ; la liste des disques des réglages RAID est utilisée à la place.',
@@ -1267,6 +1273,8 @@ export const fr = {
   'about.version': 'Version {version}',
   'about.license': 'Logiciel libre sous licence MIT. Copyright (c) 2026 UnlitCube',
   'about.noWarranty': 'Fourni sans garantie. Cet outil efface la clé USB cible. Une machine démarrée depuis cette clé efface son disque cible sans demander, sauf si quelqu’un intervient.',
+  'about.experimental':
+    'Seedstick est un projet expérimental. Les installations automatiques n’ont été vérifiées que dans des machines virtuelles, pas encore sur des serveurs physiques, et les fonctionnalités, les réglages et le format des profils enregistrés peuvent changer d’une version à l’autre. Essayez-le sur des machines dont vous pouvez vous permettre de perdre les disques, et ne vous y fiez pas encore pour des systèmes de production.',
   'about.disclaimer': 'Seedstick est un projet libre indépendant. Il n’est ni affilié à Canonical Ltd., ni approuvé ou parrainé par elle. Ubuntu et Canonical sont des marques déposées de Canonical Ltd.',
   'about.noImages': 'Aucune image Ubuntu n’est fournie. L’outil utilise, sur cet ordinateur, l’ISO que vous avez téléchargée sur le site officiel.',
   'about.trademarks': 'Windows est une marque du groupe de sociétés Microsoft. Apple et macOS sont des marques d’Apple Inc. NVIDIA et CUDA sont des marques de NVIDIA Corporation. Les autres noms sont des marques de leurs propriétaires respectifs.',

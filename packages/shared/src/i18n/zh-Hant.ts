@@ -6,6 +6,7 @@ import type { MsgKey } from './ja.js'
 export const zhHant = {
   'app.name': 'Seedstick',
   'app.tagline': '製作 Ubuntu Server 無人安裝 USB',
+  'app.experimental': '實驗性',
   'common.next': '下一步',
   'common.language': '顯示語言',
   'common.back': '返回',
@@ -321,7 +322,8 @@ export const zhHant = {
   'storage.raidBootSize': '/boot 的大小',
   'storage.raidBootSizeHint': '只在有陣列放置 /boot 時使用。例如 2G。',
   'storage.raidMirrorBootloader': '也在其他開機磁碟上安裝開機載入程式',
-  'storage.raidMirrorBootloaderHint': 'curtin 只會在一個磁碟上安裝開機載入程式。此選項會在安裝結束時複製它，讓第一個磁碟故障後機器仍能開機。此程序尚未在實體機上驗證。',
+  'storage.raidMirrorBootloaderHint':
+    'curtin 只會在一個磁碟上安裝開機載入程式。此選項會在安裝結束時複製它，讓第一個磁碟故障後機器仍能開機。複製過程已在虛擬機器中確認能執行，但只靠第二個磁碟能否開機，無論在虛擬機器或實體機上都還沒有試過。',
   'storage.raidPtableIgnored': 'RAID + LVM 不使用此設定。分割表一律為 GPT。',
   'storage.layoutZfsHint': '使用 ZFS 作為根，快照與資料完整性檢查功能強大得多。',
   'storage.modelHint': '例如 Samsung SSD*。可以使用萬用字元。',
@@ -335,7 +337,8 @@ export const zhHant = {
   'storage.serialHint': '可以使用萬用字元，例如 CT500MX*。在有多個磁碟的機器上，這是指定目標磁碟最可靠的方法。',
   'storage.serialLabel': '序號',
   'storage.usbExcluded': '這些規則絕不會比對到安裝 USB 本身（安裝程式會將它排除）。',
-  'storage.warningBody': '選作安裝目標的磁碟會被完全清除，包括現有的所有分割區。在正式機器上使用之前，請先在虛擬機器中試用一次這個 USB。',
+  'storage.warningBody':
+    '選作安裝目標的磁碟會被完全清除，包括現有的所有分割區。在實機上使用之前，請先在虛擬機器中試用一次這個 USB。',
   'software.source': '安裝範圍',
   'software.sourceFull': '標準（ubuntu-server）',
   'software.sourceMinimal': '最小（ubuntu-server-minimal）',
@@ -546,7 +549,8 @@ export const zhHant = {
   'write.troubleApplied': '實際套用的設定可以在 {path} 中確認（僅 root 可讀取）。',
   'write.troubleLogs': '記錄保存在已安裝系統的 {path}。',
   'write.troubleTitle': '如果發生問題',
-  'write.verifyOptionHint': '把寫入的資料讀回並比對雜湊值，可以找出廉價 USB 隨身碟的瑕疵。',
+  'write.verifyOptionHint':
+    '把寫入的資料讀回並比對雜湊值。可以找出廉價 USB 隨身碟常見的寫入錯誤。',
   'write.deviceGone': '裝置已不存在。請重新插入並重新整理清單。',
   'write.deviceNotWritable': '無法寫入此裝置。請重新整理裝置清單。',
   'write.deviceStalled': '寫入 USB 隨身碟停滯了，它可能已被拔出。請重新插入並再次製作。',
@@ -842,7 +846,8 @@ export const zhHant = {
   'runtime.grubFreeHint': '由於 ISO 是就地修改而非重新建置，開機選單必須控制在 2048 位元組以內。',
   'runtime.grubTooLarge': '主機太多：開機選單已超過 2048 位元組。請移除一些列或縮短選單名稱。',
   'runtime.howItWorks': '運作方式',
-  'runtime.howItWorksBody': '開機選單項目會傳遞 ai.hostname= 等核心參數。在安裝開始之前，只改寫 autoinstall.yaml 中對應的部分。沒有參數時使用設定檔中的值，因此不會卡住。',
+  'runtime.howItWorksBody':
+    '開機選單項目會傳遞 ai.hostname= 等核心參數。在安裝開始之前，只改寫 autoinstall.yaml 中對應的部分。沒有參數時直接使用設定檔中的值。有參數卻無法套用時，安裝會停止，以免每台機器都得到相同的值。',
   'runtime.previewTitle': '開機選單預覽',
   'runtime.needIso': '選擇 ISO 後即可預覽實際的開機選單。',
   'runtime.grubFreeBytes': '{bytes} 位元組',
@@ -1086,7 +1091,8 @@ export const zhHant = {
   'validate.raidSizeInvalid': '{field}的大小「{value}」無效；請寫成 4G 或 512M 的形式。',
   'validate.raidVolumeGroupNameInvalid': '卷冊群組名稱「{name}」無效（只能使用字母、數字和 + _ . -，且不能以 - 開頭）。',
   'validate.raidRootNameInvalid': '根目錄的邏輯卷冊名稱「{name}」無效（只能使用字母、數字和 + _ . -，且不能以 - 開頭）。',
-  'validate.raidGrubMirrorUnverified': '將開機載入程式複製到第二顆及之後的開機碟時，結果會寫入已安裝系統的 /var/log/autoinstall-raid-esp.log。這一步尚未在實機上驗證，請確認拔掉第一顆磁碟後機器仍能啟動。',
+  'validate.raidGrubMirrorUnverified':
+    '將開機載入程式複製到第二顆及之後的開機碟時，結果會寫入已安裝系統的 /var/log/autoinstall-raid-esp.log。這一步只在虛擬機器中確認過能執行，單靠第二顆磁碟開機也還沒有試過，因此請確認拔掉第一顆磁碟後機器仍能啟動。',
   'validate.raidGrubMirrorUnreachableDisk': '帶有 EFI 系統分割區的磁碟中，有 {count} 顆不是承載 / 或 /boot 的任何陣列的成員。開機載入程式只會複製到本次安裝實際使用的磁碟，因此這些磁碟不會取得副本，第一顆磁碟故障時無法從它們開機。請把它們加入 / 或 /boot 的 RAID，或者不要在它們上面建立 EFI 系統分割區。',
   'validate.raidGrubOnlyOnFirstDisk': '開機載入程式只安裝在第一顆開機碟上。即使 RAID 存活，只要這顆磁碟故障，機器就無法啟動。',
   'validate.raidMatchIgnored': '使用 RAID + LVM 時，「安裝到哪顆磁碟」的選擇器會被忽略，改用 RAID 設定中的磁碟清單。',
@@ -1267,6 +1273,8 @@ export const zhHant = {
   'about.version': '版本 {version}',
   'about.license': '採用 MIT 授權條款的開放原始碼軟體。Copyright (c) 2026 UnlitCube',
   'about.noWarranty': '不提供任何擔保。本工具會清除目標 USB 隨身碟。從該隨身碟開機的機器，除非有人介入，否則會不經詢問清除其目標磁碟。',
+  'about.experimental':
+    'Seedstick 是一個實驗性專案。無人安裝僅在虛擬機器中驗證過，尚未在實體伺服器上驗證。功能、設定以及已儲存設定檔的格式可能會隨版本而改變。請在磁碟內容遺失也無妨的機器上試用，目前請勿將它用於正式環境的系統。',
   'about.disclaimer': 'Seedstick 是獨立的開放原始碼專案，與 Canonical Ltd. 沒有關聯，也未獲其認可或贊助。Ubuntu 和 Canonical 是 Canonical Ltd. 的註冊商標。',
   'about.noImages': '本工具不附帶任何 Ubuntu 映像檔。它在這台電腦上使用你從官方網站下載的 ISO。',
   'about.trademarks': 'Windows 是 Microsoft 集團公司的商標。Apple 和 macOS 是 Apple Inc. 的商標。NVIDIA 和 CUDA 是 NVIDIA Corporation 的商標。其他名稱為其各自所有者的商標。',

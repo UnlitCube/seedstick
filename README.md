@@ -1,12 +1,20 @@
 # Seedstick
 
 **Build an unattended-install USB drive for Ubuntu Server, with a GUI.**
-Pick the official ISO, fill in a wizard, write the drive. Plug it into a server,
-power on, and the install runs to the end on its own: hostname, users, network,
-disk layout, packages and post-install setup included.
+Pick the official ISO, fill in a wizard, write the drive. Plug it into a server and
+power on: the install is set up to run to the end on its own, hostname, users,
+network, disk layout, packages and post-install setup included (so far verified in
+virtual machines only; see the warning below).
 
-Windows · macOS · Linux (Electron) · MIT License ·
+Windows · macOS · Linux (Electron) · MIT License · **Experimental** ·
 [Website](https://unlitcube.github.io/seedstick/) · [日本語の README](README.ja.md)
+
+> [!WARNING]
+> **Seedstick is an experimental project.** Unattended installs have only been
+> verified in virtual machines, not yet on physical servers, and features, settings
+> and the saved-profile format may change between versions. Try it on machines whose
+> disks you can afford to lose, and do not rely on it for production systems yet.
+> While the version is 0.x, releases are published as GitHub *pre-releases*.
 
 ```
 ┌────────────────┐   ┌──────────────────────┐   ┌──────────────────────┐
@@ -34,10 +42,13 @@ Windows · macOS · Linux (Electron) · MIT License ·
 - **Stops dangerous settings before writing.** For example "SSH password login is
   off but no public key is registered" (you would be locked out), or a malformed
   password hash that makes Ubuntu 26.10's installer fail at the very end.
-- **System disks can never be selected.** Internal disks, the disk the OS runs from
-  and anything over 2 TB are blocked while enumerating (they are listed separately,
-  with the reason). You type a confirmation word before anything is written.
-- **Read-back verification** after writing catches bad cheap USB sticks.
+- **System disks are blocked from selection.** Internal disks, the disk the OS runs
+  from and anything over 2 TB are blocked while enumerating (they are listed
+  separately, with the reason). This was checked on real hardware on Windows only;
+  on macOS and Linux, check the list yourself (see [Known limitations](#known-limitations)).
+  You type a confirmation word before anything is written.
+- **Read-back verification** after writing can catch write errors, which are common
+  with cheap USB sticks.
 - **The ISO is not rebuilt.** A few sectors are patched in place on the drive and a
   small `CIDATA` partition is appended, so writing takes about as long as copying
   the ISO. Your ISO file itself is never modified.
@@ -62,7 +73,7 @@ Windows · macOS · Linux (Electron) · MIT License ·
 | 22.04 LTS (Jammy) | supported; end of life April 2027 (the app warns from six months before) | no completed run yet |
 | 24.04 LTS (Noble) | supported | 24.04.5: single disk. 24.04.3: single disk, RAID + LVM, ESP on two disks + bonding, IP picked from the boot menu |
 | 25.10 (Questing) | usable, but **end of life since the end of July 2026** (the app warns) | not run |
-| 26.04 LTS (Resolute) | supported | not run (no ISO tested yet) |
+| 26.04 LTS (Resolute) | supported | not run (the patching tests use data read from the 26.04.1 ISO) |
 | 26.10 (Stonking) | supported | single disk |
 
 "Supported" means the configuration is generated for that release's schema and the
@@ -75,13 +86,14 @@ not work on arm64. NVIDIA driver / CUDA setup needs an amd64 ISO and an LTS rele
 
 Get the latest build from the
 [Releases page](https://github.com/UnlitCube/seedstick/releases).
-Each release has a `SHA256SUMS.txt`.
+Each release has a `SHA256SUMS.txt`. Releases are marked as *pre-releases* while
+Seedstick is experimental (0.x).
 
 | | Installer | Portable |
 |---|---|---|
 | Windows (x64) | `Seedstick-<v>-win-x64-Setup.exe` | `Seedstick-<v>-win-x64-portable.exe` |
 | macOS (Intel / Apple Silicon) | `Seedstick-<v>-mac-{x64,arm64}.dmg` | `Seedstick-<v>-mac-{x64,arm64}.zip` |
-| Linux (x64, experimental) | `Seedstick-<v>-linux-x64.deb` | — |
+| Linux (x64) | `Seedstick-<v>-linux-x64.deb` | — |
 
 The Windows installer installs for the current user only (no administrator rights
 needed) and is removed from *Settings → Apps*. Writing to a USB drive asks for
@@ -108,10 +120,11 @@ covered yet ([docs/LEGAL.md](docs/LEGAL.md)).
 
 - Unattended installs were verified **in virtual machines** (QEMU with UEFI), not
   yet on physical servers. Legacy BIOS boot has not been tested.
-- **macOS and Linux:** USB device enumeration (including recognising the system
-  disk) and the elevation prompt (`osascript` / `pkexec`) have not been tested on
-  real hardware yet. Check the device list carefully before writing, and please
-  report what you see.
+- **Writing to a USB drive** was verified on Windows, with one real USB stick.
+  **On macOS and Linux**, USB device enumeration (including recognising the system
+  disk), the elevation prompt (`osascript` / `pkexec`) and writing to the drive have
+  not been tested on real hardware yet. Check the device list carefully before
+  writing, and please report what you see.
 - Picking the hostname or target disk from the boot menu, and the post-install
   steps (extra users, files, services, NVIDIA / CUDA), are covered by unit tests but
   have not been run in a full install yet. Only picking the IP address from the
@@ -148,7 +161,8 @@ covered yet ([docs/LEGAL.md](docs/LEGAL.md)).
 ```
 
 1. The official ISO is written raw, keeping its boot code, so the drive boots like
-   the official image (verified with UEFI; legacy BIOS boot is untested). The
+   the official image (verified in a UEFI virtual machine, QEMU with OVMF; not yet on
+   physical hardware, and legacy BIOS boot is untested). The
    partition table is rebuilt for the size of the drive.
 2. Only `/boot/grub/grub.cfg` inside the ISO is patched in place: it gains the
    `autoinstall` kernel argument (without it the installer stops at

@@ -81,7 +81,17 @@ export function App(): React.JSX.Element {
         <div className="flex items-center gap-2.5">
           <Disc3 className="size-5 text-sky-600" aria-hidden />
           <div>
-            <h1 className="text-sm font-semibold leading-tight">{t('app.name')}</h1>
+            <h1 className="flex items-center gap-1.5 text-sm font-semibold leading-tight">
+              {t('app.name')}
+              {/* 実験的な製品であることを常に見えるところに出す。中身の説明は About に置き、ここは札だけ */}
+              <span
+                data-experimental-badge
+                title={t('about.experimental')}
+                className="rounded-full border border-amber-300 bg-amber-50 px-1.5 py-px text-[10px] font-medium text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+              >
+                {t('app.experimental')}
+              </span>
+            </h1>
             <p className="text-xs leading-tight text-slate-500 dark:text-slate-400">{t('app.tagline')}</p>
           </div>
         </div>

@@ -2,7 +2,7 @@
   "name": "seedstick",
   "private": true,
   "version": "0.1.0",
-  "description": "Unofficial GUI for building unattended-install USB drives for Ubuntu Server (Electron, Windows/macOS/Linux)",
+  "description": "Experimental, unofficial GUI for building unattended-install USB drives for Ubuntu Server (Electron, Windows/macOS/Linux)",
   "workspaces": [
     "packages/*",
     "apps/*"

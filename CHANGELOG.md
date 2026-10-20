@@ -7,8 +7,14 @@
 ## v0.1.0
 
 The first public release of **Seedstick**: a GUI that builds unattended-install USB
-drives for Ubuntu Server without rebuilding the ISO.
+drives for Ubuntu Server without rebuilding the ISO. It is published as an
+**experimental pre-release**.
 
+> **Seedstick is experimental.** Unattended installs have only been verified in
+> virtual machines, not yet on physical servers, and features, settings and the
+> saved-profile format may change between versions. Try it on machines whose disks
+> you can afford to lose, and do not rely on it for production systems yet.
+>
 > **Seedstick erases things.** Writing erases the selected USB drive, and a machine
 > booted from it erases its target disk without asking. Read the warning at the top of
 > the [README](https://github.com/UnlitCube/seedstick#readme) first.
@@ -21,7 +27,8 @@ drives for Ubuntu Server without rebuilding the ISO.
 - Ubuntu Server **22.04 LTS, 24.04 LTS, 25.10 (end of life, with a warning),
   26.04 LTS and 26.10**, live-server ISOs for amd64. arm64 ISOs are recognised but
   untested; RAID boot-disk mirroring and NVIDIA / CUDA are amd64-only.
-- System disks, internal disks and drives over 2 TB can never be selected as targets.
+- System disks, internal disks and drives over 2 TB are blocked as targets while
+  enumerating (checked on real hardware on Windows; not yet on macOS or Linux).
 - Validation that stops settings which would lock you out or make the install fail
   late, before anything is written.
 - Hostname, IP address and target disk can be picked from the boot menu, so one
@@ -35,7 +42,7 @@ drives for Ubuntu Server without rebuilding the ISO.
 ### Downloads
 
 Windows installer and portable `.exe`, macOS `.dmg` and `.zip` for Intel and
-Apple Silicon, Linux `.deb` (experimental). Check the files against `SHA256SUMS.txt`.
+Apple Silicon, Linux `.deb`. Check the files against `SHA256SUMS.txt`.
 
 ### Known limitations
 
@@ -45,7 +52,8 @@ Apple Silicon, Linux `.deb` (experimental). Check the files against `SHA256SUMS.
 - Unattended installs were verified end to end in virtual machines (QEMU, UEFI):
   24.04 with a single disk, RAID + LVM, two ESPs with bonding, and an IP picked from the
   boot menu; 26.10 with a single disk.
-  Writing was verified on a real USB drive. **A full install on physical servers has
+  Writing was verified on Windows with one real USB drive; writing on macOS and Linux
+  has not been tried on real hardware yet. **A full install on physical servers has
   not been verified yet**, nor legacy BIOS boot, 802.3ad bonding against a real switch
   or failover on a pulled cable, booting from the second disk of a RAID pair, or USB
   device enumeration and elevation on macOS and Linux hardware.

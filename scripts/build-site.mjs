@@ -31,6 +31,8 @@ for (const l of LOCALES) {
 
 const APP_KEYS = [
   'app.tagline',
+  'app.experimental',
+  'about.experimental',
   'common.language',
   'about.noWarranty',
   'about.license',
@@ -69,12 +71,19 @@ async function latestRelease() {
   const token = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN
   if (token) headers.Authorization = `Bearer ${token}`
   try {
-    const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers })
+    // **`/releases/latest` は使わない。** 実験的な間（0.x）は Release をプレリリースにしており、
+    // `/releases/latest` はプレリリースを返さない（404 になってボタンが全部 Releases の一覧へ落ちる）。
+    // 一覧は作成日時の新しい順なので、下書きでない最初のものを採る。
+    const res = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=20`, { headers })
     if (!res.ok) {
       console.log(`latest release: HTTP ${res.status} (links point to the releases page)`)
       return null
     }
-    const rel = await res.json()
+    const rel = (await res.json()).find((r) => !r.draft)
+    if (!rel) {
+      console.log('latest release: none published yet (links point to the releases page)')
+      return null
+    }
     return {
       tag: rel.tag_name,
       url: rel.html_url,
@@ -87,7 +96,8 @@ async function latestRelease() {
 }
 
 const release = await latestRelease()
-const RELEASES_PAGE = `${REPO_URL}/releases/latest`
+// `/releases/latest` はプレリリースしか無いと 404 になるので、一覧を指す
+const RELEASES_PAGE = `${REPO_URL}/releases`
 
 function asset(kind) {
   const hit = release?.assets.find((a) => ASSET_PATTERNS[kind].test(a.name))
@@ -190,7 +200,7 @@ function page(locale) {
     <main>
       <section class="hero">
         <div class="wrap">
-          <h1>Seedstick</h1>
+          <h1>Seedstick <span class="badge">${esc(a['app.experimental'])}</span></h1>
           <p class="tagline">${esc(a['app.tagline'])}</p>
           <p class="lead">${esc(s.metaDescription)}</p>
           <p class="actions">
@@ -206,6 +216,7 @@ function page(locale) {
         <div class="wrap">
           <div class="callout">
             <h2 id="safety-title">${esc(s.safetyTitle)}</h2>
+            <p><strong>${esc(a['about.experimental'])}</strong></p>
             <p><strong>${esc(a['about.noWarranty'])}</strong></p>
             <p>${esc(s.safetyAdvice)}</p>
           </div>
@@ -274,7 +285,7 @@ function page(locale) {
               ${dl('macX64Zip', `${s.portable} (.zip)`)}
             </div>
             <div class="platform">
-              <h3>Linux <span>x64 · ${esc(s.experimental)}</span></h3>
+              <h3>Linux <span>x64</span></h3>
               ${dl('linuxDeb', `${s.installer} (.deb)`)}
             </div>
           </div>

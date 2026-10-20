@@ -6,6 +6,7 @@ import type { MsgKey } from './ja.js'
 export const ptBR = {
   'app.name': 'Seedstick',
   'app.tagline': 'Crie um pendrive de instalação automática do Ubuntu Server',
+  'app.experimental': 'Experimental',
   'common.next': 'Avançar',
   'common.language': 'Idioma da interface',
   'common.back': 'Voltar',
@@ -321,7 +322,8 @@ export const ptBR = {
   'storage.raidBootSize': 'Tamanho do /boot',
   'storage.raidBootSizeHint': 'Só é usado quando um arranjo contém o /boot. Por exemplo 2G.',
   'storage.raidMirrorBootloader': 'Instalar o carregador de inicialização também nos outros discos de inicialização',
-  'storage.raidMirrorBootloaderHint': 'O curtin instala o carregador de inicialização em um único disco. Isto o copia no fim da instalação para que a máquina continue inicializando se o primeiro disco falhar. O procedimento ainda não foi verificado em hardware real.',
+  'storage.raidMirrorBootloaderHint':
+    'O curtin instala o carregador de inicialização em um único disco. Isto o copia no fim da instalação para que a máquina possa continuar inicializando se o primeiro disco falhar. A cópia foi observada em execução em uma máquina virtual, mas inicializar apenas pelo segundo disco ainda não foi testado, nem em máquina virtual nem em hardware real.',
   'storage.raidPtableIgnored': 'RAID + LVM não usa esta configuração. A tabela de partições é sempre GPT.',
   'storage.layoutZfsHint': 'Usa uma raiz ZFS, com snapshots e verificação de integridade muito mais fortes.',
   'storage.modelHint': 'Por exemplo Samsung SSD*. Curingas são permitidos.',
@@ -335,7 +337,8 @@ export const ptBR = {
   'storage.serialHint': 'Curingas são permitidos, como em CT500MX*. Em uma máquina com vários discos, é a forma mais confiável de indicar o disco certo.',
   'storage.serialLabel': 'Número de série',
   'storage.usbExcluded': 'O próprio pendrive de instalação nunca é escolhido por estas regras (o instalador o exclui).',
-  'storage.warningBody': 'O disco escolhido para a instalação é apagado por completo, com todas as partições existentes. Teste o pendrive uma vez em uma máquina virtual antes de usá-lo em uma máquina de produção.',
+  'storage.warningBody':
+    'O disco escolhido para a instalação é apagado por completo, com todas as partições existentes. Teste o pendrive uma vez em uma máquina virtual antes de usá-lo em uma máquina real.',
   'software.source': 'Abrangência da instalação',
   'software.sourceFull': 'Padrão (ubuntu-server)',
   'software.sourceMinimal': 'Mínima (ubuntu-server-minimal)',
@@ -546,7 +549,8 @@ export const ptBR = {
   'write.troubleApplied': 'As configurações realmente aplicadas podem ser conferidas em {path} (somente root pode ler).',
   'write.troubleLogs': 'Os logs ficam em {path} no sistema instalado.',
   'write.troubleTitle': 'Se algo der errado',
-  'write.verifyOptionHint': 'Lê de volta os dados gravados e compara os hashes, o que detecta defeitos de pendrives baratos.',
+  'write.verifyOptionHint':
+    'Lê de volta os dados gravados e compara os hashes. Isso pode detectar erros de gravação, comuns em pendrives baratos.',
   'write.deviceGone': 'O dispositivo sumiu. Conecte-o de novo e atualize a lista.',
   'write.deviceNotWritable': 'Não é possível gravar neste dispositivo. Atualize a lista de dispositivos.',
   'write.deviceStalled': 'A gravação no pendrive parou de avançar. Ele pode ter sido removido. Conecte-o de novo e crie o pendrive outra vez.',
@@ -842,7 +846,8 @@ export const ptBR = {
   'runtime.grubFreeHint': 'O menu de inicialização precisa caber em 2048 bytes, porque a ISO é alterada no lugar em vez de reconstruída.',
   'runtime.grubTooLarge': 'Hosts demais: o menu de inicialização não cabe mais em 2048 bytes. Remova linhas ou encurte os nomes do menu.',
   'runtime.howItWorks': 'Como funciona',
-  'runtime.howItWorksBody': 'As entradas do menu de inicialização passam argumentos do kernel como ai.hostname=. Logo antes de a instalação começar, só as partes correspondentes do autoinstall.yaml são reescritas. Sem argumento, o valor do perfil é usado, então nada fica travado.',
+  'runtime.howItWorksBody':
+    'As entradas do menu de inicialização passam argumentos do kernel como ai.hostname=. Logo antes de a instalação começar, só as partes correspondentes do autoinstall.yaml são reescritas. Sem argumento, o valor do perfil é usado como está. Se houver um argumento, mas ele não puder ser aplicado, a instalação é interrompida, para evitar que todas as máquinas fiquem com o mesmo valor.',
   'runtime.previewTitle': 'Prévia do menu de inicialização',
   'runtime.needIso': 'Selecione uma ISO para ver a prévia do menu de inicialização real.',
   'runtime.grubFreeBytes': '{bytes} bytes',
@@ -1086,7 +1091,8 @@ export const ptBR = {
   'validate.raidSizeInvalid': 'O tamanho "{value}" informado para {field} é inválido; escreva como 4G ou 512M.',
   'validate.raidVolumeGroupNameInvalid': 'O nome do grupo de volumes "{name}" é inválido (só letras, dígitos e + _ . -, e não pode começar com -).',
   'validate.raidRootNameInvalid': 'O nome do volume lógico "{name}" para a raiz é inválido (só letras, dígitos e + _ . -, e não pode começar com -).',
-  'validate.raidGrubMirrorUnverified': 'Copiar o carregador de inicialização para o segundo disco de inicialização e os seguintes grava o resultado em /var/log/autoinstall-raid-esp.log no sistema instalado. Essa etapa ainda não foi verificada em hardware real, então confirme que a máquina ainda inicia sem o primeiro disco.',
+  'validate.raidGrubMirrorUnverified':
+    'Copiar o carregador de inicialização para o segundo disco de inicialização e os seguintes grava o resultado em /var/log/autoinstall-raid-esp.log no sistema instalado. Essa etapa só foi observada em execução em uma máquina virtual, e inicializar apenas pelo segundo disco ainda não foi testado, então confirme que a máquina ainda inicia sem o primeiro disco.',
   'validate.raidGrubMirrorUnreachableDisk': '{count, plural, one {# dos discos que recebem uma partição de sistema EFI não é membro} other {# dos discos que recebem uma partição de sistema EFI não são membros}} de nenhum arranjo que sustenta / ou /boot. O carregador de inicialização só é espelhado nos discos que esta instalação realmente usa, então {count, plural, one {esse disco não receberá} other {esses discos não receberão}} uma cópia e não poderão iniciar se o primeiro disco falhar. Adicione-os ao RAID de / ou /boot, ou não crie neles uma partição de sistema EFI.',
   'validate.raidGrubOnlyOnFirstDisk': 'O carregador de inicialização é instalado só no primeiro disco de inicialização. Se ele falhar, a máquina não inicia, mesmo que o RAID sobreviva.',
   'validate.raidMatchIgnored': 'Com RAID + LVM, o seletor "em qual disco instalar" é ignorado; em vez dele é usada a lista de discos das configurações de RAID.',
@@ -1267,6 +1273,8 @@ export const ptBR = {
   'about.version': 'Versão {version}',
   'about.license': 'Software de código aberto sob a Licença MIT. Copyright (c) 2026 UnlitCube',
   'about.noWarranty': 'Fornecido sem garantia. Esta ferramenta apaga o pendrive de destino. Uma máquina iniciada por esse pendrive apaga o disco de destino sem perguntar, a menos que alguém intervenha.',
+  'about.experimental':
+    'O Seedstick é um projeto experimental. As instalações desassistidas só foram verificadas em máquinas virtuais, ainda não em servidores físicos, e os recursos, as configurações e o formato dos perfis salvos podem mudar de uma versão para outra. Teste-o em máquinas cujos discos você possa perder sem problema e ainda não confie nele para sistemas de produção.',
   'about.disclaimer': 'O Seedstick é um projeto de código aberto independente. Não é afiliado à Canonical Ltd. nem endossado ou patrocinado por ela. Ubuntu e Canonical são marcas registradas da Canonical Ltd.',
   'about.noImages': 'Nenhuma imagem do Ubuntu vem incluída. A ferramenta usa, neste computador, a ISO que você baixou do site oficial.',
   'about.trademarks': 'Windows é uma marca do grupo de empresas Microsoft. Apple e macOS são marcas da Apple Inc. NVIDIA e CUDA são marcas da NVIDIA Corporation. Os demais nomes são marcas de seus respectivos proprietários.',

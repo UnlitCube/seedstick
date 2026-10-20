@@ -6,6 +6,7 @@ export const en = {
   // --- common ---
   'app.name': 'Seedstick',
   'app.tagline': 'Build an unattended Ubuntu Server install USB',
+  'app.experimental': 'Experimental',
   'common.next': 'Next',
   'common.language': 'Display language',
   'common.back': 'Back',
@@ -399,7 +400,7 @@ export const en = {
   'storage.raidBootSizeHint': 'Only used when an array holds /boot. For example 2G.',
   'storage.raidMirrorBootloader': 'Install the bootloader on the other boot disks too',
   'storage.raidMirrorBootloaderHint':
-    'curtin installs the bootloader on one disk only. This copies it at the end of the installation so the machine still boots if the first disk dies. The procedure has not been verified on real hardware yet.',
+    'curtin installs the bootloader on one disk only. This copies it at the end of the installation so that the machine can still boot if the first disk dies. The copy has been seen to run in a virtual machine, but booting from the second disk alone has not been tried yet, in a virtual machine or on real hardware.',
   'storage.raidPtableIgnored':
     'RAID + LVM does not use this setting. The partition table is always GPT.',
   'storage.layoutZfsHint':
@@ -419,7 +420,7 @@ export const en = {
   'storage.usbExcluded':
     'The installation USB itself is never matched by these rules (the installer excludes it).',
   'storage.warningBody':
-    'The disk chosen for the installation is erased completely, existing partitions and all. Try the USB once in a virtual machine before you use it on a production machine.',
+    'The disk chosen for the installation is erased completely, existing partitions and all. Try the USB once in a virtual machine before you use it on a real machine.',
 
   // --- software ---
   'software.source': 'Installation scope',
@@ -679,7 +680,7 @@ export const en = {
   'write.troubleLogs': 'Logs are kept in {path} on the installed system.',
   'write.troubleTitle': 'If something goes wrong',
   'write.verifyOptionHint':
-    'Reads the written data back and compares hashes, which catches defects in cheap USB drives.',
+    'Reads the written data back and compares hashes. This can catch write errors, which are common with cheap USB drives.',
 
   // Progress and failures for the write itself (carried from main / media as LocalizedText)
   'write.deviceGone': 'The device is gone. Re-insert it and reload the list.',
@@ -1088,7 +1089,7 @@ Date: {date}`,
     'Too many hosts: the boot menu no longer fits in 2048 bytes. Remove rows or shorten the menu names.',
   'runtime.howItWorks': 'How it works',
   'runtime.howItWorksBody':
-    'Boot menu entries pass kernel arguments such as ai.hostname=. Just before the install starts, only the matching parts of autoinstall.yaml are rewritten. If no argument is present the profile value is used, so nothing stalls.',
+    'Boot menu entries pass kernel arguments such as ai.hostname=. Just before the install starts, only the matching parts of autoinstall.yaml are rewritten. If no argument is present, the profile value is used as is. If an argument is present but cannot be applied, the install stops, so that every machine does not end up with the same value.',
   'runtime.previewTitle': 'Boot menu preview',
   'runtime.needIso': 'Select an ISO to preview the real boot menu.',
   'runtime.grubFreeBytes': '{bytes} bytes',
@@ -1462,7 +1463,7 @@ Date: {date}`,
   'validate.raidRootNameInvalid':
     'The logical volume name "{name}" for root is not valid (letters, digits and + _ . - only, and it cannot start with -).',
   'validate.raidGrubMirrorUnverified':
-    'Copying the bootloader to the second and later boot disks writes its result to /var/log/autoinstall-raid-esp.log on the installed system. That step has not been verified on real hardware yet, so confirm that the machine still starts with the first disk removed.',
+    'Copying the bootloader to the second and later boot disks writes its result to /var/log/autoinstall-raid-esp.log on the installed system. That step has only been seen to run in a virtual machine, and booting from the second disk alone has not been tried yet, so confirm that the machine still starts with the first disk removed.',
   'validate.raidGrubMirrorUnreachableDisk':
     '{count, plural, one {# of the disks that get an EFI system partition is} other {# of the disks that get an EFI system partition are}} not a member of any array backing / or /boot. The bootloader is only mirrored to disks this install actually uses, so {count, plural, one {that disk} other {those disks}} will not receive a copy and cannot boot if the first disk fails. Either add them to the / or /boot RAID, or do not create an EFI system partition on them.',
   'validate.raidGrubOnlyOnFirstDisk':
@@ -1703,6 +1704,8 @@ Date: {date}`,
   'about.version': 'Version {version}',
   'about.license': 'Open-source software under the MIT License. Copyright (c) 2026 UnlitCube',
   'about.noWarranty': 'Provided without warranty. This tool erases the target USB drive. A machine booted from the drive erases its target disk without asking unless someone intervenes.',
+  'about.experimental':
+    'Seedstick is an experimental project. Unattended installs have only been verified in virtual machines, not yet on physical servers, and features, settings and the saved-profile format may change between versions. Try it on machines whose disks you can afford to lose, and do not rely on it for production systems yet.',
   'about.disclaimer': 'Seedstick is an independent open-source project. It is not affiliated with, endorsed by, or sponsored by Canonical Ltd. Ubuntu and Canonical are registered trademarks of Canonical Ltd.',
   'about.noImages': 'No Ubuntu image is bundled. The tool uses the ISO you downloaded from the official site, on this computer.',
   'about.trademarks': 'Windows is a trademark of the Microsoft group of companies. Apple and macOS are trademarks of Apple Inc. NVIDIA and CUDA are trademarks of NVIDIA Corporation. Other names are trademarks of their respective owners.',

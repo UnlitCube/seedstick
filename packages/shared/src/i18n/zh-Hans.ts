@@ -6,6 +6,7 @@ import type { MsgKey } from './ja.js'
 export const zhHans = {
   'app.name': 'Seedstick',
   'app.tagline': '制作 Ubuntu Server 无人值守安装 USB',
+  'app.experimental': '实验性',
   'common.next': '下一步',
   'common.language': '显示语言',
   'common.back': '返回',
@@ -321,7 +322,8 @@ export const zhHans = {
   'storage.raidBootSize': '/boot 的大小',
   'storage.raidBootSizeHint': '仅在有阵列放置 /boot 时使用。例如 2G。',
   'storage.raidMirrorBootloader': '也在其他启动盘上安装引导程序',
-  'storage.raidMirrorBootloaderHint': 'curtin 只在一块磁盘上安装引导程序。此选项会在安装结束时复制它，使第一块磁盘损坏后机器仍能启动。该步骤尚未在实体机上验证。',
+  'storage.raidMirrorBootloaderHint':
+    'curtin 只在一块磁盘上安装引导程序。此选项会在安装结束时复制它，使第一块磁盘损坏后机器仍能启动。复制过程已在虚拟机中确认能运行，但单靠第二块磁盘能否启动，无论在虚拟机还是实体机上都尚未试过。',
   'storage.raidPtableIgnored': 'RAID + LVM 不使用此设置。分区表始终是 GPT。',
   'storage.layoutZfsHint': '使用 ZFS 作为根文件系统，快照和数据完整性检查功能强大得多。',
   'storage.modelHint': '例如 Samsung SSD*。可以使用通配符。',
@@ -335,7 +337,8 @@ export const zhHans = {
   'storage.serialHint': '可以使用通配符，例如 CT500MX*。在有多块磁盘的机器上，这是指定目标磁盘最可靠的方法。',
   'storage.serialLabel': '序列号',
   'storage.usbExcluded': '这些规则永远不会匹配安装 USB 本身（安装程序会把它排除在外）。',
-  'storage.warningBody': '选作安装目标的磁盘会被完全清除，包括现有的所有分区。在生产机器上使用之前，请先在虚拟机中试用一次这个 USB。',
+  'storage.warningBody':
+    '选作安装目标的磁盘会被完全清除，包括现有的所有分区。在实机上使用之前，请先在虚拟机中试用一次这个 USB。',
   'software.source': '安装范围',
   'software.sourceFull': '标准（ubuntu-server）',
   'software.sourceMinimal': '最小（ubuntu-server-minimal）',
@@ -546,7 +549,8 @@ export const zhHans = {
   'write.troubleApplied': '实际应用的设置可以在 {path} 中查看（仅 root 可读）。',
   'write.troubleLogs': '日志保存在已安装系统的 {path} 中。',
   'write.troubleTitle': '如果出现问题',
-  'write.verifyOptionHint': '把写入的数据读回并比较哈希值，可以发现廉价 USB 驱动器的缺陷。',
+  'write.verifyOptionHint':
+    '把写入的数据读回并比较哈希值。可以发现廉价 USB 驱动器上常见的写入错误。',
   'write.deviceGone': '设备已不存在。请重新插入并刷新列表。',
   'write.deviceNotWritable': '无法写入此设备。请刷新设备列表。',
   'write.deviceStalled': '向 USB 驱动器的写入停滞了，它可能已被拔出。请重新插入并再次制作。',
@@ -842,7 +846,8 @@ export const zhHans = {
   'runtime.grubFreeHint': '由于 ISO 是就地修改而不是重新构建，启动菜单必须控制在 2048 字节以内。',
   'runtime.grubTooLarge': '主机太多：启动菜单已超出 2048 字节。请删除一些行或缩短菜单名称。',
   'runtime.howItWorks': '工作原理',
-  'runtime.howItWorksBody': '启动菜单条目会传递 ai.hostname= 等内核参数。在安装开始之前，只改写 autoinstall.yaml 中对应的部分。没有参数时使用配置文件中的值，因此不会卡住。',
+  'runtime.howItWorksBody':
+    '启动菜单条目会传递 ai.hostname= 等内核参数。在安装开始之前，只改写 autoinstall.yaml 中对应的部分。没有参数时直接使用配置文件中的值。有参数却无法应用时，安装会停止，以免每台机器都得到相同的值。',
   'runtime.previewTitle': '启动菜单预览',
   'runtime.needIso': '选择 ISO 后即可预览实际的启动菜单。',
   'runtime.grubFreeBytes': '{bytes} 字节',
@@ -1086,7 +1091,8 @@ export const zhHans = {
   'validate.raidSizeInvalid': '{field}的大小“{value}”无效；请写成 4G 或 512M 的形式。',
   'validate.raidVolumeGroupNameInvalid': '卷组名称“{name}”无效（只能使用字母、数字和 + _ . -，且不能以 - 开头）。',
   'validate.raidRootNameInvalid': '根目录的逻辑卷名称“{name}”无效（只能使用字母、数字和 + _ . -，且不能以 - 开头）。',
-  'validate.raidGrubMirrorUnverified': '将引导程序复制到第二块及之后的启动盘时，结果会写入已安装系统的 /var/log/autoinstall-raid-esp.log。这一步尚未在实机上验证，请确认拔掉第一块磁盘后机器仍能启动。',
+  'validate.raidGrubMirrorUnverified':
+    '将引导程序复制到第二块及之后的启动盘时，结果会写入已安装系统的 /var/log/autoinstall-raid-esp.log。这一步只在虚拟机中确认过能运行，单靠第二块磁盘启动也尚未试过，因此请确认拔掉第一块磁盘后机器仍能启动。',
   'validate.raidGrubMirrorUnreachableDisk': '带有 EFI 系统分区的磁盘中，有 {count} 块不是承载 / 或 /boot 的任何阵列的成员。引导程序只会复制到本次安装实际使用的磁盘，因此这些磁盘不会获得副本，第一块磁盘故障时无法从它们启动。请把它们加入 / 或 /boot 的 RAID，或者不要在它们上面创建 EFI 系统分区。',
   'validate.raidGrubOnlyOnFirstDisk': '引导程序只安装在第一块启动盘上。即使 RAID 幸存，只要这块磁盘故障，机器就无法启动。',
   'validate.raidMatchIgnored': '使用 RAID + LVM 时，“安装到哪块磁盘”的选择器会被忽略，改用 RAID 设置中的磁盘列表。',
@@ -1267,6 +1273,8 @@ export const zhHans = {
   'about.version': '版本 {version}',
   'about.license': '基于 MIT 许可证的开源软件。Copyright (c) 2026 UnlitCube',
   'about.noWarranty': '不提供任何担保。本工具会清除目标 U 盘。从该 U 盘启动的机器，除非有人介入，否则会不经询问清除其目标磁盘。',
+  'about.experimental':
+    'Seedstick 是一个实验性项目。无人值守安装仅在虚拟机中验证过，尚未在物理服务器上验证。功能、设置以及已保存配置文件的格式可能会随版本而变化。请在磁盘内容丢失也无妨的机器上试用，目前请勿将它用于生产环境中的系统。',
   'about.disclaimer': 'Seedstick 是独立的开源项目，与 Canonical Ltd. 没有关联，也未获得其认可或赞助。Ubuntu 和 Canonical 是 Canonical Ltd. 的注册商标。',
   'about.noImages': '本工具不附带任何 Ubuntu 映像。它在这台电脑上使用你从官方网站下载的 ISO。',
   'about.trademarks': 'Windows 是 Microsoft 集团公司的商标。Apple 和 macOS 是 Apple Inc. 的商标。NVIDIA 和 CUDA 是 NVIDIA Corporation 的商标。其他名称是其各自所有者的商标。',

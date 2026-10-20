@@ -2,7 +2,7 @@
   "name": "@autoinstall/desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "Unofficial GUI for building unattended-install USB drives for Ubuntu Server",
+  "description": "Experimental, unofficial GUI for building unattended-install USB drives for Ubuntu Server",
   "main": "./out/main/index.js",
   "author": "UnlitCube",
   "license": "MIT",

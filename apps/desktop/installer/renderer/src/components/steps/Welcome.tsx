@@ -41,6 +41,12 @@ export function WelcomeStep({ info, onNext, onUninstall }: Props): React.JSX.Ele
           <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 font-mono text-[11px] text-white/60">
             {t('welcome.version', { version: info.version })}
           </span>
+          <span
+            data-experimental-badge
+            className="rounded-full border border-amber-400/25 bg-amber-400/10 px-2.5 py-1 text-[11px] text-amber-200/90"
+          >
+            {t('welcome.experimental')}
+          </span>
           {info.installedAt !== null ? (
             <span className="rounded-full border border-amber-400/25 bg-amber-400/10 px-2.5 py-1 text-[11px] text-amber-200/90">
               {t('welcome.upgrade', { version: info.version })}
@@ -48,11 +54,11 @@ export function WelcomeStep({ info, onNext, onUninstall }: Props): React.JSX.Ele
           ) : null}
         </div>
 
-        <div className="hairline mt-6" />
+        <div className="hairline mt-4" />
 
-        <div className="mt-6 grid gap-3">
+        <div className="mt-4 grid gap-2.5">
           {features.map((f) => (
-            <div key={f.key} className="card flex items-start gap-3.5 p-4">
+            <div key={f.key} className="card flex items-start gap-3.5 px-4 py-3.5">
               <span className="mt-0.5 text-indigo-300/90">{f.icon}</span>
               <div>
                 <div className="text-sm font-semibold text-white/90">
@@ -66,11 +72,15 @@ export function WelcomeStep({ info, onNext, onUninstall }: Props): React.JSX.Ele
           ))}
         </div>
 
-        {/* ライセンスと「Canonical とは無関係」（docs/LEGAL.md）。インストーラだけを受け取った人にも届くように */}
-        <p className="mt-4 text-[11px] leading-relaxed text-white/40">{t('welcome.disclaimer')}</p>
+        {/* 実験的であること・ライセンス・「Canonical とは無関係」（docs/LEGAL.md）。
+            インストーラだけを受け取った人にも届くように */}
+        <p className="mt-4 text-[11px] leading-relaxed text-white/40">
+          <span className="text-amber-200/80">{t('welcome.experimentalNote')}</span>{' '}
+          {t('welcome.disclaimer')}
+        </p>
       </div>
 
-      <div className="mt-auto flex items-center justify-between pt-6">
+      <div className="mt-auto flex items-center justify-between pt-5">
         {/* 「プログラムと機能」からは uninstall.ps1 が黙って走るので、
             画面つきで消したい人のための出口をここに置く。 */}
         {onUninstall !== null ? (

@@ -47,6 +47,27 @@ body:
         - Other
     validations:
       required: true
+  # Seedstick is experimental: unattended installs were verified in virtual machines
+  # only. Reports from physical machines are what moves a setup from "untested" to
+  # "verified", so ask for the machine and firmware.
+  - type: dropdown
+    id: target
+    attributes:
+      label: Target machine
+      options:
+        - Physical server or PC (please name the model below)
+        - Virtual machine (please name the hypervisor below)
+        - Not booted yet
+    validations:
+      required: true
+  - type: dropdown
+    id: firmware
+    attributes:
+      label: Boot firmware of the target machine
+      options:
+        - UEFI
+        - Legacy BIOS / CSM
+        - Don't know / not booted yet
   - type: textarea
     id: what
     attributes:

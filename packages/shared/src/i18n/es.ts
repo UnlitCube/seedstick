@@ -6,6 +6,7 @@ import type { MsgKey } from './ja.js'
 export const es = {
   'app.name': 'Seedstick',
   'app.tagline': 'Crea un USB de instalación desatendida de Ubuntu Server',
+  'app.experimental': 'Experimental',
   'common.next': 'Siguiente',
   'common.language': 'Idioma de la interfaz',
   'common.back': 'Atrás',
@@ -321,7 +322,8 @@ export const es = {
   'storage.raidBootSize': 'Tamaño de /boot',
   'storage.raidBootSizeHint': 'Solo se usa cuando un arreglo contiene /boot. Por ejemplo 2G.',
   'storage.raidMirrorBootloader': 'Instalar también el gestor de arranque en los demás discos de arranque',
-  'storage.raidMirrorBootloaderHint': 'curtin instala el gestor de arranque en un solo disco. Esto lo copia al final de la instalación para que el equipo siga arrancando si muere el primer disco. El procedimiento aún no se ha verificado en hardware real.',
+  'storage.raidMirrorBootloaderHint':
+    'curtin instala el gestor de arranque en un solo disco. Esto lo copia al final de la instalación para que el equipo pueda seguir arrancando si muere el primer disco. Se ha observado que la copia se ejecuta en una máquina virtual, pero aún no se ha probado arrancar únicamente desde el segundo disco, ni en una máquina virtual ni en hardware real.',
   'storage.raidPtableIgnored': 'RAID + LVM no usa este ajuste. La tabla de particiones siempre es GPT.',
   'storage.layoutZfsHint': 'Usa una raíz ZFS, con instantáneas y comprobación de integridad mucho más potentes.',
   'storage.modelHint': 'Por ejemplo Samsung SSD*. Se admiten comodines.',
@@ -335,7 +337,8 @@ export const es = {
   'storage.serialHint': 'Se admiten comodines, como en CT500MX*. En un equipo con varios discos es la forma más fiable de indicar el que quieres.',
   'storage.serialLabel': 'Número de serie',
   'storage.usbExcluded': 'Estas reglas nunca seleccionan el propio USB de instalación (el instalador lo excluye).',
-  'storage.warningBody': 'El disco elegido para la instalación se borra por completo, con todas sus particiones. Prueba el USB una vez en una máquina virtual antes de usarlo en un equipo de producción.',
+  'storage.warningBody':
+    'El disco elegido para la instalación se borra por completo, con todas sus particiones. Prueba el USB una vez en una máquina virtual antes de usarlo en un equipo real.',
   'software.source': 'Alcance de la instalación',
   'software.sourceFull': 'Estándar (ubuntu-server)',
   'software.sourceMinimal': 'Mínima (ubuntu-server-minimal)',
@@ -546,7 +549,8 @@ export const es = {
   'write.troubleApplied': 'Los ajustes realmente aplicados se pueden consultar en {path} (solo los puede leer root).',
   'write.troubleLogs': 'Los registros se guardan en {path} en el sistema instalado.',
   'write.troubleTitle': 'Si algo sale mal',
-  'write.verifyOptionHint': 'Vuelve a leer los datos escritos y compara los hashes, lo que detecta defectos de las unidades USB baratas.',
+  'write.verifyOptionHint':
+    'Vuelve a leer los datos escritos y compara los hashes. Así se pueden detectar errores de escritura, frecuentes en las unidades USB baratas.',
   'write.deviceGone': 'El dispositivo ha desaparecido. Vuelve a insertarlo y actualiza la lista.',
   'write.deviceNotWritable': 'No se puede escribir en este dispositivo. Actualiza la lista de dispositivos.',
   'write.deviceStalled': 'La escritura en la unidad USB dejó de avanzar. Puede que la hayan retirado. Vuelve a insertarla y crea la unidad de nuevo.',
@@ -842,7 +846,8 @@ export const es = {
   'runtime.grubFreeHint': 'El menú de arranque debe caber en 2048 bytes, porque la ISO se modifica en su sitio en lugar de reconstruirse.',
   'runtime.grubTooLarge': 'Demasiados equipos: el menú de arranque ya no cabe en 2048 bytes. Quita filas o acorta los nombres del menú.',
   'runtime.howItWorks': 'Cómo funciona',
-  'runtime.howItWorksBody': 'Las entradas del menú de arranque pasan argumentos del kernel como ai.hostname=. Justo antes de que empiece la instalación, solo se reescriben las partes correspondientes de autoinstall.yaml. Si no hay argumento se usa el valor del perfil, así que nada se queda bloqueado.',
+  'runtime.howItWorksBody':
+    'Las entradas del menú de arranque pasan argumentos del kernel como ai.hostname=. Justo antes de que empiece la instalación, solo se reescriben las partes correspondientes de autoinstall.yaml. Si no hay argumento, se usa tal cual el valor del perfil. Si hay un argumento pero no se puede aplicar, la instalación se detiene, para evitar que todas las máquinas acaben con el mismo valor.',
   'runtime.previewTitle': 'Vista previa del menú de arranque',
   'runtime.needIso': 'Selecciona una ISO para ver el menú de arranque real.',
   'runtime.grubFreeBytes': '{bytes} bytes',
@@ -1086,7 +1091,8 @@ export const es = {
   'validate.raidSizeInvalid': 'El tamaño "{value}" indicado para {field} no es válido; escríbelo como 4G o 512M.',
   'validate.raidVolumeGroupNameInvalid': 'El nombre del grupo de volúmenes "{name}" no es válido (solo letras, dígitos y + _ . -, y no puede empezar por -).',
   'validate.raidRootNameInvalid': 'El nombre del volumen lógico "{name}" para la raíz no es válido (solo letras, dígitos y + _ . -, y no puede empezar por -).',
-  'validate.raidGrubMirrorUnverified': 'Copiar el gestor de arranque al segundo disco de arranque y siguientes escribe el resultado en /var/log/autoinstall-raid-esp.log del sistema instalado. Ese paso aún no se ha verificado en hardware real, así que confirma que la máquina arranca con el primer disco retirado.',
+  'validate.raidGrubMirrorUnverified':
+    'Copiar el gestor de arranque al segundo disco de arranque y siguientes escribe el resultado en /var/log/autoinstall-raid-esp.log del sistema instalado. Solo se ha observado que ese paso se ejecuta en una máquina virtual, y aún no se ha probado arrancar únicamente desde el segundo disco, así que confirma que la máquina arranca con el primer disco retirado.',
   'validate.raidGrubMirrorUnreachableDisk': '{count, plural, one {# de los discos que reciben una partición del sistema EFI no es miembro} other {# de los discos que reciben una partición del sistema EFI no son miembros}} de ninguna matriz que respalde / o /boot. El gestor de arranque solo se replica en los discos que esta instalación usa de verdad, así que {count, plural, one {ese disco no recibirá} other {esos discos no recibirán}} una copia y no podrán arrancar si falla el primer disco. Añádelos al RAID de / o /boot, o no crees en ellos una partición del sistema EFI.',
   'validate.raidGrubOnlyOnFirstDisk': 'El gestor de arranque solo se instala en el primer disco de arranque. Si ese disco falla, la máquina no arrancará aunque el RAID sobreviva.',
   'validate.raidMatchIgnored': 'Con RAID + LVM se ignora el selector "en qué disco instalar"; en su lugar se usa la lista de discos de los ajustes RAID.',
@@ -1267,6 +1273,8 @@ export const es = {
   'about.version': 'Versión {version}',
   'about.license': 'Software de código abierto bajo la licencia MIT. Copyright (c) 2026 UnlitCube',
   'about.noWarranty': 'Se ofrece sin garantía. Esta herramienta borra la unidad USB de destino. Una máquina arrancada desde esa unidad borra su disco de destino sin preguntar, salvo que alguien intervenga.',
+  'about.experimental':
+    'Seedstick es un proyecto experimental. Las instalaciones desatendidas solo se han verificado en máquinas virtuales, aún no en servidores físicos, y las funciones, los ajustes y el formato de los perfiles guardados pueden cambiar de una versión a otra. Pruébalo en equipos cuyos discos puedas permitirte perder y no confíes aún en él para sistemas de producción.',
   'about.disclaimer': 'Seedstick es un proyecto de código abierto independiente. No está afiliado a Canonical Ltd. ni cuenta con su respaldo o patrocinio. Ubuntu y Canonical son marcas registradas de Canonical Ltd.',
   'about.noImages': 'No se incluye ninguna imagen de Ubuntu. La herramienta usa, en este equipo, la ISO que descargaste del sitio oficial.',
   'about.trademarks': 'Windows es una marca comercial del grupo de empresas Microsoft. Apple y macOS son marcas comerciales de Apple Inc. NVIDIA y CUDA son marcas comerciales de NVIDIA Corporation. Los demás nombres son marcas comerciales de sus respectivos propietarios.',

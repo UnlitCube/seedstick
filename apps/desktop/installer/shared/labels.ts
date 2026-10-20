@@ -44,12 +44,17 @@ const ja = {
   'welcome.disclaimer':
     'MIT ライセンスのオープンソースソフトウェアです。Canonical Ltd. とは提携・承認の関係にありません。Ubuntu は Canonical Ltd. の登録商標です。',
   'welcome.version': 'バージョン {version}',
+  'welcome.experimental': '実験的',
+  'welcome.experimentalNote':
+    '無人インストールは、これまで仮想マシンでしか確認していません。消えても困らないディスクの機械で試してください。',
   'welcome.upgrade': '{version} が既にインストールされています。上書きして更新します。',
   'welcome.f1.title': 'ISO はそのまま',
   'welcome.f1.body':
     '数セクタのインプレース改変と CIDATA パーティションの追加だけで、元の ISO ファイルには触れません。',
-  'welcome.f2.title': '危険なディスクは選べない',
-  'welcome.f2.body': 'システムディスク・内蔵ディスク・2 TB 超は、列挙の時点で書き込み先に選べなくします（理由つきで別枠に表示します）。',
+  'welcome.f2.title':
+    '危険なディスクを選べないようにする',
+  'welcome.f2.body':
+    'システムディスク・内蔵ディスク・2 TB 超は、列挙の時点で書き込み先に選べなくします（理由つきで別枠に表示します）。',
   'welcome.f3.title': '書き込みだけを昇格する',
   'welcome.f3.body':
     '本体は通常権限のまま。USB へ書く子プロセスだけが管理者権限で動きます。',
@@ -155,12 +160,17 @@ const en = {
   'welcome.disclaimer':
     'Open-source software under the MIT License. Not affiliated with or endorsed by Canonical Ltd. Ubuntu is a registered trademark of Canonical Ltd.',
   'welcome.version': 'Version {version}',
+  'welcome.experimental': 'Experimental',
+  'welcome.experimentalNote':
+    'Unattended installs have only been verified in virtual machines so far. Try Seedstick on machines whose disks you can afford to lose.',
   'welcome.upgrade': '{version} is already installed. It will be replaced.',
   'welcome.f1.title': 'The ISO stays untouched',
   'welcome.f1.body':
     'A few sectors are patched in place and a CIDATA partition is appended — the ISO file itself is never modified.',
-  'welcome.f2.title': 'Dangerous disks can never be selected',
-  'welcome.f2.body': 'System disks, internal disks and anything over 2 TB are blocked while enumerating and cannot be chosen (they are listed separately, with the reason).',
+  'welcome.f2.title':
+    'Dangerous disks are blocked',
+  'welcome.f2.body':
+    'System disks, internal disks and anything over 2 TB are blocked while enumerating and cannot be chosen (they are listed separately, with the reason).',
   'welcome.f3.title': 'Only the write is elevated',
   'welcome.f3.body':
     'The app runs unprivileged; just the child process that writes the USB asks for administrator rights.',
@@ -264,11 +274,16 @@ const zhHans = {
   'welcome.tagline': '无需重建 ISO，即可制作 Ubuntu Server 无人值守安装 U 盘',
   'welcome.disclaimer': '基于 MIT 许可证的开源软件。与 Canonical Ltd. 没有关联，也未获其认可。Ubuntu 是 Canonical Ltd. 的注册商标。',
   'welcome.version': '版本 {version}',
+  'welcome.experimental': '实验性',
+  'welcome.experimentalNote':
+    '无人值守安装目前仅在虚拟机中验证过。请在磁盘内容丢失也无妨的机器上试用。',
   'welcome.upgrade': '已安装 {version}。将覆盖并更新。',
   'welcome.f1.title': 'ISO 保持原样',
   'welcome.f1.body': '只就地修改几个扇区并追加 CIDATA 分区，绝不改动 ISO 文件本身。',
-  'welcome.f2.title': '危险的磁盘无法被选中',
-  'welcome.f2.body': '系统磁盘、内置磁盘以及超过 2 TB 的磁盘在枚举时就会被锁定，无法选择（会连同原因另行列出）。',
+  'welcome.f2.title':
+    '危险的磁盘会被锁定',
+  'welcome.f2.body':
+    '系统磁盘、内置磁盘以及超过 2 TB 的磁盘在枚举时就会被锁定，无法选择（会连同原因另行列出）。',
   'welcome.f3.title': '只有写入需要提升权限',
   'welcome.f3.body': '应用本身以普通权限运行，只有写入 U 盘的子进程需要管理员权限。',
   'welcome.next': '开始',
@@ -368,11 +383,16 @@ const zhHant = {
   'welcome.tagline': '不必重新建置 ISO，就能製作 Ubuntu Server 無人值守安裝 USB 隨身碟',
   'welcome.disclaimer': '採用 MIT 授權條款的開放原始碼軟體。與 Canonical Ltd. 沒有關聯，也未獲其認可。Ubuntu 是 Canonical Ltd. 的註冊商標。',
   'welcome.version': '版本 {version}',
+  'welcome.experimental': '實驗性',
+  'welcome.experimentalNote':
+    '無人值守安裝目前僅在虛擬機器中驗證過。請在磁碟內容遺失也無妨的機器上試用。',
   'welcome.upgrade': '已安裝 {version}。將覆寫並更新。',
   'welcome.f1.title': 'ISO 維持原樣',
   'welcome.f1.body': '只就地修改幾個磁區並附加 CIDATA 分割區，絕不更動 ISO 檔案本身。',
-  'welcome.f2.title': '危險的磁碟無法被選取',
-  'welcome.f2.body': '系統磁碟、內建磁碟以及超過 2 TB 的磁碟在列舉時就會被鎖定，無法選取（會連同原因另外列出）。',
+  'welcome.f2.title':
+    '危險的磁碟會被鎖定',
+  'welcome.f2.body':
+    '系統磁碟、內建磁碟以及超過 2 TB 的磁碟在列舉時就會被鎖定，無法選取（會連同原因另外列出）。',
   'welcome.f3.title': '只有寫入需要提升權限',
   'welcome.f3.body': '應用程式本身以一般權限執行，只有寫入 USB 的子處理程序需要系統管理員權限。',
   'welcome.next': '開始',
@@ -472,11 +492,16 @@ const ko = {
   'welcome.tagline': 'ISO를 다시 만들지 않고 Ubuntu Server 무인 설치 USB를 만듭니다',
   'welcome.disclaimer': 'MIT 라이선스의 오픈 소스 소프트웨어입니다. Canonical Ltd.와 제휴하거나 승인을 받은 관계가 아닙니다. Ubuntu는 Canonical Ltd.의 등록 상표입니다.',
   'welcome.version': '버전 {version}',
+  'welcome.experimental': '실험적',
+  'welcome.experimentalNote':
+    '무인 설치는 지금까지 가상 머신에서만 검증되었습니다. 디스크 내용이 사라져도 괜찮은 기기에서 시험해 보세요.',
   'welcome.upgrade': '{version}이(가) 이미 설치되어 있습니다. 덮어써서 업데이트합니다.',
   'welcome.f1.title': 'ISO는 그대로',
   'welcome.f1.body': '몇 개의 섹터를 제자리에서 수정하고 CIDATA 파티션을 덧붙일 뿐, ISO 파일 자체는 건드리지 않습니다.',
-  'welcome.f2.title': '위험한 디스크는 선택할 수 없음',
-  'welcome.f2.body': '시스템 디스크, 내장 디스크, 2 TB를 넘는 디스크는 목록을 만들 때부터 막혀 있어 선택할 수 없습니다(이유와 함께 따로 표시합니다).',
+  'welcome.f2.title':
+    '위험한 디스크는 차단됨',
+  'welcome.f2.body':
+    '시스템 디스크, 내장 디스크, 2 TB를 넘는 디스크는 목록을 만들 때부터 막혀 있어 선택할 수 없습니다(이유와 함께 따로 표시합니다).',
   'welcome.f3.title': '쓰기만 권한 상승',
   'welcome.f3.body': '앱은 일반 권한으로 동작하고, USB에 쓰는 하위 프로세스만 관리자 권한을 요청합니다.',
   'welcome.next': '시작하기',
@@ -576,11 +601,16 @@ const es = {
   'welcome.tagline': 'Crea un USB de instalación desatendida de Ubuntu Server sin reconstruir la ISO',
   'welcome.disclaimer': 'Software de código abierto bajo la licencia MIT. No está afiliado a Canonical Ltd. ni cuenta con su respaldo. Ubuntu es una marca registrada de Canonical Ltd.',
   'welcome.version': 'Versión {version}',
+  'welcome.experimental': 'Experimental',
+  'welcome.experimentalNote':
+    'Hasta ahora, las instalaciones desatendidas solo se han verificado en máquinas virtuales. Prueba Seedstick en equipos cuyos discos puedas permitirte perder.',
   'welcome.upgrade': 'Ya está instalada la versión {version}. Se sustituirá.',
   'welcome.f1.title': 'La ISO queda intacta',
   'welcome.f1.body': 'Se modifican unos pocos sectores en su sitio y se añade una partición CIDATA; el archivo ISO en sí nunca se toca.',
-  'welcome.f2.title': 'Los discos peligrosos no se pueden elegir',
-  'welcome.f2.body': 'Los discos del sistema, los discos internos y todo lo que supere 2 TB se bloquean al enumerar y no se pueden elegir (se muestran aparte, con el motivo).',
+  'welcome.f2.title':
+    'Los discos peligrosos se bloquean',
+  'welcome.f2.body':
+    'Los discos del sistema, los discos internos y todo lo que supere 2 TB se bloquean al enumerar y no se pueden elegir (se muestran aparte, con el motivo).',
   'welcome.f3.title': 'Solo la escritura se eleva',
   'welcome.f3.body': 'La aplicación se ejecuta sin privilegios; solo el proceso hijo que escribe el USB pide permisos de administrador.',
   'welcome.next': 'Empezar',
@@ -680,11 +710,16 @@ const fr = {
   'welcome.tagline': 'Créez une clé USB d’installation automatique d’Ubuntu Server sans reconstruire l’ISO',
   'welcome.disclaimer': 'Logiciel libre sous licence MIT. Non affilié à Canonical Ltd. ni approuvé par elle. Ubuntu est une marque déposée de Canonical Ltd.',
   'welcome.version': 'Version {version}',
+  'welcome.experimental': 'Expérimental',
+  'welcome.experimentalNote':
+    'Les installations automatiques n’ont été vérifiées jusqu’ici que dans des machines virtuelles. Essayez Seedstick sur des machines dont vous pouvez vous permettre de perdre les disques.',
   'welcome.upgrade': 'La version {version} est déjà installée. Elle sera remplacée.',
   'welcome.f1.title': 'L’ISO reste intacte',
   'welcome.f1.body': 'Quelques secteurs sont modifiés sur place et une partition CIDATA est ajoutée : le fichier ISO lui-même n’est jamais modifié.',
-  'welcome.f2.title': 'Les disques dangereux ne peuvent jamais être choisis',
-  'welcome.f2.body': 'Les disques système, les disques internes et tout ce qui dépasse 2 To sont bloqués dès l’énumération et ne peuvent pas être choisis (ils sont listés à part, avec la raison).',
+  'welcome.f2.title':
+    'Les disques dangereux sont bloqués',
+  'welcome.f2.body':
+    'Les disques système, les disques internes et tout ce qui dépasse 2 To sont bloqués dès l’énumération et ne peuvent pas être choisis (ils sont listés à part, avec la raison).',
   'welcome.f3.title': 'Seule l’écriture est élevée',
   'welcome.f3.body': 'L’application tourne sans privilèges ; seul le processus enfant qui écrit la clé USB demande les droits d’administrateur.',
   'welcome.next': 'Commencer',
@@ -784,11 +819,16 @@ const de = {
   'welcome.tagline': 'Einen USB-Stick für die unbeaufsichtigte Installation von Ubuntu Server erstellen, ohne die ISO neu zu bauen',
   'welcome.disclaimer': 'Open-Source-Software unter der MIT-Lizenz. Nicht mit Canonical Ltd. verbunden und nicht von ihr unterstützt. Ubuntu ist eine eingetragene Marke der Canonical Ltd.',
   'welcome.version': 'Version {version}',
+  'welcome.experimental': 'Experimentell',
+  'welcome.experimentalNote':
+    'Unbeaufsichtigte Installationen wurden bisher nur in virtuellen Maschinen geprüft. Probieren Sie Seedstick auf Maschinen aus, bei denen Sie den Verlust der Festplatten verschmerzen können.',
   'welcome.upgrade': '{version} ist bereits installiert und wird ersetzt.',
   'welcome.f1.title': 'Die ISO bleibt unverändert',
   'welcome.f1.body': 'Nur wenige Sektoren werden direkt angepasst und eine CIDATA-Partition angehängt – die ISO-Datei selbst wird nie verändert.',
-  'welcome.f2.title': 'Gefährliche Festplatten lassen sich nie auswählen',
-  'welcome.f2.body': 'Systemfestplatten, interne Festplatten und alles über 2 TB werden schon beim Auflisten gesperrt und können nicht gewählt werden (sie werden getrennt mit dem Grund angezeigt).',
+  'welcome.f2.title':
+    'Gefährliche Festplatten werden gesperrt',
+  'welcome.f2.body':
+    'Systemfestplatten, interne Festplatten und alles über 2 TB werden schon beim Auflisten gesperrt und können nicht gewählt werden (sie werden getrennt mit dem Grund angezeigt).',
   'welcome.f3.title': 'Nur das Schreiben erhält erhöhte Rechte',
   'welcome.f3.body': 'Die App läuft ohne besondere Rechte; nur der Kindprozess, der den USB-Stick schreibt, fordert Administratorrechte an.',
   'welcome.next': 'Los geht’s',
@@ -888,11 +928,16 @@ const ptBR = {
   'welcome.tagline': 'Crie um pendrive de instalação desassistida do Ubuntu Server sem reconstruir a ISO',
   'welcome.disclaimer': 'Software de código aberto sob a Licença MIT. Não é afiliado à Canonical Ltd. nem endossado por ela. Ubuntu é uma marca registrada da Canonical Ltd.',
   'welcome.version': 'Versão {version}',
+  'welcome.experimental': 'Experimental',
+  'welcome.experimentalNote':
+    'Até agora, as instalações desassistidas só foram verificadas em máquinas virtuais. Teste o Seedstick em máquinas cujos discos você possa perder sem problema.',
   'welcome.upgrade': 'A versão {version} já está instalada. Ela será substituída.',
   'welcome.f1.title': 'A ISO fica intacta',
   'welcome.f1.body': 'Alguns setores são alterados no lugar e uma partição CIDATA é acrescentada — o arquivo ISO em si nunca é modificado.',
-  'welcome.f2.title': 'Discos perigosos nunca podem ser escolhidos',
-  'welcome.f2.body': 'Discos do sistema, discos internos e qualquer coisa acima de 2 TB são bloqueados já na listagem e não podem ser escolhidos (aparecem à parte, com o motivo).',
+  'welcome.f2.title':
+    'Discos perigosos são bloqueados',
+  'welcome.f2.body':
+    'Discos do sistema, discos internos e qualquer coisa acima de 2 TB são bloqueados já na listagem e não podem ser escolhidos (aparecem à parte, com o motivo).',
   'welcome.f3.title': 'Só a gravação é elevada',
   'welcome.f3.body': 'O aplicativo roda sem privilégios; só o processo filho que grava o pendrive pede direitos de administrador.',
   'welcome.next': 'Começar',

@@ -3,6 +3,8 @@ export const ja = {
   // --- 共通 ---
   'app.name': 'Seedstick',
   'app.tagline': 'Ubuntu Server の自動インストール USB を作る',
+  // 製品の位置付け。ヘッダーの小さな札・About・Web サイトで同じものを使う
+  'app.experimental': '実験的',
   'common.next': '次へ',
   'common.language': '表示言語',
   'common.back': '戻る',
@@ -392,7 +394,7 @@ export const ja = {
   'storage.raidBootSizeHint': '/boot にする配列があるときだけ使われます。例: 2G。',
   'storage.raidMirrorBootloader': '2 台目以降の起動ディスクにもブートローダを入れる',
   'storage.raidMirrorBootloaderHint':
-    'curtin は 1 台にしかブートローダを入れません。1 台目が壊れても起動できるよう、インストールの最後に複製します（この手順はまだ実機で検証していません）。',
+    'curtin は 1 台にしかブートローダを入れません。1 台目が壊れても起動できるよう、インストールの最後に複製します（複製が走ることは仮想マシンで確かめましたが、2 台目だけで起動できるかは、仮想マシンでも実機でもまだ試していません）。',
   'storage.raidPtableIgnored':
     'RAID + LVM ではこの設定は使われません。パーティション形式は GPT に固定されます。',
   'storage.layoutZfsHint':
@@ -412,7 +414,7 @@ export const ja = {
   'storage.usbExcluded':
     'インストール USB 自身がこの条件で選ばれることはありません（インストーラが除外します）。',
   'storage.warningBody':
-    'インストール先として選ばれたディスクは、既存のパーティションごと完全に消去されます。本番機で使う前に、必ず仮想マシンで一度試してください。',
+    'インストール先として選ばれたディスクは、既存のパーティションごと完全に消去されます。実機で使う前に、必ず仮想マシンで一度試してください。',
 
   // --- ソフトウェア ---
   'software.source': 'インストールの範囲',
@@ -565,7 +567,8 @@ export const ja = {
   'review.export': '設定を書き出す',
   'review.exportProfile': 'プロファイル (JSON) を保存',
   'review.importProfile': 'プロファイルを読み込む',
-  'review.unattended': 'このまま書き込めば、電源を入れるだけでインストールが完了します',
+  'review.unattended':
+    'このまま書き込めば、インストールは入力を求めずに最後まで進みます',
   'review.interactive': '一部の項目はインストール中に画面で質問されます',
   'review.aptUpgradeOff': 'しない',
   'review.aptUpgradeOn': '実行する',
@@ -670,7 +673,7 @@ export const ja = {
   'write.troubleLogs': 'インストール先の {path} にログが残ります。',
   'write.troubleTitle': 'うまくいかないときは',
   'write.verifyOptionHint':
-    '書き込んだ内容を読み戻してハッシュを照合します。安価な USB メモリの不良を検出できます。',
+    '書き込んだ内容を読み戻してハッシュを照合します。安価な USB メモリで起きやすい書き込みの誤りを見つけられます。',
 
   // 書き込みの進行状況・失敗（main / media から LocalizedText で運ばれてくる）
   'write.deviceGone': 'デバイスが見つかりません。挿し直して再読み込みしてください。',
@@ -1085,7 +1088,7 @@ export const ja = {
     'ホストが多すぎて起動メニューが 2048 バイトに収まりません。件数を減らすか、メニュー名を短くしてください。',
   'runtime.howItWorks': '仕組み',
   'runtime.howItWorksBody':
-    '起動メニューから選ぶ場合は ai.hostname= のようなカーネル引数が渡され、インストール開始直前に autoinstall.yaml の該当箇所だけを書き換えます。引数が無ければこの設定の値がそのまま使われるので、失敗しても止まりません。',
+    '起動メニューから選ぶ場合は ai.hostname= のようなカーネル引数が渡され、インストール開始直前に autoinstall.yaml の該当箇所だけを書き換えます。引数が無ければこの設定の値がそのまま使われます。引数を受け取ったのに反映できなかったときは、全台が同じ値で入るのを防ぐためにインストールを止めます。',
   'runtime.previewTitle': '起動メニューのプレビュー',
   'runtime.needIso': 'ISO を選ぶと、実際の起動メニューを確認できます。',
   'runtime.grubFreeBytes': '{bytes} バイト',
@@ -1419,7 +1422,7 @@ export const ja = {
   'validate.raidRootNameInvalid':
     'root の論理ボリューム名 "{name}" が不正です（英数字と + _ . - のみ、先頭に - は使えません）。',
   'validate.raidGrubMirrorUnverified':
-    '2 台目以降の起動ディスクへのブートローダの複製は、インストール後に /var/log/autoinstall-raid-esp.log に結果が残ります。この手順はまだ実機で検証していないので、1 台目を抜いた状態で起動できるか必ず確かめてください。',
+    '2 台目以降の起動ディスクへのブートローダの複製は、インストール後に /var/log/autoinstall-raid-esp.log に結果が残ります。この手順は仮想マシンで走ることを確かめただけで、2 台目だけでの起動はまだ試していないので、1 台目を抜いた状態で起動できるか必ず確かめてください。',
   // ESP を作るディスクが「マウントされる FS」を 1 つも支えていないと、
   // late-command の絞り込み（落とし穴 114）から外れて複製が届かない。
   'validate.raidGrubMirrorUnreachableDisk':
@@ -1660,6 +1663,8 @@ export const ja = {
   'about.version': 'バージョン {version}',
   'about.license': 'MIT ライセンスのオープンソースソフトウェアです。Copyright (c) 2026 UnlitCube',
   'about.noWarranty': '無保証で提供されます。このツールは書き込み先の USB メモリを消去します。作った USB で起動した機械は、操作しなければインストール先のディスクを確認なしで消去します。',
+  'about.experimental':
+    'Seedstick は実験的なプロジェクトです。無人インストールは仮想マシンでしか確認しておらず、物理サーバーではまだ確かめていません。機能・設定・保存したプロファイルの形式は、版によって変わることがあります。消えても困らないディスクの機械で試し、本番のシステムにはまだ使わないでください。',
   'about.disclaimer': 'Seedstick は独立したオープンソースソフトウェアで、Canonical Ltd. とは提携・承認・後援の関係にありません。Ubuntu および Canonical は Canonical Ltd. の登録商標です。',
   'about.noImages': 'Ubuntu のイメージは同梱していません。公式サイトから入手した ISO を、この PC の上で使います。',
   'about.trademarks': 'Windows は Microsoft グループの商標です。Apple と macOS は Apple Inc. の商標です。NVIDIA と CUDA は NVIDIA Corporation の商標です。その他の名称は各社の商標です。',

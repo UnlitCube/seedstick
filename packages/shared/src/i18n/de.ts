@@ -6,6 +6,7 @@ import type { MsgKey } from './ja.js'
 export const de = {
   'app.name': 'Seedstick',
   'app.tagline': 'USB-Stick für die unbeaufsichtigte Installation von Ubuntu Server erstellen',
+  'app.experimental': 'Experimentell',
   'common.next': 'Weiter',
   'common.language': 'Anzeigesprache',
   'common.back': 'Zurück',
@@ -321,7 +322,8 @@ export const de = {
   'storage.raidBootSize': 'Größe von /boot',
   'storage.raidBootSizeHint': 'Wird nur verwendet, wenn ein Verbund /boot aufnimmt. Zum Beispiel 2G.',
   'storage.raidMirrorBootloader': 'Bootloader auch auf den anderen Startfestplatten installieren',
-  'storage.raidMirrorBootloaderHint': 'curtin installiert den Bootloader nur auf einer Festplatte. Dies kopiert ihn am Ende der Installation, damit die Maschine weiter startet, wenn die erste Festplatte ausfällt. Das Verfahren wurde noch nicht auf echter Hardware geprüft.',
+  'storage.raidMirrorBootloaderHint':
+    'curtin installiert den Bootloader nur auf einer Festplatte. Dies kopiert ihn am Ende der Installation, damit die Maschine weiter starten kann, wenn die erste Festplatte ausfällt. Dass das Kopieren läuft, wurde in einer virtuellen Maschine beobachtet, aber der Start allein von der zweiten Festplatte wurde noch nicht ausprobiert, weder in einer virtuellen Maschine noch auf echter Hardware.',
   'storage.raidPtableIgnored': 'RAID + LVM verwendet diese Einstellung nicht. Die Partitionstabelle ist immer GPT.',
   'storage.layoutZfsHint': 'Verwendet ein ZFS-Root mit deutlich stärkeren Snapshots und Datenintegritätsprüfung.',
   'storage.modelHint': 'Zum Beispiel Samsung SSD*. Platzhalter sind erlaubt.',
@@ -335,7 +337,8 @@ export const de = {
   'storage.serialHint': 'Platzhalter sind erlaubt, etwa CT500MX*. Auf einer Maschine mit mehreren Festplatten ist dies der zuverlässigste Weg, die gemeinte zu benennen.',
   'storage.serialLabel': 'Seriennummer',
   'storage.usbExcluded': 'Der Installations-USB-Stick selbst passt nie auf diese Regeln (das Installationsprogramm schließt ihn aus).',
-  'storage.warningBody': 'Die für die Installation gewählte Festplatte wird vollständig gelöscht, samt aller vorhandenen Partitionen. Probieren Sie den USB-Stick einmal in einer virtuellen Maschine aus, bevor Sie ihn auf einer Produktivmaschine einsetzen.',
+  'storage.warningBody':
+    'Die für die Installation gewählte Festplatte wird vollständig gelöscht, samt aller vorhandenen Partitionen. Probieren Sie den USB-Stick einmal in einer virtuellen Maschine aus, bevor Sie ihn auf einer echten Maschine einsetzen.',
   'software.source': 'Installationsumfang',
   'software.sourceFull': 'Standard (ubuntu-server)',
   'software.sourceMinimal': 'Minimal (ubuntu-server-minimal)',
@@ -546,7 +549,8 @@ export const de = {
   'write.troubleApplied': 'Die tatsächlich angewendeten Einstellungen finden Sie in {path} (nur für root lesbar).',
   'write.troubleLogs': 'Protokolle liegen im installierten System unter {path}.',
   'write.troubleTitle': 'Falls etwas schiefgeht',
-  'write.verifyOptionHint': 'Liest die geschriebenen Daten zurück und vergleicht Hashes; so fallen Mängel billiger USB-Sticks auf.',
+  'write.verifyOptionHint':
+    'Liest die geschriebenen Daten zurück und vergleicht Hashes. So lassen sich Schreibfehler erkennen, die bei billigen USB-Sticks häufig vorkommen.',
   'write.deviceGone': 'Das Gerät ist verschwunden. Stecken Sie es wieder ein und laden Sie die Liste neu.',
   'write.deviceNotWritable': 'Auf dieses Gerät kann nicht geschrieben werden. Laden Sie die Geräteliste neu.',
   'write.deviceStalled': 'Das Schreiben auf den USB-Stick kommt nicht mehr voran. Er wurde vielleicht abgezogen. Stecken Sie ihn wieder ein und erstellen Sie ihn neu.',
@@ -842,7 +846,8 @@ export const de = {
   'runtime.grubFreeHint': 'Das Startmenü muss in 2048 Bytes passen, weil die ISO direkt angepasst und nicht neu erstellt wird.',
   'runtime.grubTooLarge': 'Zu viele Hosts: Das Startmenü passt nicht mehr in 2048 Bytes. Entfernen Sie Zeilen oder kürzen Sie die Menünamen.',
   'runtime.howItWorks': 'So funktioniert es',
-  'runtime.howItWorksBody': 'Startmenüeinträge übergeben Kernelargumente wie ai.hostname=. Kurz vor Beginn der Installation werden nur die passenden Teile von autoinstall.yaml umgeschrieben. Fehlt ein Argument, wird der Profilwert verwendet, sodass nichts hängen bleibt.',
+  'runtime.howItWorksBody':
+    'Startmenüeinträge übergeben Kernelargumente wie ai.hostname=. Kurz vor Beginn der Installation werden nur die passenden Teile von autoinstall.yaml umgeschrieben. Fehlt ein Argument, wird der Profilwert unverändert verwendet. Wenn ein Argument vorhanden ist, aber nicht angewendet werden kann, wird die Installation gestoppt, damit nicht alle Maschinen denselben Wert erhalten.',
   'runtime.previewTitle': 'Vorschau des Startmenüs',
   'runtime.needIso': 'Wählen Sie eine ISO, um eine Vorschau des echten Startmenüs zu sehen.',
   'runtime.grubFreeBytes': '{bytes} Bytes',
@@ -1086,7 +1091,8 @@ export const de = {
   'validate.raidSizeInvalid': 'Die Größe "{value}" für {field} ist ungültig; schreiben Sie sie als 4G oder 512M.',
   'validate.raidVolumeGroupNameInvalid': 'Der Name der Volume-Gruppe "{name}" ist ungültig (nur Buchstaben, Ziffern und + _ . -, und er darf nicht mit - beginnen).',
   'validate.raidRootNameInvalid': 'Der Name des logischen Volumes "{name}" für root ist ungültig (nur Buchstaben, Ziffern und + _ . -, und er darf nicht mit - beginnen).',
-  'validate.raidGrubMirrorUnverified': 'Das Kopieren des Bootloaders auf die zweite und weitere Startfestplatten schreibt sein Ergebnis nach /var/log/autoinstall-raid-esp.log im installierten System. Dieser Schritt ist auf echter Hardware noch nicht geprüft, daher bestätigen Sie, dass die Maschine auch ohne die erste Festplatte startet.',
+  'validate.raidGrubMirrorUnverified':
+    'Das Kopieren des Bootloaders auf die zweite und weitere Startfestplatten schreibt sein Ergebnis nach /var/log/autoinstall-raid-esp.log im installierten System. Dass dieser Schritt läuft, wurde nur in einer virtuellen Maschine beobachtet, und der Start allein von der zweiten Festplatte wurde noch nicht ausprobiert, daher bestätigen Sie, dass die Maschine auch ohne die erste Festplatte startet.',
   'validate.raidGrubMirrorUnreachableDisk': '{count, plural, one {# der Festplatten mit EFI-Systempartition ist} other {# der Festplatten mit EFI-Systempartition sind}} kein Mitglied eines Verbunds, der / oder /boot trägt. Der Bootloader wird nur auf Festplatten gespiegelt, die diese Installation tatsächlich nutzt, daher {count, plural, one {erhält diese Festplatte} other {erhalten diese Festplatten}} keine Kopie und kann beim Ausfall der ersten Festplatte nicht starten. Fügen Sie sie dem RAID für / oder /boot hinzu oder legen Sie darauf keine EFI-Systempartition an.',
   'validate.raidGrubOnlyOnFirstDisk': 'Der Bootloader wird nur auf der ersten Startfestplatte installiert. Fällt sie aus, startet die Maschine nicht, auch wenn das RAID überlebt.',
   'validate.raidMatchIgnored': 'Bei RAID + LVM wird der Selektor "auf welche Festplatte installieren" ignoriert; stattdessen gilt die Festplattenliste in den RAID-Einstellungen.',
@@ -1267,6 +1273,8 @@ export const de = {
   'about.version': 'Version {version}',
   'about.license': 'Open-Source-Software unter der MIT-Lizenz. Copyright (c) 2026 UnlitCube',
   'about.noWarranty': 'Ohne Gewährleistung. Dieses Werkzeug löscht den Ziel-USB-Stick. Eine von diesem Stick gestartete Maschine löscht ihre Zielfestplatte ohne Nachfrage, sofern niemand eingreift.',
+  'about.experimental':
+    'Seedstick ist ein experimentelles Projekt. Unbeaufsichtigte Installationen wurden nur in virtuellen Maschinen geprüft, noch nicht auf physischen Servern, und Funktionen, Einstellungen und das Format gespeicherter Profile können sich von Version zu Version ändern. Probieren Sie es auf Maschinen aus, bei denen Sie den Verlust der Festplatten verschmerzen können, und verlassen Sie sich bei Produktivsystemen noch nicht darauf.',
   'about.disclaimer': 'Seedstick ist ein unabhängiges Open-Source-Projekt. Es ist weder mit Canonical Ltd. verbunden noch von ihr unterstützt oder gesponsert. Ubuntu und Canonical sind eingetragene Marken der Canonical Ltd.',
   'about.noImages': 'Es ist kein Ubuntu-Image enthalten. Das Werkzeug verwendet auf diesem Computer die ISO, die Sie von der offiziellen Website heruntergeladen haben.',
   'about.trademarks': 'Windows ist eine Marke der Microsoft-Unternehmensgruppe. Apple und macOS sind Marken der Apple Inc. NVIDIA und CUDA sind Marken der NVIDIA Corporation. Andere Namen sind Marken ihrer jeweiligen Inhaber.',

@@ -8,7 +8,7 @@
 export const SITE_STRINGS = {
   ja: {
     metaDescription:
-      'Ubuntu Server の自動インストール USB を GUI で作るオープンソースのツール。ISO を再構築せず、Windows・macOS・Linux で動きます。',
+      'Ubuntu Server の自動インストール USB を GUI で作る、実験的なオープンソースのツール。ISO を再構築せず、Windows・macOS・Linux で動きます。',
     navFeatures: '特徴',
     navHow: '仕組み',
     navDownload: 'ダウンロード',
@@ -24,13 +24,14 @@ export const SITE_STRINGS = {
       'ホスト名・IP アドレス・インストール先ディスクを、起動メニューから選んだりインストーラで入力したりできます。web01、web02 … と並べておけば、挿して選ぶだけです。',
     fChecksTitle: '危険な設定は書き込む前に止める',
     fChecksBody:
-      'SSH に入れなくなる設定や、インストールの最後で失敗する設定を、USB に書く前にエラーとして知らせます。',
+      'SSH に入れなくなる設定や、インストールの終盤で失敗する設定のうち、分かっているもの（パスワードでのログインを切ったのに公開鍵が無い、パスワードハッシュの形が崩れている など）を、USB に書く前にエラーとして知らせます。',
     fAfterTitle: 'インストーラが聞かないことまで',
     fAfterBody: 'インストール時の RAID + LVM（UEFI）と NIC のボンディング、インストール後の追加ユーザー・ファイルの展開・systemd サービス・apt full-upgrade・NVIDIA ドライバと CUDA。',
     shotReviewAlt: '確認の画面。生成された YAML に表示言語でコメントが付く',
     shotRuntimeAlt: 'ホスト名・IP・ディスクを起動メニューで選ぶ設定の画面',
     releasesTitle: '対応する Ubuntu',
-    releasesBody: 'amd64 の live-server ISO で確認しています。arm64 の ISO も受け付けますが未検証です。',
+    releasesBody:
+      'amd64 の live-server ISO を使ってください。仮想マシンで無人インストールの完走まで確かめたのは 24.04 と 26.10 だけで、ほかのリリースは設定の生成と ISO の書き換えをテストで確かめた段階です。arm64 の ISO も受け付けますが未検証です。',
     releaseEol: '25.10 は 2026 年 7 月にサポートが終了しました（画面で警告します）。',
     howTitle: '仕組み',
     howStep1: '公式 ISO を選ぶ',
@@ -40,7 +41,6 @@ export const SITE_STRINGS = {
     downloadTitle: 'ダウンロード',
     installer: 'インストーラ',
     portable: 'ポータブル',
-    experimental: '試験的',
     checksums: 'チェックサム',
     unsignedTitle: 'コード署名はまだしていません',
     unsignedWindows: 'Windows: 初回起動で SmartScreen が警告します。「詳細情報」→「実行」で進めてください。',
@@ -51,11 +51,12 @@ export const SITE_STRINGS = {
     imageNotice: 'Seedstick で作った USB や .img には、改変した Ubuntu のイメージが入っています。自分や組織の中で使うのは構いませんが、他の人へ配布しないでください。Canonical の知的財産権ポリシーは、改変したイメージを Ubuntu の商標のもとで再配布することを認めていません。',
     noImages: 'Seedstick は Ubuntu を同梱していません。ubuntu.com からダウンロードした ISO を使います。',
     translationsLabel: '翻訳',
-    limitsNote: '無人インストールは仮想マシンで確認したものです。物理サーバーでの通しと、macOS / Linux での USB の検出は、まだ確認していません。',
+    limitsNote:
+      '無人インストールは仮想マシンでしか確認していません。まだ確かめていないもの: 物理サーバーでの通しのインストール、macOS / Linux での USB の検出・権限の確認画面・書き込み、起動メニューからのホスト名とディスクの選択（IP アドレスの選択は確認済み）、インストール後の処理（追加ユーザー・ファイル・サービス・NVIDIA / CUDA）。',
   },
   en: {
     metaDescription:
-      'An open-source GUI that builds unattended-install USB drives for Ubuntu Server without rebuilding the ISO. Windows, macOS and Linux.',
+      'An experimental, open-source GUI that builds unattended-install USB drives for Ubuntu Server without rebuilding the ISO. Windows, macOS and Linux.',
     navFeatures: 'Features',
     navHow: 'How it works',
     navDownload: 'Download',
@@ -71,13 +72,14 @@ export const SITE_STRINGS = {
       'Pick the hostname, IP address and target disk from the boot menu, or type them in the installer. List web01, web02 and so on, then just plug in and choose.',
     fChecksTitle: 'Risky settings are stopped before writing',
     fChecksBody:
-      'Settings that would lock you out of SSH, or make the install fail at the very end, are reported as errors before anything is written to the drive.',
+      'Known settings that would lock you out of SSH or make the install fail late, such as password login turned off with no public key or a malformed password hash, are reported as errors before anything is written to the drive.',
     fAfterTitle: 'More than the installer asks',
     fAfterBody: 'RAID + LVM (UEFI) and NIC bonding at install time; extra users, files and archives, systemd services, apt full-upgrade, NVIDIA driver and CUDA after it.',
     shotReviewAlt: 'The review step: the generated YAML, with comments in the display language',
     shotRuntimeAlt: 'Setting up the hostname, IP address and disk to be chosen from the boot menu',
     releasesTitle: 'Supported Ubuntu releases',
-    releasesBody: 'Tested with live-server ISOs for amd64. arm64 ISOs are accepted but untested.',
+    releasesBody:
+      'Use the live-server ISO for amd64. Unattended installs have been run to completion in a virtual machine for 24.04 and 26.10 only; for the other releases, configuration generation and ISO patching are covered by tests. arm64 ISOs are accepted but untested.',
     releaseEol: '25.10 reached end of life in July 2026; the app warns about it.',
     howTitle: 'How it works',
     howStep1: 'Pick the official ISO',
@@ -87,7 +89,6 @@ export const SITE_STRINGS = {
     downloadTitle: 'Download',
     installer: 'Installer',
     portable: 'Portable',
-    experimental: 'experimental',
     checksums: 'Checksums',
     unsignedTitle: 'The builds are not code-signed yet',
     unsignedWindows: 'Windows: SmartScreen warns on first launch. Click More info → Run anyway.',
@@ -98,11 +99,12 @@ export const SITE_STRINGS = {
     imageNotice: 'A USB drive or .img made with Seedstick contains a modified Ubuntu image. Use it yourself or inside your organisation, but do not redistribute it: Canonical’s IP rights policy does not allow redistributing modified images under the Ubuntu trademarks.',
     noImages: 'Seedstick does not bundle Ubuntu. It uses the ISO you download from ubuntu.com.',
     translationsLabel: 'Translations',
-    limitsNote: 'Unattended installs have been verified in virtual machines. A full install on physical servers, and USB drive detection on macOS and Linux, have not been verified yet.',
+    limitsNote:
+      'Unattended installs have only been verified in virtual machines. Not verified yet: a full install on physical servers; USB detection, the permission prompt and writing on macOS and Linux; picking the hostname or target disk from the boot menu (picking the IP address was verified); and the post-install steps (extra users, files, services, NVIDIA / CUDA).',
   },
   'zh-Hans': {
     metaDescription:
-      '一款开源 GUI 工具，无需重建 ISO 即可制作 Ubuntu Server 无人值守安装 U 盘。支持 Windows、macOS 和 Linux。',
+      '一款实验性的开源 GUI 工具，无需重建 ISO 即可制作 Ubuntu Server 无人值守安装 U 盘。支持 Windows、macOS 和 Linux。',
     navFeatures: '功能',
     navHow: '工作原理',
     navDownload: '下载',
@@ -117,13 +119,15 @@ export const SITE_STRINGS = {
     fManyBody:
       '主机名、IP 地址和目标磁盘可以从启动菜单中选择，也可以在安装程序中输入。列出 web01、web02 等条目后，插上 U 盘选择即可。',
     fChecksTitle: '写入前拦下危险的设置',
-    fChecksBody: '会让你无法通过 SSH 登录、或会让安装在最后阶段失败的设置，会在写入 U 盘之前作为错误提示出来。',
+    fChecksBody:
+      '在会让你无法通过 SSH 登录、或会让安装在后期才失败的设置中，已知的那些（例如禁用了密码登录却没有公钥、密码哈希格式损坏）会在写入 U 盘之前作为错误提示出来。',
     fAfterTitle: '超出安装程序询问的范围',
     fAfterBody: '安装时的 RAID + LVM（UEFI）和网卡绑定；安装后的追加用户、文件和压缩包部署、systemd 服务、apt full-upgrade、NVIDIA 驱动和 CUDA。',
     shotReviewAlt: '确认画面：生成的 YAML 带有显示语言的注释',
     shotRuntimeAlt: '从启动菜单选择主机名、IP 地址和磁盘的设置画面',
     releasesTitle: '支持的 Ubuntu 版本',
-    releasesBody: '已使用 amd64 的 live-server ISO 测试。也接受 arm64 的 ISO，但尚未测试。',
+    releasesBody:
+      '请使用 amd64 的 live-server ISO。在虚拟机中把无人值守安装完整跑完的，只有 24.04 和 26.10；其他版本的配置生成和 ISO 修改由测试覆盖。也接受 arm64 的 ISO，但尚未测试。',
     releaseEol: '25.10 已于 2026 年 7 月停止支持，应用会给出警告。',
     howTitle: '工作原理',
     howStep1: '选择官方 ISO',
@@ -133,7 +137,6 @@ export const SITE_STRINGS = {
     downloadTitle: '下载',
     installer: '安装程序',
     portable: '便携版',
-    experimental: '实验性',
     checksums: '校验和',
     unsignedTitle: '目前的构建尚未进行代码签名',
     unsignedWindows: 'Windows：首次启动时 SmartScreen 会发出警告。请点击“更多信息”→“仍要运行”。',
@@ -143,11 +146,12 @@ export const SITE_STRINGS = {
     imageNotice: '用 Seedstick 制作的 U 盘或 .img 中包含修改过的 Ubuntu 映像。可以自己或在组织内部使用，但请不要再分发：根据 Canonical 的知识产权政策，不允许以 Ubuntu 商标再分发修改过的映像。',
     noImages: 'Seedstick 不附带 Ubuntu，它使用你从 ubuntu.com 下载的 ISO。',
     translationsLabel: '翻译',
-    limitsNote: '无人值守安装已在虚拟机中验证。在物理服务器上的完整安装，以及 macOS / Linux 上的 U 盘检测，尚未验证。',
+    limitsNote:
+      '无人值守安装仅在虚拟机中验证过。尚未验证的有：在物理服务器上的完整安装；macOS / Linux 上的 U 盘检测、权限请求提示和写入；从启动菜单选择主机名或目标磁盘（选择 IP 地址已验证）；以及安装后的处理（追加用户、文件、服务、NVIDIA / CUDA）。',
   },
   'zh-Hant': {
     metaDescription:
-      '一款開放原始碼的 GUI 工具，不必重新建置 ISO，就能製作 Ubuntu Server 無人值守安裝 USB 隨身碟。支援 Windows、macOS 和 Linux。',
+      '一款實驗性的開放原始碼 GUI 工具，不必重新建置 ISO，就能製作 Ubuntu Server 無人值守安裝 USB 隨身碟。支援 Windows、macOS 和 Linux。',
     navFeatures: '功能',
     navHow: '運作方式',
     navDownload: '下載',
@@ -162,13 +166,15 @@ export const SITE_STRINGS = {
     fManyBody:
       '主機名稱、IP 位址和目標磁碟可以從開機選單中選擇，也可以在安裝程式中輸入。列出 web01、web02 等項目後，插上隨身碟選擇即可。',
     fChecksTitle: '寫入前攔下危險的設定',
-    fChecksBody: '會讓你無法透過 SSH 登入、或會讓安裝在最後階段失敗的設定，會在寫入隨身碟之前以錯誤提示出來。',
+    fChecksBody:
+      '在會讓你無法透過 SSH 登入、或會讓安裝在後期才失敗的設定中，已知的那些（例如停用了密碼登入卻沒有公開金鑰、密碼雜湊格式損壞）會在寫入隨身碟之前以錯誤提示出來。',
     fAfterTitle: '超出安裝程式詢問的範圍',
     fAfterBody: '安裝時的 RAID + LVM（UEFI）和網路卡綁定；安裝後的額外使用者、檔案和壓縮檔部署、systemd 服務、apt full-upgrade、NVIDIA 驅動程式和 CUDA。',
     shotReviewAlt: '確認畫面：產生的 YAML 帶有顯示語言的註解',
     shotRuntimeAlt: '從開機選單選擇主機名稱、IP 位址和磁碟的設定畫面',
     releasesTitle: '支援的 Ubuntu 版本',
-    releasesBody: '已使用 amd64 的 live-server ISO 測試。也接受 arm64 的 ISO，但尚未測試。',
+    releasesBody:
+      '請使用 amd64 的 live-server ISO。在虛擬機器中把無人值守安裝完整跑完的，只有 24.04 和 26.10；其他版本的設定產生和 ISO 修改由測試涵蓋。也接受 arm64 的 ISO，但尚未測試。',
     releaseEol: '25.10 已於 2026 年 7 月終止支援，應用程式會發出警告。',
     howTitle: '運作方式',
     howStep1: '選擇官方 ISO',
@@ -178,7 +184,6 @@ export const SITE_STRINGS = {
     downloadTitle: '下載',
     installer: '安裝程式',
     portable: '可攜版',
-    experimental: '實驗性',
     checksums: '檢查碼',
     unsignedTitle: '目前的建置尚未進行程式碼簽署',
     unsignedWindows: 'Windows：首次啟動時 SmartScreen 會發出警告。請按「其他資訊」→「仍要執行」。',
@@ -188,11 +193,12 @@ export const SITE_STRINGS = {
     imageNotice: '用 Seedstick 製作的隨身碟或 .img 中包含修改過的 Ubuntu 映像檔。可以自己或在組織內部使用，但請不要再散布：依據 Canonical 的智慧財產權政策，不允許以 Ubuntu 商標再散布修改過的映像檔。',
     noImages: 'Seedstick 不附帶 Ubuntu，它使用你從 ubuntu.com 下載的 ISO。',
     translationsLabel: '翻譯',
-    limitsNote: '無人值守安裝已在虛擬機器中驗證。在實體伺服器上的完整安裝，以及 macOS / Linux 上的隨身碟偵測，尚未驗證。',
+    limitsNote:
+      '無人值守安裝僅在虛擬機器中驗證過。尚未驗證的有：在實體伺服器上的完整安裝；macOS / Linux 上的 USB 隨身碟偵測、權限請求提示和寫入；從開機選單選擇主機名稱或目標磁碟（選擇 IP 位址已驗證）；以及安裝後的處理（額外使用者、檔案、服務、NVIDIA / CUDA）。',
   },
   ko: {
     metaDescription:
-      'ISO를 다시 만들지 않고 Ubuntu Server 무인 설치 USB를 만드는 오픈 소스 GUI 도구입니다. Windows, macOS, Linux에서 동작합니다.',
+      'ISO를 다시 만들지 않고 Ubuntu Server 무인 설치 USB를 만드는 실험적인 오픈 소스 GUI 도구입니다. Windows, macOS, Linux에서 동작합니다.',
     navFeatures: '기능',
     navHow: '동작 방식',
     navDownload: '다운로드',
@@ -208,13 +214,14 @@ export const SITE_STRINGS = {
       '호스트 이름, IP 주소, 대상 디스크를 부팅 메뉴에서 고르거나 설치 프로그램에서 입력할 수 있습니다. web01, web02처럼 나열해 두면 꽂고 고르기만 하면 됩니다.',
     fChecksTitle: '위험한 설정은 쓰기 전에 막음',
     fChecksBody:
-      'SSH로 들어갈 수 없게 되는 설정이나 설치가 맨 마지막에 실패하는 설정을 USB에 쓰기 전에 오류로 알려 줍니다.',
+      'SSH로 들어갈 수 없게 되는 설정이나 설치가 후반에 실패하는 설정 중 알려진 것(공개 키 없이 비밀번호 로그인을 끈 경우, 비밀번호 해시 형식이 깨진 경우 등)은 USB에 쓰기 전에 오류로 알려 줍니다.',
     fAfterTitle: '설치 프로그램이 묻지 않는 것까지',
     fAfterBody: '설치할 때의 RAID + LVM(UEFI)과 NIC 본딩, 설치 후의 추가 사용자, 파일과 압축 파일 배포, systemd 서비스, apt full-upgrade, NVIDIA 드라이버와 CUDA.',
     shotReviewAlt: '확인 화면: 생성된 YAML에 표시 언어로 주석이 붙습니다',
     shotRuntimeAlt: '호스트 이름, IP 주소, 디스크를 부팅 메뉴에서 고르는 설정 화면',
     releasesTitle: '지원하는 Ubuntu 릴리스',
-    releasesBody: 'amd64 live-server ISO로 확인했습니다. arm64 ISO도 받아들이지만 아직 검증하지 않았습니다.',
+    releasesBody:
+      'amd64 live-server ISO를 사용하세요. 가상 머신에서 무인 설치를 끝까지 마친 것은 24.04와 26.10뿐이고, 다른 릴리스는 설정 생성과 ISO 수정을 테스트로 확인하고 있습니다. arm64 ISO도 받아들이지만 아직 검증하지 않았습니다.',
     releaseEol: '25.10은 2026년 7월에 지원이 끝났습니다. 앱이 경고합니다.',
     howTitle: '동작 방식',
     howStep1: '공식 ISO 선택',
@@ -224,7 +231,6 @@ export const SITE_STRINGS = {
     downloadTitle: '다운로드',
     installer: '설치 프로그램',
     portable: '포터블',
-    experimental: '실험적',
     checksums: '체크섬',
     unsignedTitle: '아직 코드 서명을 하지 않았습니다',
     unsignedWindows: 'Windows: 처음 실행할 때 SmartScreen이 경고합니다. "추가 정보" → "실행"을 누르세요.',
@@ -235,11 +241,12 @@ export const SITE_STRINGS = {
     imageNotice: 'Seedstick으로 만든 USB나 .img에는 수정된 Ubuntu 이미지가 들어 있습니다. 본인이나 조직 내부에서 사용하는 것은 괜찮지만 재배포하지 마세요. Canonical의 지식재산권 정책은 수정된 이미지를 Ubuntu 상표로 재배포하는 것을 허용하지 않습니다.',
     noImages: 'Seedstick은 Ubuntu를 포함하지 않습니다. ubuntu.com에서 내려받은 ISO를 사용합니다.',
     translationsLabel: '번역',
-    limitsNote: '무인 설치는 가상 머신에서 확인했습니다. 물리 서버에서의 전체 설치와 macOS / Linux에서의 USB 감지는 아직 확인하지 않았습니다.',
+    limitsNote:
+      '무인 설치는 가상 머신에서만 확인했습니다. 아직 확인하지 않은 것: 물리 서버에서의 전체 설치, macOS / Linux에서의 USB 감지·권한 요청 창·쓰기, 부팅 메뉴에서 호스트 이름이나 대상 디스크 고르기(IP 주소 고르기는 확인했습니다), 설치 후 처리(추가 사용자, 파일, 서비스, NVIDIA / CUDA).',
   },
   es: {
     metaDescription:
-      'Una herramienta gráfica de código abierto que crea unidades USB de instalación desatendida de Ubuntu Server sin reconstruir la ISO. Windows, macOS y Linux.',
+      'Una herramienta gráfica experimental y de código abierto que crea unidades USB de instalación desatendida de Ubuntu Server sin reconstruir la ISO. Windows, macOS y Linux.',
     navFeatures: 'Funciones',
     navHow: 'Cómo funciona',
     navDownload: 'Descargar',
@@ -255,13 +262,14 @@ export const SITE_STRINGS = {
       'Elige el nombre de equipo, la dirección IP y el disco de destino en el menú de arranque, o escríbelos en el instalador. Prepara web01, web02, etc., y basta con conectar y elegir.',
     fChecksTitle: 'Los ajustes peligrosos se detienen antes de escribir',
     fChecksBody:
-      'Los ajustes que te dejarían sin acceso por SSH, o que harían fallar la instalación al final, se muestran como errores antes de escribir nada en la unidad.',
+      'Los ajustes que se sabe que te dejarían sin acceso por SSH o harían fallar la instalación en su fase final, como el inicio de sesión con contraseña desactivado sin ninguna clave pública o un hash de contraseña mal formado, se muestran como errores antes de escribir nada en la unidad.',
     fAfterTitle: 'Más allá de lo que pregunta el instalador',
     fAfterBody: 'RAID + LVM (UEFI) y agregación de tarjetas de red durante la instalación; usuarios adicionales, archivos y archivos comprimidos, servicios de systemd, apt full-upgrade, controlador NVIDIA y CUDA después.',
     shotReviewAlt: 'El paso de revisión: el YAML generado, con comentarios en el idioma de la interfaz',
     shotRuntimeAlt: 'Configurar el nombre de equipo, la dirección IP y el disco para elegirlos en el menú de arranque',
     releasesTitle: 'Versiones de Ubuntu compatibles',
-    releasesBody: 'Probado con ISO live-server para amd64. Las ISO arm64 se aceptan, pero no se han probado.',
+    releasesBody:
+      'Usa la ISO live-server para amd64. Solo con 24.04 y 26.10 se ha completado una instalación desatendida de principio a fin en una máquina virtual; en las demás versiones, la generación de la configuración y la modificación de la ISO están cubiertas por pruebas. Las ISO arm64 se aceptan, pero no se han probado.',
     releaseEol: '25.10 dejó de tener soporte en julio de 2026; la aplicación avisa de ello.',
     howTitle: 'Cómo funciona',
     howStep1: 'Elige la ISO oficial',
@@ -271,7 +279,6 @@ export const SITE_STRINGS = {
     downloadTitle: 'Descargar',
     installer: 'Instalador',
     portable: 'Portable',
-    experimental: 'experimental',
     checksums: 'Sumas de comprobación',
     unsignedTitle: 'Las compilaciones todavía no están firmadas',
     unsignedWindows:
@@ -283,11 +290,12 @@ export const SITE_STRINGS = {
     imageNotice: 'Una unidad USB o un .img creados con Seedstick contienen una imagen de Ubuntu modificada. Úsala tú mismo o dentro de tu organización, pero no la redistribuyas: la política de propiedad intelectual de Canonical no permite redistribuir imágenes modificadas con las marcas de Ubuntu.',
     noImages: 'Seedstick no incluye Ubuntu. Usa la ISO que descargas de ubuntu.com.',
     translationsLabel: 'Traducciones',
-    limitsNote: 'Las instalaciones desatendidas se han verificado en máquinas virtuales. Aún no se ha verificado una instalación completa en servidores físicos, ni la detección de unidades USB en macOS y Linux.',
+    limitsNote:
+      'Las instalaciones desatendidas solo se han verificado en máquinas virtuales. Aún sin verificar: una instalación completa en servidores físicos; en macOS y Linux, la detección de unidades USB, la solicitud de permisos y la escritura; la elección del nombre de equipo o del disco de destino desde el menú de arranque (la elección de la dirección IP sí se ha verificado); y los pasos tras la instalación (usuarios adicionales, archivos, servicios, NVIDIA / CUDA).',
   },
   fr: {
     metaDescription:
-      'Un outil graphique libre qui crée des clés USB d’installation automatique d’Ubuntu Server sans reconstruire l’ISO. Windows, macOS et Linux.',
+      'Un outil graphique expérimental et libre qui crée des clés USB d’installation automatique d’Ubuntu Server sans reconstruire l’ISO. Windows, macOS et Linux.',
     navFeatures: 'Fonctionnalités',
     navHow: 'Fonctionnement',
     navDownload: 'Télécharger',
@@ -303,13 +311,14 @@ export const SITE_STRINGS = {
       'Choisissez le nom d’hôte, l’adresse IP et le disque cible dans le menu de démarrage, ou saisissez-les dans l’installateur. Préparez web01, web02, etc., puis branchez et choisissez.',
     fChecksTitle: 'Les réglages risqués sont arrêtés avant l’écriture',
     fChecksBody:
-      'Les réglages qui vous empêcheraient de vous connecter en SSH, ou qui feraient échouer l’installation tout à la fin, sont signalés comme erreurs avant toute écriture sur la clé.',
+      'Les réglages connus pour vous empêcher de vous connecter en SSH ou pour faire échouer l’installation dans ses dernières étapes, comme la connexion par mot de passe désactivée sans clé publique ou un hachage de mot de passe mal formé, sont signalés comme erreurs avant toute écriture sur la clé.',
     fAfterTitle: 'Au-delà des questions de l’installateur',
     fAfterBody: 'RAID + LVM (UEFI) et agrégation de cartes réseau pendant l’installation ; utilisateurs supplémentaires, fichiers et archives, services systemd, apt full-upgrade, pilote NVIDIA et CUDA ensuite.',
     shotReviewAlt: 'L’étape de vérification : le YAML généré, commenté dans la langue d’affichage',
     shotRuntimeAlt: 'Configurer le nom d’hôte, l’adresse IP et le disque à choisir dans le menu de démarrage',
     releasesTitle: 'Versions d’Ubuntu prises en charge',
-    releasesBody: 'Testé avec les ISO live-server pour amd64. Les ISO arm64 sont acceptées mais n’ont pas été testées.',
+    releasesBody:
+      'Utilisez l’ISO live-server pour amd64. Une installation automatique n’a été menée jusqu’au bout dans une machine virtuelle qu’avec les versions 24.04 et 26.10 ; pour les autres versions, la génération de la configuration et la modification de l’ISO sont couvertes par des tests. Les ISO arm64 sont acceptées mais n’ont pas été testées.',
     releaseEol: 'La 25.10 n’est plus prise en charge depuis juillet 2026 ; l’application le signale.',
     howTitle: 'Fonctionnement',
     howStep1: 'Choisir l’ISO officielle',
@@ -319,7 +328,6 @@ export const SITE_STRINGS = {
     downloadTitle: 'Télécharger',
     installer: 'Installateur',
     portable: 'Portable',
-    experimental: 'expérimental',
     checksums: 'Sommes de contrôle',
     unsignedTitle: 'Les versions ne sont pas encore signées',
     unsignedWindows:
@@ -331,11 +339,12 @@ export const SITE_STRINGS = {
     imageNotice: 'Une clé USB ou un .img créés avec Seedstick contiennent une image Ubuntu modifiée. Utilisez-la vous-même ou au sein de votre organisation, mais ne la redistribuez pas : la politique de propriété intellectuelle de Canonical n’autorise pas la redistribution d’images modifiées sous les marques Ubuntu.',
     noImages: 'Seedstick n’inclut pas Ubuntu. Il utilise l’ISO que vous téléchargez sur ubuntu.com.',
     translationsLabel: 'Traductions',
-    limitsNote: 'Les installations automatiques ont été vérifiées sur des machines virtuelles. Une installation complète sur des serveurs physiques, ainsi que la détection des clés USB sous macOS et Linux, n’ont pas encore été vérifiées.',
+    limitsNote:
+      'Les installations automatiques n’ont été vérifiées que sur des machines virtuelles. Reste à vérifier : une installation complète sur des serveurs physiques ; sous macOS et Linux, la détection des clés USB, la demande d’autorisation et l’écriture ; le choix du nom d’hôte ou du disque cible dans le menu de démarrage (le choix de l’adresse IP a été vérifié) ; et les étapes après l’installation (utilisateurs supplémentaires, fichiers, services, NVIDIA / CUDA).',
   },
   de: {
     metaDescription:
-      'Ein quelloffenes Werkzeug mit grafischer Oberfläche, das USB-Sticks für die unbeaufsichtigte Installation von Ubuntu Server erstellt, ohne die ISO neu zu bauen. Windows, macOS und Linux.',
+      'Ein experimentelles, quelloffenes Werkzeug mit grafischer Oberfläche, das USB-Sticks für die unbeaufsichtigte Installation von Ubuntu Server erstellt, ohne die ISO neu zu bauen. Windows, macOS und Linux.',
     navFeatures: 'Funktionen',
     navHow: 'So funktioniert es',
     navDownload: 'Download',
@@ -351,13 +360,14 @@ export const SITE_STRINGS = {
       'Hostname, IP-Adresse und Zielfestplatte lassen sich im Startmenü auswählen oder im Installationsprogramm eingeben. Legen Sie web01, web02 usw. an – dann nur noch einstecken und auswählen.',
     fChecksTitle: 'Riskante Einstellungen werden vor dem Schreiben gestoppt',
     fChecksBody:
-      'Einstellungen, die Sie von SSH aussperren oder die Installation ganz am Ende scheitern lassen würden, werden als Fehler gemeldet, bevor etwas auf den Stick geschrieben wird.',
+      'Einstellungen, von denen bekannt ist, dass sie Sie von SSH aussperren oder die Installation erst spät scheitern lassen würden, etwa eine abgeschaltete Anmeldung per Passwort ohne öffentlichen Schlüssel oder ein fehlerhafter Passwort-Hash, werden als Fehler gemeldet, bevor etwas auf den Stick geschrieben wird.',
     fAfterTitle: 'Mehr, als das Installationsprogramm fragt',
     fAfterBody: 'RAID + LVM (UEFI) und gebündelte Netzwerkkarten bei der Installation; weitere Benutzer, Dateien und Archive, systemd-Dienste, apt full-upgrade, NVIDIA-Treiber und CUDA danach.',
     shotReviewAlt: 'Der Überprüfungsschritt: das erzeugte YAML, kommentiert in der Anzeigesprache',
     shotRuntimeAlt: 'Hostname, IP-Adresse und Festplatte für die Auswahl im Startmenü einrichten',
     releasesTitle: 'Unterstützte Ubuntu-Versionen',
-    releasesBody: 'Getestet mit live-server-ISOs für amd64. arm64-ISOs werden angenommen, sind aber ungetestet.',
+    releasesBody:
+      'Verwenden Sie die live-server-ISO für amd64. Unbeaufsichtigte Installationen sind nur mit 24.04 und 26.10 in einer virtuellen Maschine vollständig durchgelaufen; für die anderen Versionen sind die Erzeugung der Konfiguration und das Anpassen der ISO durch Tests abgedeckt. arm64-ISOs werden angenommen, sind aber ungetestet.',
     releaseEol: 'Die Unterstützung für 25.10 endete im Juli 2026; die App weist darauf hin.',
     howTitle: 'So funktioniert es',
     howStep1: 'Offizielle ISO wählen',
@@ -367,7 +377,6 @@ export const SITE_STRINGS = {
     downloadTitle: 'Download',
     installer: 'Installationsprogramm',
     portable: 'Portabel',
-    experimental: 'experimentell',
     checksums: 'Prüfsummen',
     unsignedTitle: 'Die Builds sind noch nicht signiert',
     unsignedWindows:
@@ -379,11 +388,12 @@ export const SITE_STRINGS = {
     imageNotice: 'Ein mit Seedstick erstellter USB-Stick oder eine .img-Datei enthält ein verändertes Ubuntu-Image. Verwenden Sie es selbst oder innerhalb Ihrer Organisation, aber geben Sie es nicht weiter: Die Richtlinie von Canonical zu geistigem Eigentum (IP Rights Policy) erlaubt nicht, veränderte Images unter den Ubuntu-Marken weiterzugeben.',
     noImages: 'Seedstick enthält kein Ubuntu. Es verwendet die ISO, die Sie von ubuntu.com herunterladen.',
     translationsLabel: 'Übersetzungen',
-    limitsNote: 'Unbeaufsichtigte Installationen wurden in virtuellen Maschinen geprüft. Eine vollständige Installation auf physischen Servern sowie die Erkennung von USB-Sticks unter macOS und Linux sind noch nicht geprüft.',
+    limitsNote:
+      'Unbeaufsichtigte Installationen wurden nur in virtuellen Maschinen geprüft. Noch nicht geprüft: eine vollständige Installation auf physischen Servern; unter macOS und Linux die Erkennung von USB-Sticks, die Anfrage nach Administratorrechten und das Schreiben; die Auswahl von Hostname oder Zielfestplatte im Startmenü (die Auswahl der IP-Adresse wurde geprüft); und die Schritte nach der Installation (weitere Benutzer, Dateien, Dienste, NVIDIA / CUDA).',
   },
   'pt-BR': {
     metaDescription:
-      'Uma ferramenta gráfica de código aberto que cria pendrives de instalação desassistida do Ubuntu Server sem reconstruir a ISO. Windows, macOS e Linux.',
+      'Uma ferramenta gráfica experimental e de código aberto que cria pendrives de instalação desassistida do Ubuntu Server sem reconstruir a ISO. Windows, macOS e Linux.',
     navFeatures: 'Recursos',
     navHow: 'Como funciona',
     navDownload: 'Baixar',
@@ -399,13 +409,14 @@ export const SITE_STRINGS = {
       'Escolha o nome de host, o endereço IP e o disco de destino no menu de inicialização, ou digite-os no instalador. Liste web01, web02 e assim por diante, e é só conectar e escolher.',
     fChecksTitle: 'Configurações arriscadas são barradas antes da gravação',
     fChecksBody:
-      'Configurações que deixariam você sem acesso por SSH, ou que fariam a instalação falhar bem no final, aparecem como erros antes de qualquer gravação no pendrive.',
+      'Configurações que sabidamente deixariam você sem acesso por SSH ou fariam a instalação falhar já perto do fim, como o login com senha desativado sem chave pública ou um hash de senha malformado, aparecem como erros antes de qualquer gravação no pendrive.',
     fAfterTitle: 'Além do que o instalador pergunta',
     fAfterBody: 'RAID + LVM (UEFI) e agregação de placas de rede na instalação; usuários extras, arquivos e pacotes compactados, serviços do systemd, apt full-upgrade, driver NVIDIA e CUDA depois.',
     shotReviewAlt: 'A etapa de revisão: o YAML gerado, com comentários no idioma da interface',
     shotRuntimeAlt: 'Configurando nome de host, endereço IP e disco para escolher no menu de inicialização',
     releasesTitle: 'Versões do Ubuntu suportadas',
-    releasesBody: 'Testado com ISOs live-server para amd64. ISOs arm64 são aceitas, mas não foram testadas.',
+    releasesBody:
+      'Use a ISO live-server para amd64. Só com o 24.04 e o 26.10 uma instalação desassistida foi executada até o fim em uma máquina virtual; nas demais versões, a geração da configuração e a alteração da ISO são cobertas por testes. ISOs arm64 são aceitas, mas não foram testadas.',
     releaseEol: 'O 25.10 deixou de ter suporte em julho de 2026; o aplicativo avisa sobre isso.',
     howTitle: 'Como funciona',
     howStep1: 'Escolha a ISO oficial',
@@ -415,7 +426,6 @@ export const SITE_STRINGS = {
     downloadTitle: 'Baixar',
     installer: 'Instalador',
     portable: 'Portátil',
-    experimental: 'experimental',
     checksums: 'Somas de verificação',
     unsignedTitle: 'As versões ainda não têm assinatura de código',
     unsignedWindows:
@@ -427,6 +437,7 @@ export const SITE_STRINGS = {
     imageNotice: 'Um pendrive ou .img criado com o Seedstick contém uma imagem do Ubuntu modificada. Use-a você mesmo ou dentro da sua organização, mas não a redistribua: a política de propriedade intelectual da Canonical não permite redistribuir imagens modificadas com as marcas Ubuntu.',
     noImages: 'O Seedstick não inclui o Ubuntu. Ele usa a ISO que você baixa em ubuntu.com.',
     translationsLabel: 'Traduções',
-    limitsNote: 'As instalações desassistidas foram verificadas em máquinas virtuais. Uma instalação completa em servidores físicos e a detecção de pendrives no macOS e no Linux ainda não foram verificadas.',
+    limitsNote:
+      'As instalações desassistidas só foram verificadas em máquinas virtuais. Ainda não verificado: uma instalação completa em servidores físicos; no macOS e no Linux, a detecção de pendrives, o pedido de permissão e a gravação; a escolha do nome de host ou do disco de destino pelo menu de inicialização (a escolha do endereço IP foi verificada); e as etapas após a instalação (usuários extras, arquivos, serviços, NVIDIA / CUDA).',
   },
 }

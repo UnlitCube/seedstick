@@ -4,7 +4,7 @@
 #            Seedstick-<v>-win-x64-portable.exe      入れずにそのまま起動
 #   macOS    Seedstick-<v>-mac-{x64,arm64}.dmg       インストーラ（/Applications へドラッグ）
 #            Seedstick-<v>-mac-{x64,arm64}.zip       ポータブル（.app をそのまま）
-#   Linux    Seedstick-<v>-linux-x64.deb             パッケージ（試験的）
+#   Linux    Seedstick-<v>-linux-x64.deb             パッケージ
 #            AppImage は出さない（落とし穴 158: 第三者のライブラリを同梱するため）
 #   その他   SHA256SUMS.txt / 7z2107-src.7z（Setup.exe が同梱する 7-Zip の LGPL ソース）
 #
@@ -313,7 +313,7 @@ jobs:
           retention-days: 7
 
   # ------------------------------------------------------------------
-  # Linux: deb（試験的。デバイス列挙と pkexec は実機未検証）
+  # Linux: deb（デバイス列挙と pkexec は実機未検証）
   # ------------------------------------------------------------------
   linux:
     needs: gate
@@ -456,10 +456,15 @@ jobs:
           test -s notes.md || { echo "::error::リリースノートが空"; exit 1; }
           # gh は「ドラフトで作る → 全部上げる → 公開」の順に動くので、
           # 途中で落ちても中途半端に公開された Release は残らない。
+          # **0.x の間は実験的な製品なので、プレリリースとして出す**（README の冒頭と同じ位置付け）。
+          # サイトはプレリリースも拾う（build-site.mjs は /releases/latest を使わない）。
+          pre=()
+          case "$GITHUB_REF_NAME" in v0.*) pre=(--prerelease) ;; esac
           gh release create "$GITHUB_REF_NAME" dist/* \
             --title "Seedstick $GITHUB_REF_NAME" \
             --notes-file notes.md \
-            --verify-tag
+            --verify-tag \
+            "${pre[@]}"
 
       - name: 配った物を書き出す
         shell: bash
