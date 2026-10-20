@@ -54,10 +54,13 @@ for (const locale of LOCALES) {
     `)
     await d.clickAt(pt.x, pt.y)
     await d.wait(500)
+    // ページ側で評価する式の中には日本語を書かない（e2e-placeholder-drift.test.ts が
+    // 「画面の文言の書き写し」と区別できないため）。判定の説明はここに置く:
+    //   - はみ出し: 自分の幅より中身が広く、切り取りで見えなくしている要素。スクロールできる領域は除く
+    //   - 支援技術向けに視覚的に隠した要素（sr-only）は 1px に潰してあるので必ず「はみ出す」ので除く
+    //   - 省略記号で切るのは設計（ナビの要約など）なので別に数える
     const report = await d.eval(`
       const text = document.body.innerText
-      // はみ出し: 自分の幅より中身が広く、しかも切り取り（overflow: hidden 等）か
-      // 省略記号で見えなくしている要素。スクロールできる領域は除く。
       const overflow = []
       const ellipsis = []
       for (const el of document.querySelectorAll('main *, nav *, header *')) {
@@ -67,11 +70,9 @@ for (const locale of LOCALES) {
         if (cs.overflowX === 'auto' || cs.overflowX === 'scroll') continue
         if (el.tagName === 'PRE' || el.tagName === 'TEXTAREA' || el.tagName === 'INPUT' || el.tagName === 'SELECT') continue
         if (el.closest('pre, textarea, [data-allow-overflow]')) continue
-        // 支援技術向けに視覚的に隠した要素（sr-only）は 1px に潰してあるので必ず「はみ出す」
         if (el.getBoundingClientRect().width <= 1) continue
         const label = (el.innerText || '').trim().slice(0, 60)
         if (!label) continue
-        // 省略記号で切るのは設計（ナビの要約など）。別に数える
         if (cs.textOverflow === 'ellipsis') ellipsis.push(label)
         else overflow.push(el.tagName.toLowerCase() + ': ' + label)
       }
