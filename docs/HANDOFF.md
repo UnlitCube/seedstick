@@ -1,8 +1,22 @@
 # 引き継ぎ記録
 
-## 0. いまの状態（2026-10-20・OSS 公開の巡）
+## 0. いまの状態（2026-10-21・OSS 公開の巡）
 
 **この節が最新。** 1 節以降は公開前の記録で、そのまま残している。
+
+**2026-10-21 に公開した**（本人の指示「公開」と最終確認のあと）:
+
+- https://github.com/UnlitCube/seedstick を Public にした。Pages（配信元は GitHub Actions）・
+  Private vulnerability reporting・secret scanning（push protection 込み）・`translation` ラベル・
+  homepage（https://unlitcube.github.io/seedstick/ ）を設定した
+- **v0.1.0 をプレリリースとして出した**: https://github.com/UnlitCube/seedstick/releases/tag/v0.1.0
+  （成果物 7 個 + `7z2107-src.7z` + `SHA256SUMS.txt`。SHA256SUMS の 8 行が GitHub の
+  asset digest と全部一致することを確かめた。サイトのボタンは 9 言語とも v0.1.0 を指す）
+- **タグは 1 度付け直した。** 最初のタグ（件名「feat: 実験的なプロダクトとして位置付ける」）の
+  実行は、release ジョブが成果物を 8 個待っていたため Release を作る前に止まった
+  （落とし穴 166）。件名「fix: release ジョブが AppImage をやめたあとも成果物を 8 個待っていた」を
+  手動実行で通してから、v0.1.0 をそのコミットへ付け直した（本人の承認のうえ。Release は
+  それまで 0 件だったので、壊れた物は配っていない）
 
 > **1 節以降に出てくるコミット SHA は、公開した履歴には存在しない。**
 > 公開用のリポジトリ（`UnlitCube/seedstick`）へは、履歴を書き換えてから載せた:
@@ -43,13 +57,11 @@
   RAID の 2 台目からの起動は VM でも試していないのに「実機で未検証」とだけ書いていた）。
   7 言語の訳は翻訳と独立したレビューの 2 段で作った。母語話者の確認は引き続き未
 
-まだやっていないこと（公開の手順）:
+公開のあとに残っていること:
 
-- Public 化（本人の最終確認のあと）→ Pages の Source を GitHub Actions にして `pages.yml` を再実行、
-  Private vulnerability reporting と secret scanning を有効化、`translation` ラベル、
-  リポジトリの homepage、v0.1.0 のタグ（**名前を指定して push**）、ポートフォリオへの通知
 - Dependabot の PR 2 件（#1 は TypeScript 7・vitest 5・electron-vite 6 のメジャー更新を含む）。
-  v0.1.0 の後に回す想定
+  どちらも CI が赤い。v0.1.0 の後に回すと決めていたもの
+- 商標「Seedstick」の J-PlatPat / EUIPO での確認（本人が手で行う。未）
 
 残っていること（優先順）:
 
