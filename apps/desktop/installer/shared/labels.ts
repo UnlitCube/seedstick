@@ -44,9 +44,9 @@ const ja = {
   'welcome.disclaimer':
     'MIT ライセンスのオープンソースソフトウェアです。Canonical Ltd. とは提携・承認の関係にありません。Ubuntu は Canonical Ltd. の登録商標です。',
   'welcome.version': 'バージョン {version}',
-  'welcome.experimental': '実験的',
-  'welcome.experimentalNote':
-    '無人インストールは、これまで仮想マシンでしか確認していません。消えても困らないディスクの機械で試してください。',
+  'welcome.beta': 'ベータ版',
+  'welcome.betaNote':
+    '無人インストールは仮想マシンで確かめており、物理サーバーでの確認はこれからです。',
   'welcome.upgrade': '{version} が既にインストールされています。上書きして更新します。',
   'welcome.f1.title': 'ISO はそのまま',
   'welcome.f1.body':
@@ -160,9 +160,9 @@ const en = {
   'welcome.disclaimer':
     'Open-source software under the MIT License. Not affiliated with or endorsed by Canonical Ltd. Ubuntu is a registered trademark of Canonical Ltd.',
   'welcome.version': 'Version {version}',
-  'welcome.experimental': 'Experimental',
-  'welcome.experimentalNote':
-    'Unattended installs have only been verified in virtual machines so far. Try Seedstick on machines whose disks you can afford to lose.',
+  'welcome.beta': 'Beta',
+  'welcome.betaNote':
+    'Unattended installs have been tested in virtual machines; testing on physical servers is still to come.',
   'welcome.upgrade': '{version} is already installed. It will be replaced.',
   'welcome.f1.title': 'The ISO stays untouched',
   'welcome.f1.body':
@@ -274,9 +274,9 @@ const zhHans = {
   'welcome.tagline': '无需重建 ISO，即可制作 Ubuntu Server 无人值守安装 U 盘',
   'welcome.disclaimer': '基于 MIT 许可证的开源软件。与 Canonical Ltd. 没有关联，也未获其认可。Ubuntu 是 Canonical Ltd. 的注册商标。',
   'welcome.version': '版本 {version}',
-  'welcome.experimental': '实验性',
-  'welcome.experimentalNote':
-    '无人值守安装目前仅在虚拟机中验证过。请在磁盘内容丢失也无妨的机器上试用。',
+  'welcome.beta': '测试版',
+  'welcome.betaNote':
+    '无人值守安装已在虚拟机中验证过，物理服务器上的验证还有待进行。',
   'welcome.upgrade': '已安装 {version}。将覆盖并更新。',
   'welcome.f1.title': 'ISO 保持原样',
   'welcome.f1.body': '只就地修改几个扇区并追加 CIDATA 分区，绝不改动 ISO 文件本身。',
@@ -383,9 +383,9 @@ const zhHant = {
   'welcome.tagline': '不必重新建置 ISO，就能製作 Ubuntu Server 無人值守安裝 USB 隨身碟',
   'welcome.disclaimer': '採用 MIT 授權條款的開放原始碼軟體。與 Canonical Ltd. 沒有關聯，也未獲其認可。Ubuntu 是 Canonical Ltd. 的註冊商標。',
   'welcome.version': '版本 {version}',
-  'welcome.experimental': '實驗性',
-  'welcome.experimentalNote':
-    '無人值守安裝目前僅在虛擬機器中驗證過。請在磁碟內容遺失也無妨的機器上試用。',
+  'welcome.beta': '測試版',
+  'welcome.betaNote':
+    '無人值守安裝已在虛擬機器中驗證過，實體伺服器上的驗證仍有待進行。',
   'welcome.upgrade': '已安裝 {version}。將覆寫並更新。',
   'welcome.f1.title': 'ISO 維持原樣',
   'welcome.f1.body': '只就地修改幾個磁區並附加 CIDATA 分割區，絕不更動 ISO 檔案本身。',
@@ -492,9 +492,9 @@ const ko = {
   'welcome.tagline': 'ISO를 다시 만들지 않고 Ubuntu Server 무인 설치 USB를 만듭니다',
   'welcome.disclaimer': 'MIT 라이선스의 오픈 소스 소프트웨어입니다. Canonical Ltd.와 제휴하거나 승인을 받은 관계가 아닙니다. Ubuntu는 Canonical Ltd.의 등록 상표입니다.',
   'welcome.version': '버전 {version}',
-  'welcome.experimental': '실험적',
-  'welcome.experimentalNote':
-    '무인 설치는 지금까지 가상 머신에서만 검증되었습니다. 디스크 내용이 사라져도 괜찮은 기기에서 시험해 보세요.',
+  'welcome.beta': '베타',
+  'welcome.betaNote':
+    '무인 설치는 가상 머신에서 검증했으며, 물리 서버에서의 검증은 앞으로 진행할 예정입니다.',
   'welcome.upgrade': '{version}이(가) 이미 설치되어 있습니다. 덮어써서 업데이트합니다.',
   'welcome.f1.title': 'ISO는 그대로',
   'welcome.f1.body': '몇 개의 섹터를 제자리에서 수정하고 CIDATA 파티션을 덧붙일 뿐, ISO 파일 자체는 건드리지 않습니다.',
@@ -601,9 +601,9 @@ const es = {
   'welcome.tagline': 'Crea un USB de instalación desatendida de Ubuntu Server sin reconstruir la ISO',
   'welcome.disclaimer': 'Software de código abierto bajo la licencia MIT. No está afiliado a Canonical Ltd. ni cuenta con su respaldo. Ubuntu es una marca registrada de Canonical Ltd.',
   'welcome.version': 'Versión {version}',
-  'welcome.experimental': 'Experimental',
-  'welcome.experimentalNote':
-    'Hasta ahora, las instalaciones desatendidas solo se han verificado en máquinas virtuales. Prueba Seedstick en equipos cuyos discos puedas permitirte perder.',
+  'welcome.beta': 'Beta',
+  'welcome.betaNote':
+    'Las instalaciones desatendidas se han probado en máquinas virtuales; las pruebas en servidores físicos están pendientes.',
   'welcome.upgrade': 'Ya está instalada la versión {version}. Se sustituirá.',
   'welcome.f1.title': 'La ISO queda intacta',
   'welcome.f1.body': 'Se modifican unos pocos sectores en su sitio y se añade una partición CIDATA; el archivo ISO en sí nunca se toca.',
@@ -710,9 +710,9 @@ const fr = {
   'welcome.tagline': 'Créez une clé USB d’installation automatique d’Ubuntu Server sans reconstruire l’ISO',
   'welcome.disclaimer': 'Logiciel libre sous licence MIT. Non affilié à Canonical Ltd. ni approuvé par elle. Ubuntu est une marque déposée de Canonical Ltd.',
   'welcome.version': 'Version {version}',
-  'welcome.experimental': 'Expérimental',
-  'welcome.experimentalNote':
-    'Les installations automatiques n’ont été vérifiées jusqu’ici que dans des machines virtuelles. Essayez Seedstick sur des machines dont vous pouvez vous permettre de perdre les disques.',
+  'welcome.beta': 'Bêta',
+  'welcome.betaNote':
+    'Les installations automatiques ont été testées dans des machines virtuelles ; les tests sur des serveurs physiques restent à faire.',
   'welcome.upgrade': 'La version {version} est déjà installée. Elle sera remplacée.',
   'welcome.f1.title': 'L’ISO reste intacte',
   'welcome.f1.body': 'Quelques secteurs sont modifiés sur place et une partition CIDATA est ajoutée : le fichier ISO lui-même n’est jamais modifié.',
@@ -819,9 +819,9 @@ const de = {
   'welcome.tagline': 'Einen USB-Stick für die unbeaufsichtigte Installation von Ubuntu Server erstellen, ohne die ISO neu zu bauen',
   'welcome.disclaimer': 'Open-Source-Software unter der MIT-Lizenz. Nicht mit Canonical Ltd. verbunden und nicht von ihr unterstützt. Ubuntu ist eine eingetragene Marke der Canonical Ltd.',
   'welcome.version': 'Version {version}',
-  'welcome.experimental': 'Experimentell',
-  'welcome.experimentalNote':
-    'Unbeaufsichtigte Installationen wurden bisher nur in virtuellen Maschinen geprüft. Probieren Sie Seedstick auf Maschinen aus, bei denen Sie den Verlust der Festplatten verschmerzen können.',
+  'welcome.beta': 'Beta',
+  'welcome.betaNote':
+    'Unbeaufsichtigte Installationen wurden in virtuellen Maschinen getestet; Tests auf physischen Servern stehen noch aus.',
   'welcome.upgrade': '{version} ist bereits installiert und wird ersetzt.',
   'welcome.f1.title': 'Die ISO bleibt unverändert',
   'welcome.f1.body': 'Nur wenige Sektoren werden direkt angepasst und eine CIDATA-Partition angehängt – die ISO-Datei selbst wird nie verändert.',
@@ -928,9 +928,9 @@ const ptBR = {
   'welcome.tagline': 'Crie um pendrive de instalação desassistida do Ubuntu Server sem reconstruir a ISO',
   'welcome.disclaimer': 'Software de código aberto sob a Licença MIT. Não é afiliado à Canonical Ltd. nem endossado por ela. Ubuntu é uma marca registrada da Canonical Ltd.',
   'welcome.version': 'Versão {version}',
-  'welcome.experimental': 'Experimental',
-  'welcome.experimentalNote':
-    'Até agora, as instalações desassistidas só foram verificadas em máquinas virtuais. Teste o Seedstick em máquinas cujos discos você possa perder sem problema.',
+  'welcome.beta': 'Beta',
+  'welcome.betaNote':
+    'As instalações desassistidas foram testadas em máquinas virtuais; os testes em servidores físicos ainda estão por vir.',
   'welcome.upgrade': 'A versão {version} já está instalada. Ela será substituída.',
   'welcome.f1.title': 'A ISO fica intacta',
   'welcome.f1.body': 'Alguns setores são alterados no lugar e uma partição CIDATA é acrescentada — o arquivo ISO em si nunca é modificado.',

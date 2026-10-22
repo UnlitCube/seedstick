@@ -481,7 +481,7 @@ jobs:
           test -s notes.md || { echo "::error::リリースノートが空"; exit 1; }
           # gh は「ドラフトで作る → 全部上げる → 公開」の順に動くので、
           # 途中で落ちても中途半端に公開された Release は残らない。
-          # **0.x の間は実験的な製品なので、プレリリースとして出す**（README の冒頭と同じ位置付け）。
+          # **0.x の間はベータ版なので、プレリリースとして出す**（README の冒頭と同じ位置付け）。
           # サイトはプレリリースも拾う（build-site.mjs は /releases/latest を使わない）。
           pre=()
           case "$GITHUB_REF_NAME" in v0.*) pre=(--prerelease) ;; esac

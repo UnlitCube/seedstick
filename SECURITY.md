@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Seedstick is experimental (0.x, published as pre-releases). Only the latest release
+Seedstick is in beta (0.x, published as pre-releases). Only the latest release
 receives fixes; there are no long-term or back-ported fixes for older versions.
 
 ## Reporting a vulnerability
@@ -14,7 +14,7 @@ Please **do not open a public issue.** Report privately through GitHub:
 
 Include what you did, what happened, and what an attacker could gain. A proof of
 concept helps. We aim to send a first answer within a week, but cannot promise it:
-Seedstick is an experimental project maintained in spare time, so a fix may take
+Seedstick is maintained in spare time, so a fix may take
 longer. We will keep you informed and credit you in the advisory unless you prefer
 otherwise.
 

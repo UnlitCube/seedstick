@@ -6,7 +6,7 @@ import type { MsgKey } from './ja.js'
 export const zhHans = {
   'app.name': 'Seedstick',
   'app.tagline': '制作 Ubuntu Server 无人值守安装 USB',
-  'app.experimental': '实验性',
+  'app.beta': '测试版',
   'common.next': '下一步',
   'common.language': '显示语言',
   'common.back': '返回',
@@ -1273,8 +1273,8 @@ export const zhHans = {
   'about.version': '版本 {version}',
   'about.license': '基于 MIT 许可证的开源软件。Copyright (c) 2026 UnlitCube',
   'about.noWarranty': '不提供任何担保。本工具会清除目标 U 盘。从该 U 盘启动的机器，除非有人介入，否则会不经询问清除其目标磁盘。',
-  'about.experimental':
-    'Seedstick 是一个实验性项目。无人值守安装仅在虚拟机中验证过，尚未在物理服务器上验证。功能、设置以及已保存配置文件的格式可能会随版本而变化。请在磁盘内容丢失也无妨的机器上试用，目前请勿将它用于生产环境中的系统。',
+  'about.beta':
+    'Seedstick 目前处于测试阶段。无人值守安装已在虚拟机中验证过，物理服务器上的验证还有待进行。设置和已保存配置文件的格式可能会在今后的版本中变化。',
   'about.disclaimer': 'Seedstick 是独立的开源项目，与 Canonical Ltd. 没有关联，也未获得其认可或赞助。Ubuntu 和 Canonical 是 Canonical Ltd. 的注册商标。',
   'about.noImages': '本工具不附带任何 Ubuntu 映像。它在这台电脑上使用你从官方网站下载的 ISO。',
   'about.trademarks': 'Windows 是 Microsoft 集团公司的商标。Apple 和 macOS 是 Apple Inc. 的商标。NVIDIA 和 CUDA 是 NVIDIA Corporation 的商标。其他名称是其各自所有者的商标。',

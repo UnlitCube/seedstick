@@ -6,7 +6,7 @@ import type { MsgKey } from './ja.js'
 export const es = {
   'app.name': 'Seedstick',
   'app.tagline': 'Crea un USB de instalación desatendida de Ubuntu Server',
-  'app.experimental': 'Experimental',
+  'app.beta': 'Beta',
   'common.next': 'Siguiente',
   'common.language': 'Idioma de la interfaz',
   'common.back': 'Atrás',
@@ -1273,8 +1273,8 @@ export const es = {
   'about.version': 'Versión {version}',
   'about.license': 'Software de código abierto bajo la licencia MIT. Copyright (c) 2026 UnlitCube',
   'about.noWarranty': 'Se ofrece sin garantía. Esta herramienta borra la unidad USB de destino. Una máquina arrancada desde esa unidad borra su disco de destino sin preguntar, salvo que alguien intervenga.',
-  'about.experimental':
-    'Seedstick es un proyecto experimental. Las instalaciones desatendidas solo se han verificado en máquinas virtuales, aún no en servidores físicos, y las funciones, los ajustes y el formato de los perfiles guardados pueden cambiar de una versión a otra. Pruébalo en equipos cuyos discos puedas permitirte perder y no confíes aún en él para sistemas de producción.',
+  'about.beta':
+    'Seedstick está en fase beta. Las instalaciones desatendidas se han probado en máquinas virtuales; las pruebas en servidores físicos están pendientes. Los ajustes y el formato de los perfiles guardados pueden cambiar en futuras versiones.',
   'about.disclaimer': 'Seedstick es un proyecto de código abierto independiente. No está afiliado a Canonical Ltd. ni cuenta con su respaldo o patrocinio. Ubuntu y Canonical son marcas registradas de Canonical Ltd.',
   'about.noImages': 'No se incluye ninguna imagen de Ubuntu. La herramienta usa, en este equipo, la ISO que descargaste del sitio oficial.',
   'about.trademarks': 'Windows es una marca comercial del grupo de empresas Microsoft. Apple y macOS son marcas comerciales de Apple Inc. NVIDIA y CUDA son marcas comerciales de NVIDIA Corporation. Los demás nombres son marcas comerciales de sus respectivos propietarios.',

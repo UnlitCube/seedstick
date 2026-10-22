@@ -6,7 +6,7 @@ import type { MsgKey } from './ja.js'
 export const de = {
   'app.name': 'Seedstick',
   'app.tagline': 'USB-Stick für die unbeaufsichtigte Installation von Ubuntu Server erstellen',
-  'app.experimental': 'Experimentell',
+  'app.beta': 'Beta',
   'common.next': 'Weiter',
   'common.language': 'Anzeigesprache',
   'common.back': 'Zurück',
@@ -1273,8 +1273,8 @@ export const de = {
   'about.version': 'Version {version}',
   'about.license': 'Open-Source-Software unter der MIT-Lizenz. Copyright (c) 2026 UnlitCube',
   'about.noWarranty': 'Ohne Gewährleistung. Dieses Werkzeug löscht den Ziel-USB-Stick. Eine von diesem Stick gestartete Maschine löscht ihre Zielfestplatte ohne Nachfrage, sofern niemand eingreift.',
-  'about.experimental':
-    'Seedstick ist ein experimentelles Projekt. Unbeaufsichtigte Installationen wurden nur in virtuellen Maschinen geprüft, noch nicht auf physischen Servern, und Funktionen, Einstellungen und das Format gespeicherter Profile können sich von Version zu Version ändern. Probieren Sie es auf Maschinen aus, bei denen Sie den Verlust der Festplatten verschmerzen können, und verlassen Sie sich bei Produktivsystemen noch nicht darauf.',
+  'about.beta':
+    'Seedstick befindet sich in der Beta-Phase. Unbeaufsichtigte Installationen wurden in virtuellen Maschinen getestet; Tests auf physischen Servern stehen noch aus. Einstellungen und das Format gespeicherter Profile können sich in künftigen Versionen ändern.',
   'about.disclaimer': 'Seedstick ist ein unabhängiges Open-Source-Projekt. Es ist weder mit Canonical Ltd. verbunden noch von ihr unterstützt oder gesponsert. Ubuntu und Canonical sind eingetragene Marken der Canonical Ltd.',
   'about.noImages': 'Es ist kein Ubuntu-Image enthalten. Das Werkzeug verwendet auf diesem Computer die ISO, die Sie von der offiziellen Website heruntergeladen haben.',
   'about.trademarks': 'Windows ist eine Marke der Microsoft-Unternehmensgruppe. Apple und macOS sind Marken der Apple Inc. NVIDIA und CUDA sind Marken der NVIDIA Corporation. Andere Namen sind Marken ihrer jeweiligen Inhaber.',

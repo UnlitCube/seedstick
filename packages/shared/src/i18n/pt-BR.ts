@@ -6,7 +6,7 @@ import type { MsgKey } from './ja.js'
 export const ptBR = {
   'app.name': 'Seedstick',
   'app.tagline': 'Crie um pendrive de instalação automática do Ubuntu Server',
-  'app.experimental': 'Experimental',
+  'app.beta': 'Beta',
   'common.next': 'Avançar',
   'common.language': 'Idioma da interface',
   'common.back': 'Voltar',
@@ -1273,8 +1273,8 @@ export const ptBR = {
   'about.version': 'Versão {version}',
   'about.license': 'Software de código aberto sob a Licença MIT. Copyright (c) 2026 UnlitCube',
   'about.noWarranty': 'Fornecido sem garantia. Esta ferramenta apaga o pendrive de destino. Uma máquina iniciada por esse pendrive apaga o disco de destino sem perguntar, a menos que alguém intervenha.',
-  'about.experimental':
-    'O Seedstick é um projeto experimental. As instalações desassistidas só foram verificadas em máquinas virtuais, ainda não em servidores físicos, e os recursos, as configurações e o formato dos perfis salvos podem mudar de uma versão para outra. Teste-o em máquinas cujos discos você possa perder sem problema e ainda não confie nele para sistemas de produção.',
+  'about.beta':
+    'O Seedstick está em versão beta. As instalações desassistidas foram testadas em máquinas virtuais; os testes em servidores físicos ainda estão por vir. As configurações e o formato dos perfis salvos podem mudar em versões futuras.',
   'about.disclaimer': 'O Seedstick é um projeto de código aberto independente. Não é afiliado à Canonical Ltd. nem endossado ou patrocinado por ela. Ubuntu e Canonical são marcas registradas da Canonical Ltd.',
   'about.noImages': 'Nenhuma imagem do Ubuntu vem incluída. A ferramenta usa, neste computador, a ISO que você baixou do site oficial.',
   'about.trademarks': 'Windows é uma marca do grupo de empresas Microsoft. Apple e macOS são marcas da Apple Inc. NVIDIA e CUDA são marcas da NVIDIA Corporation. Os demais nomes são marcas de seus respectivos proprietários.',

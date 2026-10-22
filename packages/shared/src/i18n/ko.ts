@@ -6,7 +6,7 @@ import type { MsgKey } from './ja.js'
 export const ko = {
   'app.name': 'Seedstick',
   'app.tagline': 'Ubuntu Server 무인 설치 USB 만들기',
-  'app.experimental': '실험적',
+  'app.beta': '베타',
   'common.next': '다음',
   'common.language': '표시 언어',
   'common.back': '뒤로',
@@ -1273,8 +1273,8 @@ export const ko = {
   'about.version': '버전 {version}',
   'about.license': 'MIT 라이선스의 오픈 소스 소프트웨어. Copyright (c) 2026 UnlitCube',
   'about.noWarranty': '어떠한 보증도 없이 제공됩니다. 이 도구는 대상 USB 드라이브를 삭제합니다. 이 드라이브로 부팅한 기기는 누군가 개입하지 않는 한 묻지 않고 대상 디스크를 삭제합니다.',
-  'about.experimental':
-    'Seedstick은 실험적인 프로젝트입니다. 무인 설치는 가상 머신에서만 검증되었고, 물리 서버에서는 아직 검증되지 않았습니다. 기능, 설정, 저장된 프로필의 형식은 버전에 따라 바뀔 수 있습니다. 디스크 내용이 사라져도 괜찮은 기기에서 시험해 보고, 운영 환경의 시스템에는 아직 사용하지 마세요.',
+  'about.beta':
+    'Seedstick은 베타 버전입니다. 무인 설치는 가상 머신에서 검증했으며, 물리 서버에서의 검증은 앞으로 진행할 예정입니다. 설정과 저장된 프로필의 형식은 이후 버전에서 바뀔 수 있습니다.',
   'about.disclaimer': 'Seedstick은 독립 오픈 소스 프로젝트이며 Canonical Ltd.와 제휴하거나 그 승인 또는 후원을 받지 않았습니다. Ubuntu와 Canonical은 Canonical Ltd.의 등록 상표입니다.',
   'about.noImages': 'Ubuntu 이미지는 포함되어 있지 않습니다. 이 도구는 공식 사이트에서 내려받은 ISO를 이 컴퓨터에서 사용합니다.',
   'about.trademarks': 'Windows는 Microsoft 그룹 회사의 상표입니다. Apple과 macOS는 Apple Inc.의 상표입니다. NVIDIA와 CUDA는 NVIDIA Corporation의 상표입니다. 그 밖의 이름은 각 소유자의 상표입니다.',

@@ -31,10 +31,9 @@ for (const l of LOCALES) {
 
 const APP_KEYS = [
   'app.tagline',
-  'app.experimental',
-  'about.experimental',
+  'app.beta',
+  'about.beta',
   'common.language',
-  'about.noWarranty',
   'about.license',
   'about.disclaimer',
   'about.trademarks',
@@ -71,7 +70,7 @@ async function latestRelease() {
   const token = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN
   if (token) headers.Authorization = `Bearer ${token}`
   try {
-    // **`/releases/latest` は使わない。** 実験的な間（0.x）は Release をプレリリースにしており、
+    // **`/releases/latest` は使わない。** ベータ版の間（0.x）は Release をプレリリースにしており、
     // `/releases/latest` はプレリリースを返さない（404 になってボタンが全部 Releases の一覧へ落ちる）。
     // 一覧は作成日時の新しい順なので、下書きでない最初のものを採る。
     const res = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=20`, { headers })
@@ -200,7 +199,7 @@ function page(locale) {
     <main>
       <section class="hero">
         <div class="wrap">
-          <h1>Seedstick <span class="badge">${esc(a['app.experimental'])}</span></h1>
+          <h1>Seedstick <span class="badge" title="${esc(a['about.beta'])}">${esc(a['app.beta'])}</span></h1>
           <p class="tagline">${esc(a['app.tagline'])}</p>
           <p class="lead">${esc(s.metaDescription)}</p>
           <p class="actions">
@@ -209,17 +208,6 @@ function page(locale) {
           </p>
           ${version ? `<p class="version">${esc(version)}</p>` : ''}
           <img class="shot" src="${img('review')}" alt="${esc(s.shotReviewAlt)}" width="1200" height="806" fetchpriority="high">
-        </div>
-      </section>
-
-      <section class="safety" aria-labelledby="safety-title">
-        <div class="wrap">
-          <div class="callout">
-            <h2 id="safety-title">${esc(s.safetyTitle)}</h2>
-            <p><strong>${esc(a['about.experimental'])}</strong></p>
-            <p><strong>${esc(a['about.noWarranty'])}</strong></p>
-            <p>${esc(s.safetyAdvice)}</p>
-          </div>
         </div>
       </section>
 

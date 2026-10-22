@@ -4,7 +4,7 @@ export const ja = {
   'app.name': 'Seedstick',
   'app.tagline': 'Ubuntu Server の自動インストール USB を作る',
   // 製品の位置付け。ヘッダーの小さな札・About・Web サイトで同じものを使う
-  'app.experimental': '実験的',
+  'app.beta': 'ベータ版',
   'common.next': '次へ',
   'common.language': '表示言語',
   'common.back': '戻る',
@@ -1663,8 +1663,8 @@ export const ja = {
   'about.version': 'バージョン {version}',
   'about.license': 'MIT ライセンスのオープンソースソフトウェアです。Copyright (c) 2026 UnlitCube',
   'about.noWarranty': '無保証で提供されます。このツールは書き込み先の USB メモリを消去します。作った USB で起動した機械は、操作しなければインストール先のディスクを確認なしで消去します。',
-  'about.experimental':
-    'Seedstick は実験的なプロジェクトです。無人インストールは仮想マシンでしか確認しておらず、物理サーバーではまだ確かめていません。機能・設定・保存したプロファイルの形式は、版によって変わることがあります。消えても困らないディスクの機械で試し、本番のシステムにはまだ使わないでください。',
+  'about.beta':
+    'Seedstick はベータ版です。無人インストールは仮想マシンで確かめており、物理サーバーでの確認はこれからです。設定や保存したプロファイルの形式は、今後の版で変わることがあります。',
   'about.disclaimer': 'Seedstick は独立したオープンソースソフトウェアで、Canonical Ltd. とは提携・承認・後援の関係にありません。Ubuntu および Canonical は Canonical Ltd. の登録商標です。',
   'about.noImages': 'Ubuntu のイメージは同梱していません。公式サイトから入手した ISO を、この PC の上で使います。',
   'about.trademarks': 'Windows は Microsoft グループの商標です。Apple と macOS は Apple Inc. の商標です。NVIDIA と CUDA は NVIDIA Corporation の商標です。その他の名称は各社の商標です。',

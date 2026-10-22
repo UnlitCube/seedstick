@@ -6,7 +6,7 @@ export const en = {
   // --- common ---
   'app.name': 'Seedstick',
   'app.tagline': 'Build an unattended Ubuntu Server install USB',
-  'app.experimental': 'Experimental',
+  'app.beta': 'Beta',
   'common.next': 'Next',
   'common.language': 'Display language',
   'common.back': 'Back',
@@ -1704,8 +1704,8 @@ Date: {date}`,
   'about.version': 'Version {version}',
   'about.license': 'Open-source software under the MIT License. Copyright (c) 2026 UnlitCube',
   'about.noWarranty': 'Provided without warranty. This tool erases the target USB drive. A machine booted from the drive erases its target disk without asking unless someone intervenes.',
-  'about.experimental':
-    'Seedstick is an experimental project. Unattended installs have only been verified in virtual machines, not yet on physical servers, and features, settings and the saved-profile format may change between versions. Try it on machines whose disks you can afford to lose, and do not rely on it for production systems yet.',
+  'about.beta':
+    'Seedstick is in beta. Unattended installs have been tested in virtual machines; testing on physical servers is still to come. Settings and the saved-profile format may change in future versions.',
   'about.disclaimer': 'Seedstick is an independent open-source project. It is not affiliated with, endorsed by, or sponsored by Canonical Ltd. Ubuntu and Canonical are registered trademarks of Canonical Ltd.',
   'about.noImages': 'No Ubuntu image is bundled. The tool uses the ISO you downloaded from the official site, on this computer.',
   'about.trademarks': 'Windows is a trademark of the Microsoft group of companies. Apple and macOS are trademarks of Apple Inc. NVIDIA and CUDA are trademarks of NVIDIA Corporation. Other names are trademarks of their respective owners.',

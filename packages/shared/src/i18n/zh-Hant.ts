@@ -6,7 +6,7 @@ import type { MsgKey } from './ja.js'
 export const zhHant = {
   'app.name': 'Seedstick',
   'app.tagline': '製作 Ubuntu Server 無人安裝 USB',
-  'app.experimental': '實驗性',
+  'app.beta': '測試版',
   'common.next': '下一步',
   'common.language': '顯示語言',
   'common.back': '返回',
@@ -1273,8 +1273,8 @@ export const zhHant = {
   'about.version': '版本 {version}',
   'about.license': '採用 MIT 授權條款的開放原始碼軟體。Copyright (c) 2026 UnlitCube',
   'about.noWarranty': '不提供任何擔保。本工具會清除目標 USB 隨身碟。從該隨身碟開機的機器，除非有人介入，否則會不經詢問清除其目標磁碟。',
-  'about.experimental':
-    'Seedstick 是一個實驗性專案。無人安裝僅在虛擬機器中驗證過，尚未在實體伺服器上驗證。功能、設定以及已儲存設定檔的格式可能會隨版本而改變。請在磁碟內容遺失也無妨的機器上試用，目前請勿將它用於正式環境的系統。',
+  'about.beta':
+    'Seedstick 目前為測試版。無人安裝已在虛擬機器中驗證過，實體伺服器上的驗證仍有待進行。設定和已儲存設定檔的格式可能會在日後的版本中改變。',
   'about.disclaimer': 'Seedstick 是獨立的開放原始碼專案，與 Canonical Ltd. 沒有關聯，也未獲其認可或贊助。Ubuntu 和 Canonical 是 Canonical Ltd. 的註冊商標。',
   'about.noImages': '本工具不附帶任何 Ubuntu 映像檔。它在這台電腦上使用你從官方網站下載的 ISO。',
   'about.trademarks': 'Windows 是 Microsoft 集團公司的商標。Apple 和 macOS 是 Apple Inc. 的商標。NVIDIA 和 CUDA 是 NVIDIA Corporation 的商標。其他名稱為其各自所有者的商標。',

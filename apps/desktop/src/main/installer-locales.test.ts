@@ -32,9 +32,10 @@ describe('インストーラとアプリ本体の言語', () => {
     expect(Object.keys(INSTALLER_DICTIONARIES).sort()).toEqual([...LOCALES].sort())
   })
 
-  // 実験的な製品であることの説明は、アプリ（About とサイト）とインストーラの 2 つの辞書にある。
-  // 核心は「無人インストールは**仮想マシンでしか**確かめていない」なので、訳を直したときに
-  // そこが落ちたら止める（「消去」を見る SAFETY_TERMS と同じ考え方。言語を足すと型エラーになる）。
+  // ベータ版であることの説明は、アプリ（About と札の title）とインストーラの 2 つの辞書にある。
+  // 文面はやわらかくしたが、「無人インストールは**仮想マシンで**確かめた（物理サーバーはこれから）」は
+  // 事実として残すので、訳を直したときにそこが落ちたら止める
+  // （「消去」を見る SAFETY_TERMS と同じ考え方。言語を足すと型エラーになる）。
   const VIRTUAL_MACHINE = {
     ja: /仮想マシン/,
     en: /virtual machine/i,
@@ -47,15 +48,15 @@ describe('インストーラとアプリ本体の言語', () => {
     'pt-BR': /máquinas? virtua/i,
   } satisfies Record<Locale, RegExp>
 
-  it('実験的であることの説明が、どの言語でも「仮想マシンでしか確かめていない」を保っている', () => {
+  it('ベータ版であることの説明が、どの言語でも「仮想マシンで確かめた」を保っている', () => {
     for (const l of LOCALES) {
       const app = DICTIONARIES[l]
       const inst = INSTALLER_DICTIONARIES[l as keyof typeof INSTALLER_DICTIONARIES]
-      expect(app['about.experimental'], `${l} about.experimental`).toMatch(VIRTUAL_MACHINE[l])
-      expect(inst['welcome.experimentalNote'], `${l} welcome.experimentalNote`).toMatch(VIRTUAL_MACHINE[l])
+      expect(app['about.beta'], `${l} about.beta`).toMatch(VIRTUAL_MACHINE[l])
+      expect(inst['welcome.betaNote'], `${l} welcome.betaNote`).toMatch(VIRTUAL_MACHINE[l])
       // 札は 1 語か短い句。長くなるとヘッダーとようこそ画面で折り返す
-      expect(app['app.experimental'].length, `${l} app.experimental`).toBeLessThanOrEqual(14)
-      expect(inst['welcome.experimental'], `${l} welcome.experimental`).toBe(app['app.experimental'])
+      expect(app['app.beta'].length, `${l} app.beta`).toBeLessThanOrEqual(14)
+      expect(inst['welcome.beta'], `${l} welcome.beta`).toBe(app['app.beta'])
     }
   })
 

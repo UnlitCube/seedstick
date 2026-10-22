@@ -47,7 +47,7 @@ body:
         - Other
     validations:
       required: true
-  # Seedstick is experimental: unattended installs were verified in virtual machines
+  # Seedstick is in beta: unattended installs were tested in virtual machines
   # only. Reports from physical machines are what moves a setup from "untested" to
   # "verified", so ask for the machine and firmware.
   - type: dropdown

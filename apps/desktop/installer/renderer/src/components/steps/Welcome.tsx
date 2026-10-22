@@ -42,10 +42,10 @@ export function WelcomeStep({ info, onNext, onUninstall }: Props): React.JSX.Ele
             {t('welcome.version', { version: info.version })}
           </span>
           <span
-            data-experimental-badge
-            className="rounded-full border border-amber-400/25 bg-amber-400/10 px-2.5 py-1 text-[11px] text-amber-200/90"
+            data-beta-badge
+            className="rounded-full border border-sky-400/25 bg-sky-400/10 px-2.5 py-1 text-[11px] text-sky-200/90"
           >
-            {t('welcome.experimental')}
+            {t('welcome.beta')}
           </span>
           {info.installedAt !== null ? (
             <span className="rounded-full border border-amber-400/25 bg-amber-400/10 px-2.5 py-1 text-[11px] text-amber-200/90">
@@ -72,11 +72,10 @@ export function WelcomeStep({ info, onNext, onUninstall }: Props): React.JSX.Ele
           ))}
         </div>
 
-        {/* 実験的であること・ライセンス・「Canonical とは無関係」（docs/LEGAL.md）。
+        {/* ベータ版であること・ライセンス・「Canonical とは無関係」（docs/LEGAL.md）。
             インストーラだけを受け取った人にも届くように */}
         <p className="mt-4 text-[11px] leading-relaxed text-white/40">
-          <span className="text-amber-200/80">{t('welcome.experimentalNote')}</span>{' '}
-          {t('welcome.disclaimer')}
+          {t('welcome.betaNote')} {t('welcome.disclaimer')}
         </p>
       </div>
 

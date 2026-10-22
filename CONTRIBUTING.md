@@ -164,7 +164,7 @@ packages and `SHA256SUMS.txt` to a GitHub Release, and then starts `pages.yml` o
 check that exactly the expected files were collected, and `SHA256SUMS.txt`. Run it
 before tagging whenever you change what gets built or how it is named.
 While the version is 0.x (tags `v0.*`), the release is published as a GitHub
-*pre-release*, matching the experimental status in the README. The website build
+*pre-release*, matching the beta status in the README. The website build
 takes the newest non-draft release, pre-releases included, so its download buttons
 still point at it.
 

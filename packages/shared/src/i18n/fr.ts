@@ -6,7 +6,7 @@ import type { MsgKey } from './ja.js'
 export const fr = {
   'app.name': 'Seedstick',
   'app.tagline': 'Créer une clé USB d’installation automatique d’Ubuntu Server',
-  'app.experimental': 'Expérimental',
+  'app.beta': 'Bêta',
   'common.next': 'Suivant',
   'common.language': 'Langue de l’interface',
   'common.back': 'Retour',
@@ -1273,8 +1273,8 @@ export const fr = {
   'about.version': 'Version {version}',
   'about.license': 'Logiciel libre sous licence MIT. Copyright (c) 2026 UnlitCube',
   'about.noWarranty': 'Fourni sans garantie. Cet outil efface la clé USB cible. Une machine démarrée depuis cette clé efface son disque cible sans demander, sauf si quelqu’un intervient.',
-  'about.experimental':
-    'Seedstick est un projet expérimental. Les installations automatiques n’ont été vérifiées que dans des machines virtuelles, pas encore sur des serveurs physiques, et les fonctionnalités, les réglages et le format des profils enregistrés peuvent changer d’une version à l’autre. Essayez-le sur des machines dont vous pouvez vous permettre de perdre les disques, et ne vous y fiez pas encore pour des systèmes de production.',
+  'about.beta':
+    'Seedstick est en version bêta. Les installations automatiques ont été testées dans des machines virtuelles ; les tests sur des serveurs physiques restent à faire. Les réglages et le format des profils enregistrés peuvent changer dans les versions à venir.',
   'about.disclaimer': 'Seedstick est un projet libre indépendant. Il n’est ni affilié à Canonical Ltd., ni approuvé ou parrainé par elle. Ubuntu et Canonical sont des marques déposées de Canonical Ltd.',
   'about.noImages': 'Aucune image Ubuntu n’est fournie. L’outil utilise, sur cet ordinateur, l’ISO que vous avez téléchargée sur le site officiel.',
   'about.trademarks': 'Windows est une marque du groupe de sociétés Microsoft. Apple et macOS sont des marques d’Apple Inc. NVIDIA et CUDA sont des marques de NVIDIA Corporation. Les autres noms sont des marques de leurs propriétaires respectifs.',

@@ -11,12 +11,9 @@
   --accent: #6d7cff;
   --accent-ink: #ffffff;
   --sky: #38bdf8;
-  --danger-bg: #2a1320;
-  --danger-line: #7f2d4a;
-  --danger-ink: #fecdd3;
-  --warn-bg: rgba(251, 191, 36, 0.12);
-  --warn-line: rgba(251, 191, 36, 0.4);
-  --warn-ink: #fcd34d;
+  --beta-bg: rgba(56, 189, 248, 0.1);
+  --beta-line: rgba(56, 189, 248, 0.35);
+  --beta-ink: #7dd3fc;
   --radius: 14px;
   --wrap: 1080px;
   --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
@@ -192,16 +189,17 @@ h1 {
   letter-spacing: -0.02em;
 }
 
-/* 実験的な製品であることを見出しの横に出す札。見出しの字の大きさに引きずられないよう固定する */
+/* ベータ版であることを見出しの横に出す札。警告色にはしない（やわらかく伝える）。
+   見出しの字の大きさに引きずられないよう固定する */
 h1 .badge {
   display: inline-block;
   vertical-align: middle;
   margin-left: 10px;
   padding: 4px 12px;
-  border: 1px solid var(--warn-line);
+  border: 1px solid var(--beta-line);
   border-radius: 999px;
-  background: var(--warn-bg);
-  color: var(--warn-ink);
+  background: var(--beta-bg);
+  color: var(--beta-ink);
   font-size: 15px;
   font-weight: 600;
   letter-spacing: 0;
@@ -282,22 +280,6 @@ figcaption {
   margin-top: 10px;
   color: var(--ink-faint);
   font-size: 15px;
-}
-
-.safety .callout {
-  padding: 24px 20px;
-  border: 1px solid var(--danger-line);
-  border-radius: var(--radius);
-  background: var(--danger-bg);
-  color: var(--danger-ink);
-}
-
-.safety .callout h2 {
-  font-size: 22px;
-}
-
-.safety {
-  border-bottom: none;
 }
 
 .grid {

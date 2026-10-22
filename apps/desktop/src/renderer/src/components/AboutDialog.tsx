@@ -31,16 +31,14 @@ export function AboutDialog({ open, onClose }: { open: boolean; onClose: () => v
         <div>
           <p className="font-semibold text-slate-900 dark:text-slate-100">{APP_NAME}</p>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            {t('about.version', { version: window.autoinstall.appVersion })} · {t('app.experimental')}
+            {t('about.version', { version: window.autoinstall.appVersion })} · {t('app.beta')}
           </p>
           <p className="mt-1">{t('app.tagline')}</p>
         </div>
 
         <p>{t('about.license')}</p>
-        <div className="space-y-2 rounded-lg bg-amber-50 p-3 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-          <p>{t('about.experimental')}</p>
-          <p>{t('about.noWarranty')}</p>
-        </div>
+        <p>{t('about.beta')}</p>
+        <p>{t('about.noWarranty')}</p>
         <p>{t('about.disclaimer')}</p>
         <p>{t('about.noImages')}</p>
         <p className="text-xs text-slate-500 dark:text-slate-400">{t('about.trademarks')}</p>

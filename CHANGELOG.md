@@ -7,17 +7,14 @@
 ## v0.1.0
 
 The first public release of **Seedstick**: a GUI that builds unattended-install USB
-drives for Ubuntu Server without rebuilding the ISO. It is published as an
-**experimental pre-release**.
+drives for Ubuntu Server without rebuilding the ISO. It is published as a **beta**
+(a GitHub pre-release).
 
-> **Seedstick is experimental.** Unattended installs have only been verified in
-> virtual machines, not yet on physical servers, and features, settings and the
-> saved-profile format may change between versions. Try it on machines whose disks
-> you can afford to lose, and do not rely on it for production systems yet.
->
-> **Seedstick erases things.** Writing erases the selected USB drive, and a machine
-> booted from it erases its target disk without asking. Read the warning at the top of
-> the [README](https://github.com/UnlitCube/seedstick#readme) first.
+> **Seedstick is in beta.** Unattended installs have been tested in virtual machines;
+> testing on physical servers is still to come. Settings and the saved-profile format
+> may change in future versions. Writing erases the selected USB drive, and a machine
+> booted from it erases its target disk and installs Ubuntu without asking; see the
+> [README](https://github.com/UnlitCube/seedstick#readme).
 
 ### What it does
 

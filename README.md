@@ -3,18 +3,18 @@
 **Build an unattended-install USB drive for Ubuntu Server, with a GUI.**
 Pick the official ISO, fill in a wizard, write the drive. Plug it into a server and
 power on: the install is set up to run to the end on its own, hostname, users,
-network, disk layout, packages and post-install setup included (so far verified in
-virtual machines only; see the warning below).
+network, disk layout, packages and post-install setup included (tested in virtual
+machines so far).
 
-Windows · macOS · Linux (Electron) · MIT License · **Experimental** ·
+Windows · macOS · Linux (Electron) · MIT License · **Beta** ·
 [Website](https://unlitcube.github.io/seedstick/) · [日本語の README](README.ja.md)
 
-> [!WARNING]
-> **Seedstick is an experimental project.** Unattended installs have only been
-> verified in virtual machines, not yet on physical servers, and features, settings
-> and the saved-profile format may change between versions. Try it on machines whose
-> disks you can afford to lose, and do not rely on it for production systems yet.
-> While the version is 0.x, releases are published as GitHub *pre-releases*.
+> [!NOTE]
+> **Seedstick is in beta.** Unattended installs have been tested in virtual machines;
+> testing on physical servers is still to come. Settings and the saved-profile format
+> may change in future versions, and releases are published as GitHub *pre-releases*
+> while the version is 0.x. Bug reports and feedback are welcome in
+> [Issues](https://github.com/UnlitCube/seedstick/issues).
 
 ```
 ┌────────────────┐   ┌──────────────────────┐   ┌──────────────────────┐
@@ -23,16 +23,10 @@ Windows · macOS · Linux (Electron) · MIT License · **Experimental** ·
 └────────────────┘   └──────────────────────┘   └──────────────────────┘
 ```
 
-> [!CAUTION]
-> **This tool erases things, twice.**
-> 1. Writing **erases the whole USB drive** you select.
-> 2. A machine booted from that drive **erases its target disk without asking**.
->    That is what "unattended" means: nobody is asked to confirm.
->
-> Keep the drive away from machines you did not mean to reinstall, label it, and
-> on machines with several disks select the target disk by **serial number**, not
-> "largest disk". Seedstick is provided **without warranty** (see [LICENSE](LICENSE)).
-> See also [Known limitations](#known-limitations).
+Writing erases the selected USB drive, and a machine booted from the drive erases its
+target disk and installs Ubuntu without asking (that is what "unattended" means), so
+keep the drive away from machines you do not mean to reinstall. Seedstick is provided
+without warranty (see [LICENSE](LICENSE)); see also [Known limitations](#known-limitations).
 
 ## Features
 
@@ -87,7 +81,7 @@ not work on arm64. NVIDIA driver / CUDA setup needs an amd64 ISO and an LTS rele
 Get the latest build from the
 [Releases page](https://github.com/UnlitCube/seedstick/releases).
 Each release has a `SHA256SUMS.txt`. Releases are marked as *pre-releases* while
-Seedstick is experimental (0.x).
+Seedstick is in beta (0.x).
 
 | | Installer | Portable |
 |---|---|---|

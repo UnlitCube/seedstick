@@ -8,16 +8,13 @@
 export const SITE_STRINGS = {
   ja: {
     metaDescription:
-      'Ubuntu Server の自動インストール USB を GUI で作る、実験的なオープンソースのツール。ISO を再構築せず、Windows・macOS・Linux で動きます。',
+      'Ubuntu Server の自動インストール USB を GUI で作る、オープンソースのツール。ISO を再構築せず、Windows・macOS・Linux で動きます。',
     navFeatures: '特徴',
     navHow: '仕組み',
     navDownload: 'ダウンロード',
     heroDownload: 'ダウンロード',
     latest: '最新版 {version}',
     allReleases: 'すべてのリリース',
-    safetyTitle: '最初に読んでください',
-    safetyAdvice:
-      'USB に目印を付け、再インストールするつもりのない機械に挿さないでください。ディスクが複数ある機械では、インストール先を「いちばん大きいディスク」ではなくシリアル番号で指定してください。',
     featuresTitle: 'できること',
     fManyTitle: '1 本の USB を何台にも',
     fManyBody:
@@ -56,16 +53,13 @@ export const SITE_STRINGS = {
   },
   en: {
     metaDescription:
-      'An experimental, open-source GUI that builds unattended-install USB drives for Ubuntu Server without rebuilding the ISO. Windows, macOS and Linux.',
+      'An open-source GUI that builds unattended-install USB drives for Ubuntu Server without rebuilding the ISO. Windows, macOS and Linux.',
     navFeatures: 'Features',
     navHow: 'How it works',
     navDownload: 'Download',
     heroDownload: 'Download',
     latest: 'Latest: {version}',
     allReleases: 'All releases',
-    safetyTitle: 'Read this first',
-    safetyAdvice:
-      'Label the drive and keep it away from machines you do not mean to reinstall. On machines with several disks, select the target disk by serial number, not "largest disk".',
     featuresTitle: 'What it does',
     fManyTitle: 'One drive, many machines',
     fManyBody:
@@ -104,16 +98,13 @@ export const SITE_STRINGS = {
   },
   'zh-Hans': {
     metaDescription:
-      '一款实验性的开源 GUI 工具，无需重建 ISO 即可制作 Ubuntu Server 无人值守安装 U 盘。支持 Windows、macOS 和 Linux。',
+      '一款开源 GUI 工具，无需重建 ISO 即可制作 Ubuntu Server 无人值守安装 U 盘。支持 Windows、macOS 和 Linux。',
     navFeatures: '功能',
     navHow: '工作原理',
     navDownload: '下载',
     heroDownload: '下载',
     latest: '最新版本 {version}',
     allReleases: '所有版本',
-    safetyTitle: '请先阅读',
-    safetyAdvice:
-      '请给 U 盘做好标记，不要插到不打算重装的机器上。在有多块磁盘的机器上，请按序列号指定目标磁盘，而不是“最大的磁盘”。',
     featuresTitle: '能做什么',
     fManyTitle: '一个 U 盘，多台机器',
     fManyBody:
@@ -151,16 +142,13 @@ export const SITE_STRINGS = {
   },
   'zh-Hant': {
     metaDescription:
-      '一款實驗性的開放原始碼 GUI 工具，不必重新建置 ISO，就能製作 Ubuntu Server 無人值守安裝 USB 隨身碟。支援 Windows、macOS 和 Linux。',
+      '一款開放原始碼 GUI 工具，不必重新建置 ISO，就能製作 Ubuntu Server 無人值守安裝 USB 隨身碟。支援 Windows、macOS 和 Linux。',
     navFeatures: '功能',
     navHow: '運作方式',
     navDownload: '下載',
     heroDownload: '下載',
     latest: '最新版本 {version}',
     allReleases: '所有版本',
-    safetyTitle: '請先閱讀',
-    safetyAdvice:
-      '請在隨身碟上做好標記，不要插到不打算重新安裝的機器上。在有多顆磁碟的機器上，請依序號指定目標磁碟，而不是「最大的磁碟」。',
     featuresTitle: '能做什麼',
     fManyTitle: '一支隨身碟，多台機器',
     fManyBody:
@@ -198,16 +186,13 @@ export const SITE_STRINGS = {
   },
   ko: {
     metaDescription:
-      'ISO를 다시 만들지 않고 Ubuntu Server 무인 설치 USB를 만드는 실험적인 오픈 소스 GUI 도구입니다. Windows, macOS, Linux에서 동작합니다.',
+      'ISO를 다시 만들지 않고 Ubuntu Server 무인 설치 USB를 만드는 오픈 소스 GUI 도구입니다. Windows, macOS, Linux에서 동작합니다.',
     navFeatures: '기능',
     navHow: '동작 방식',
     navDownload: '다운로드',
     heroDownload: '다운로드',
     latest: '최신 버전 {version}',
     allReleases: '모든 릴리스',
-    safetyTitle: '먼저 읽어 주세요',
-    safetyAdvice:
-      'USB에 표시를 해 두고, 다시 설치할 생각이 없는 기기에는 꽂지 마세요. 디스크가 여러 개인 기기에서는 "가장 큰 디스크"가 아니라 일련번호로 대상 디스크를 지정하세요.',
     featuresTitle: '할 수 있는 일',
     fManyTitle: 'USB 하나로 여러 기기',
     fManyBody:
@@ -246,16 +231,13 @@ export const SITE_STRINGS = {
   },
   es: {
     metaDescription:
-      'Una herramienta gráfica experimental y de código abierto que crea unidades USB de instalación desatendida de Ubuntu Server sin reconstruir la ISO. Windows, macOS y Linux.',
+      'Una herramienta gráfica de código abierto que crea unidades USB de instalación desatendida de Ubuntu Server sin reconstruir la ISO. Windows, macOS y Linux.',
     navFeatures: 'Funciones',
     navHow: 'Cómo funciona',
     navDownload: 'Descargar',
     heroDownload: 'Descargar',
     latest: 'Última versión: {version}',
     allReleases: 'Todas las versiones',
-    safetyTitle: 'Lee esto primero',
-    safetyAdvice:
-      'Marca la unidad y mantenla lejos de las máquinas que no quieras reinstalar. En máquinas con varios discos, elige el disco de destino por número de serie, no "el disco más grande".',
     featuresTitle: 'Qué hace',
     fManyTitle: 'Una unidad, muchas máquinas',
     fManyBody:
@@ -295,16 +277,13 @@ export const SITE_STRINGS = {
   },
   fr: {
     metaDescription:
-      'Un outil graphique expérimental et libre qui crée des clés USB d’installation automatique d’Ubuntu Server sans reconstruire l’ISO. Windows, macOS et Linux.',
+      'Un outil graphique libre qui crée des clés USB d’installation automatique d’Ubuntu Server sans reconstruire l’ISO. Windows, macOS et Linux.',
     navFeatures: 'Fonctionnalités',
     navHow: 'Fonctionnement',
     navDownload: 'Télécharger',
     heroDownload: 'Télécharger',
     latest: 'Dernière version : {version}',
     allReleases: 'Toutes les versions',
-    safetyTitle: 'À lire d’abord',
-    safetyAdvice:
-      'Étiquetez la clé et tenez-la à l’écart des machines que vous ne voulez pas réinstaller. Sur une machine à plusieurs disques, désignez le disque cible par son numéro de série, et non « le plus grand disque ».',
     featuresTitle: 'Ce qu’il fait',
     fManyTitle: 'Une clé, plusieurs machines',
     fManyBody:
@@ -344,16 +323,13 @@ export const SITE_STRINGS = {
   },
   de: {
     metaDescription:
-      'Ein experimentelles, quelloffenes Werkzeug mit grafischer Oberfläche, das USB-Sticks für die unbeaufsichtigte Installation von Ubuntu Server erstellt, ohne die ISO neu zu bauen. Windows, macOS und Linux.',
+      'Ein quelloffenes Werkzeug mit grafischer Oberfläche, das USB-Sticks für die unbeaufsichtigte Installation von Ubuntu Server erstellt, ohne die ISO neu zu bauen. Windows, macOS und Linux.',
     navFeatures: 'Funktionen',
     navHow: 'So funktioniert es',
     navDownload: 'Download',
     heroDownload: 'Herunterladen',
     latest: 'Neueste Version: {version}',
     allReleases: 'Alle Versionen',
-    safetyTitle: 'Bitte zuerst lesen',
-    safetyAdvice:
-      'Beschriften Sie den Stick und halten Sie ihn von Maschinen fern, die Sie nicht neu installieren wollen. Auf Maschinen mit mehreren Festplatten wählen Sie die Zielfestplatte nach Seriennummer, nicht "größte Festplatte".',
     featuresTitle: 'Was es kann',
     fManyTitle: 'Ein Stick, viele Maschinen',
     fManyBody:
@@ -393,16 +369,13 @@ export const SITE_STRINGS = {
   },
   'pt-BR': {
     metaDescription:
-      'Uma ferramenta gráfica experimental e de código aberto que cria pendrives de instalação desassistida do Ubuntu Server sem reconstruir a ISO. Windows, macOS e Linux.',
+      'Uma ferramenta gráfica de código aberto que cria pendrives de instalação desassistida do Ubuntu Server sem reconstruir a ISO. Windows, macOS e Linux.',
     navFeatures: 'Recursos',
     navHow: 'Como funciona',
     navDownload: 'Baixar',
     heroDownload: 'Baixar',
     latest: 'Versão mais recente: {version}',
     allReleases: 'Todas as versões',
-    safetyTitle: 'Leia isto primeiro',
-    safetyAdvice:
-      'Identifique o pendrive e mantenha-o longe de máquinas que você não quer reinstalar. Em máquinas com vários discos, escolha o disco de destino pelo número de série, e não "o maior disco".',
     featuresTitle: 'O que ele faz',
     fManyTitle: 'Um pendrive, várias máquinas',
     fManyBody:

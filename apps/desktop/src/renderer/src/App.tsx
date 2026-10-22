@@ -83,13 +83,13 @@ export function App(): React.JSX.Element {
           <div>
             <h1 className="flex items-center gap-1.5 text-sm font-semibold leading-tight">
               {t('app.name')}
-              {/* 実験的な製品であることを常に見えるところに出す。中身の説明は About に置き、ここは札だけ */}
+              {/* ベータ版であることを見えるところに出す。警告色にはしない。中身の説明は About に置き、ここは札だけ */}
               <span
-                data-experimental-badge
-                title={t('about.experimental')}
-                className="rounded-full border border-amber-300 bg-amber-50 px-1.5 py-px text-[10px] font-medium text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+                data-beta-badge
+                title={t('about.beta')}
+                className="rounded-full border border-sky-200 bg-sky-50 px-1.5 py-px text-[10px] font-medium text-sky-700 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300"
               >
-                {t('app.experimental')}
+                {t('app.beta')}
               </span>
             </h1>
             <p className="text-xs leading-tight text-slate-500 dark:text-slate-400">{t('app.tagline')}</p>
