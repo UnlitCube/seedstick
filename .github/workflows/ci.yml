@@ -47,7 +47,7 @@ jobs:
 
       # 生成した early-commands を本物の python3 + PyYAML で走らせるテストがある。
       # 版は Ubuntu 24.04 の python3-yaml と同じ（yaml.test.ts の実測表もこの版）。
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
       - name: PyYAML
@@ -98,7 +98,7 @@ jobs:
       # **ランナーの Python には PyYAML が無い。** 無いと runtime-values.test.ts が
       # 「PyYAML が要る」という 1 件の失敗で止まる（以前は 15 件が同じ 180 行を出して落ち、
       # しかも 2 件は誤った理由で緑になっていた）。
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
       - name: PyYAML
@@ -189,7 +189,7 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
       - name: PyYAML
