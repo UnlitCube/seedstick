@@ -35,14 +35,14 @@
     "e2e:usb-worker": "tsx scripts/e2e-worker-usb.mts"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
+    "@types/node": "^26.6.5",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
-    "jsdom": "^29.1.1",
-    "tsx": "^4.20.0",
-    "typescript": "^5.9.0",
-    "vitest": "^4.0.0",
-    "ws": "^8.21.3"
+    "jsdom": "^30.1.3",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5",
+    "ws": "^8.22.0"
   },
   "license": "MIT",
   "author": "UnlitCube",
